@@ -21,4 +21,56 @@ L'expérience propose une profondeur stratégique s'appuyant sur une double bouc
 ## Mécanisme
 
 Le gameplay repose sur une gestion rigoureuse des ressources et du temps, dictée par un système en tour par tour. Chaque interaction, qu’il s’agisse de retourner une tuile ou d’utiliser un objet, consomme une unité de ressource (temps ou mana), forçant le joueur à planifier ses mouvements au sein d’une limite de tours impartis. La survie dépend de la gestion d'une barre de santé, physique ou mentale, qui s’érode au fil des erreurs ou des confrontations.
- L’aspect central de l’association étendue enrichit la mécanique de mémoire classique : le joueur doit identifier des paires dont la corrélation peut être identique, logique (clé et serrure), élémentaire ou narrative. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau
+ L’aspect central de l’association étendue enrichit la mécanique de mémoire classique : le joueur doit identifier des paires dont la corrélation peut être identique, logique (clé et serrure), élémentaire ou narrative. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
+
+## Verbes
+
+Pour le joueur :  Pendant les parties (Actions directes)
+
+* Dévoiler : Révéler le contenu d’une tuile face cachée (consomme du temps ou du mana).
+* Prendre : Collecter des éléments ou capturer des créatures simples via l'identification d'une paire identique.
+* Associer : Créer un lien logique entre deux tuiles complémentaires (ex: Clé + Serrure) pour synthétiser des ressources ou capturer des entités complexes.
+* Utiliser : Activer un outil, une ressource consommable ou une capacité de créature pour modifier le plateau ou protéger ses statistiques.
+* S'extraire : Initier la fin de l'incursion pour sécuriser le butin avant l'épuisement des ressources de survie.
+
+ Entre les parties (Méta-progression)
+
+* Commencer : Choisir une destination onirique et lancer une nouvelle session d'exploration.
+* Échanger : Troc ou vente des ressources collectées contre des devises ou des objets rares.
+* Allouer : Distribuer les gains au foyer pour répondre aux besoins de la famille (nourriture, dettes, santé).
+* Apprendre : Investir dans des compétences pour débloquer de nouveaux types d'associations ou améliorer les résistances du héros.
+* Équiper : Préparer son inventaire et ses outils en fonction des dangers prévus pour la prochaine mission.
+
+ Savoir du joueur (Apprentissage et Déduction)
+
+* Identifier : Reconnaître le stade de maturation d'une ressource (du bourgeon au fruit gâté) pour optimiser le moment de la récolte.
+* Déchiffrer : Interpréter les indices visuels dissimulés sur le recto/verso des tuiles ou dans l'arrière-plan pour deviner le contenu caché.
+* Prédire : Anticiper le comportement d'une créature ou l'évolution d'un cycle environnemental en fonction de l'expérience acquise.
+* Distinguer : Différencier une opportunité d'un danger (piège) grâce à l'observation de détails subtils sur le plateau de jeu.
+
+Pour les créatures :
+
+* Se placer : se positionner au départ.
+* Se déplacer : changer position au cours de la partie.
+* Fuir: quitter la zone de jeu.
+* Attaquer: infliger des dégâts au joueur.
+* Altérer : modifie le statut du joueur, transforme l'environnement.
+* Transformer : Agir sur les ressources pour les faire évoluer, les dégrader ou modifier leur accessibilité (ex: polliniser, briser, fertiliser).
+* Marquer : Laisser des traces persistantes de son passage sur le plateau (empreintes, griffures), offrant au joueur des indices sur sa position ou son trajet.
+
+Pour les ressources :
+
+* Mûrir / Maturer : Évoluer d'un stade initial (ex: bourgeon) vers un stade optimal (ex: fruit mûr) puis vers un stade dégradé (ex: fruit gâté), changeant ainsi sa valeur et ses propriétés d'association.
+* Se propager : S'étendre aux tuiles adjacentes si certaines conditions sont remplies (ex: une plante qui colonise une tuile de terre libre).
+* Réagir : Modifier son état au contact d'un autre élément ou d'une créature (ex: une ressource qui "éclot" si une créature pollinisatrice passe dessus).
+* Se dégrader : Perdre en qualité ou disparaître si elle n'est pas récoltée à temps ou si le plan devient instable.
+* Rayonner : Laisser filtrer des indices visuels sur l'arrière-plan ou le verso de la tuile (ex: une ressource luminescente qui "brille" légèrement à travers la carte face cachée).
+* S'altérer : Changer de nature sous l'influence d'un événement climatique ou psychique (ex: un minerai qui devient instable ou explosif).
+
+ 
+Verbes de l'Environnement (Décors et Structures)
+
+* Dissimuler : Masquer la présence d'une créature ou d'une ressource (ex: de hautes herbes ou un brouillard psychique sur la tuile).
+* Abriter / Révéler : Servir de refuge à une entité (ex: le terrier). Si le refuge est dévoilé en même temps que l'entité, celle-ci est débusquée.
+* Déclencher (Trigger) : Activer un événement si une condition est remplie (ex: si le terrier ET la créature sont visibles, la créature fuit).
+* Entraver : Restreindre les mouvements des créatures ou l'accès du joueur à certaines tuiles (ex: ronces, rochers).
