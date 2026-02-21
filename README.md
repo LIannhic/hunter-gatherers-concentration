@@ -1,1 +1,1 @@
-"# Hunter Gatherers Concentration" 
+# Hunter Gatherers Concentration
