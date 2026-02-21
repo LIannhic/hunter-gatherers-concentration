@@ -74,3 +74,7 @@ Verbes de l'Environnement (Décors et Structures)
 * Abriter / Révéler : Servir de refuge à une entité (ex: le terrier). Si le refuge est dévoilé en même temps que l'entité, celle-ci est débusquée.
 * Déclencher (Trigger) : Activer un événement si une condition est remplie (ex: si le terrier ET la créature sont visibles, la créature fuit).
 * Entraver : Restreindre les mouvements des créatures ou l'accès du joueur à certaines tuiles (ex: ronces, rochers).
+
+### Note aux collaborateurs
+
+Ce document pose des piliers mécaniques et narratifs. Tout le reste, l'esthétique précise, le bestiaire, les collectables, les ressources, l’écosystème, l’environnement, la structure des plans parallèles, l’histoire, les personnages, les lieux, etc...,  est un espace ouvert à vos idées et à votre expertise.
