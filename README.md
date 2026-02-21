@@ -105,5 +105,5 @@ go mod download
 ### Lancer le projet
 
 ```bash
-go run main.go
+go run ./cmd/game
 ```
