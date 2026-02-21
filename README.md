@@ -78,3 +78,5 @@ Verbes de l'Environnement (Décors et Structures)
 ### Note aux collaborateurs
 
 Ce document pose des piliers mécaniques et narratifs. Tout le reste, l'esthétique précise, le bestiaire, les collectables, les ressources, l’écosystème, l’environnement, la structure des plans parallèles, l’histoire, les personnages, les lieux, etc...,  est un espace ouvert à vos idées et à votre expertise.
+
+---
