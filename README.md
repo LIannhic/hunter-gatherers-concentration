@@ -84,3 +84,26 @@ Ce document pose des piliers mécaniques et narratifs. Tout le reste, l'esthéti
 ## Design et travaux préparatoires
 
 [Consulter le tableau blanc sur Figma.](https://www.figma.com/design/Pzh46PCN6sdWgwqBhf8bvn/Jeux-Vid%C3%A9o?node-id=325-2&t=69lWglExoEjbC8O1-1)
+
+---
+
+## Installion & lancement
+
+### Prérequis
+
+* go
+
+### Récupérer le projet
+
+* cloner le dépôt
+* Installer les dépendances
+
+```bash
+go mod download
+```
+
+### Lancer le projet
+
+```bash
+go run main.go
+```
