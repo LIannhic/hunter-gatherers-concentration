@@ -1,4 +1,4 @@
-package domain
+package system
 
 import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -123,20 +123,20 @@ func (w *World) RemoveEntity(id entity.ID) {
 	if !ok {
 		return
 	}
-	
+
 	// Retire de la grille
 	pos := e.GetPosition()
 	tile, _ := w.Grid.Get(board.Position{X: pos.X, Y: pos.Y})
 	if tile.EntityID == string(id) {
 		tile.EntityID = ""
 	}
-	
+
 	// Retire des composants
 	w.Components.RemoveEntity(string(id))
-	
+
 	// Retire du manager
 	w.Entities.Remove(id)
-	
+
 	w.EventBus.Publish(event.NewEntityRemovedEvent(string(id), "harvested"))
 }
 
@@ -212,13 +212,13 @@ func (s *PropagationSystem) Update(world *World) {
 				world.Components.Add(string(newRes.GetID()), &newRes.Value)
 
 				neighbor.EntityID = string(newRes.GetID())
-				
+
 				world.EventBus.Publish(event.Event{
-					Type:      event.ResourcePropagated,
-					SourceID:  string(newRes.GetID()),
-					Payload:   map[string]interface{}{
+					Type:     event.ResourcePropagated,
+					SourceID: string(newRes.GetID()),
+					Payload: map[string]interface{}{
 						"parent_id": entityID,
-						"position": neighbor.Position,
+						"position":  neighbor.Position,
 					},
 				})
 			}
@@ -263,14 +263,14 @@ func (s *CreatureAISystem) Update(world *World) {
 				X: c.GetPosition().X + action.Direction.X,
 				Y: c.GetPosition().Y + action.Direction.Y,
 			}
-			
+
 			// Met à jour la grille
 			oldTile, _ := world.Grid.Get(board.Position{X: c.GetPosition().X, Y: c.GetPosition().Y})
 			newTile, _ := world.Grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-			
+
 			oldTile.EntityID = ""
 			newTile.EntityID = string(c.GetID())
-			
+
 			world.Entities.UpdatePosition(c.GetID(), newPos)
 
 			world.EventBus.Publish(event.NewCreatureMovedEvent(
@@ -503,7 +503,7 @@ func (e *Engine) Update() {
 	e.world.EventBus.ProcessQueue()
 
 	e.world.Turn++
-	
+
 	e.world.EventBus.Publish(event.NewTurnEndedEvent(e.world.Turn))
 }
 
