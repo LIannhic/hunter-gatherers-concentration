@@ -5,7 +5,7 @@ import (
 )
 
 func TestNewGrid(t *testing.T) {
-	g := NewGrid(4, 4)
+	g := NewGrid("test", 4, 4)
 	
 	if g.Width != 4 || g.Height != 4 {
 		t.Errorf("Expected 4x4 grid, got %dx%d", g.Width, g.Height)
@@ -18,7 +18,7 @@ func TestNewGrid(t *testing.T) {
 }
 
 func TestGridGet(t *testing.T) {
-	g := NewGrid(4, 4)
+	g := NewGrid("test", 4, 4)
 	
 	tile, err := g.Get(Position{X: 0, Y: 0})
 	if err != nil {
@@ -36,7 +36,7 @@ func TestGridGet(t *testing.T) {
 }
 
 func TestGridIsValid(t *testing.T) {
-	g := NewGrid(4, 4)
+	g := NewGrid("test", 4, 4)
 	
 	tests := []struct {
 		pos    Position
@@ -59,7 +59,7 @@ func TestGridIsValid(t *testing.T) {
 }
 
 func TestGridReveal(t *testing.T) {
-	g := NewGrid(4, 4)
+	g := NewGrid("test", 4, 4)
 	
 	tile, err := g.Reveal(Position{X: 0, Y: 0})
 	if err != nil {
@@ -78,7 +78,7 @@ func TestGridReveal(t *testing.T) {
 }
 
 func TestGridHide(t *testing.T) {
-	g := NewGrid(4, 4)
+	g := NewGrid("test", 4, 4)
 	
 	// Reveal then hide
 	g.Reveal(Position{X: 0, Y: 0})
@@ -94,7 +94,7 @@ func TestGridHide(t *testing.T) {
 }
 
 func TestGridMatch(t *testing.T) {
-	g := NewGrid(4, 4)
+	g := NewGrid("test", 4, 4)
 	
 	// Can't match hidden tile
 	err := g.Match(Position{X: 0, Y: 0})
@@ -122,7 +122,7 @@ func TestGridMatch(t *testing.T) {
 }
 
 func TestGetNeighbors(t *testing.T) {
-	g := NewGrid(4, 4)
+	g := NewGrid("test", 4, 4)
 	
 	// Corner should have 2 neighbors
 	neighbors := g.GetNeighbors(Position{X: 0, Y: 0})
@@ -173,7 +173,7 @@ func TestPositionDistance(t *testing.T) {
 }
 
 func TestGridPlaceEntity(t *testing.T) {
-	g := NewGrid(4, 4)
+	g := NewGrid("test", 4, 4)
 	
 	err := g.PlaceEntity(Position{X: 0, Y: 0}, "entity1")
 	if err != nil {
@@ -193,7 +193,7 @@ func TestGridPlaceEntity(t *testing.T) {
 }
 
 func TestCountByState(t *testing.T) {
-	g := NewGrid(2, 2)
+	g := NewGrid("test", 2, 2)
 	
 	// All tiles hidden initially
 	if g.CountByState(Hidden) != 4 {
