@@ -467,6 +467,7 @@ func NewEngine(world *World) *Engine {
 			&PropagationSystem{},
 			&CreatureAISystem{},
 			&TriggerSystem{},
+			&VictorySystem{},
 		},
 		Running: false,
 	}
