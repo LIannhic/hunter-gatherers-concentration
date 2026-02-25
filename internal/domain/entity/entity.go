@@ -64,6 +64,8 @@ type Entity interface {
 	GetType() Type
 	GetPosition() Position
 	SetPosition(Position)
+	GetGridID() string
+	SetGridID(string)
 	IsActive() bool
 	Deactivate()
 }
@@ -73,6 +75,7 @@ type BaseEntity struct {
 	ID       ID
 	EType    Type
 	Pos      Position
+	GridID   string // ID du grid sur lequel se trouve l'entité
 	Active   bool
 	Tags     []string
 	Metadata map[string]interface{}
@@ -82,10 +85,21 @@ func NewBaseEntity(etype Type) BaseEntity {
 	return BaseEntity{
 		ID:       NewID(),
 		EType:    etype,
+		GridID:   "", // Doit être défini après création
 		Active:   true,
 		Tags:     make([]string, 0),
 		Metadata: make(map[string]interface{}),
 	}
+}
+
+// GetGridID retourne l'ID du grid de l'entité
+func (e *BaseEntity) GetGridID() string {
+	return e.GridID
+}
+
+// SetGridID définit l'ID du grid de l'entité
+func (e *BaseEntity) SetGridID(gridID string) {
+	e.GridID = gridID
 }
 
 func (e *BaseEntity) GetID() ID              { return e.ID }

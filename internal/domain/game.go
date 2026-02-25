@@ -12,7 +12,6 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/resource"
-	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/system"
 )
 
 // Ré-export des types principaux pour faciliter l'accès
@@ -24,10 +23,10 @@ type (
 	Type     = entity.Type
 
 	// Board
-	Grid         = board.Grid
-	Tile         = board.Tile
-	TileState    = board.TileState
-	Direction    = board.Direction
+	Grid        = board.Grid
+	Tile        = board.Tile
+	TileState   = board.TileState
+	Direction   = board.Direction
 	TileModifier = board.TileModifier
 
 	// Component
@@ -70,9 +69,6 @@ type (
 	AssocEngine = association.Engine
 	AssocResult = association.Result
 	AssocType   = association.Type
-
-	// System
-	Engine = system.Engine
 )
 
 // Constants
@@ -82,10 +78,10 @@ const (
 	TypeStructure = entity.TypeStructure
 	TypeArtefact  = entity.TypeArtefact
 
-	Hidden   = board.Hidden
+	Hidden  = board.Hidden
 	Revealed = board.Revealed
-	Matched  = board.Matched
-	Blocked  = board.Blocked
+	Matched = board.Matched
+	Blocked = board.Blocked
 
 	North = board.North
 	South = board.South
@@ -103,21 +99,19 @@ var (
 
 	NewStore = component.NewStore
 
-	NewCreature        = creature.New
+	NewCreature = creature.New
 	NewCreatureFactory = creature.NewFactory
 
-	NewResource        = resource.New
+	NewResource = resource.New
 	NewResourceFactory = resource.NewFactory
 
 	NewBus = event.NewBus
 
 	NewPlayer = player.New
 
-	NewFamily          = meta.NewFamily
+	NewFamily = meta.NewFamily
 	NewMetaProgression = meta.NewMetaProgression
-	NewHub             = meta.NewHub
+	NewHub = meta.NewHub
 
 	NewAssocEngine = association.NewEngine
-
-	NewEngine = system.NewEngine
 )

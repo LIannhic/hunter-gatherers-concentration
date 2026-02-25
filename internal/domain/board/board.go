@@ -99,12 +99,14 @@ type TileModifier struct {
 
 // Grid est le plateau de jeu
 type Grid struct {
+	ID            string
 	Width, Height int
 	Tiles         map[Position]*Tile
 }
 
-func NewGrid(width, height int) *Grid {
+func NewGrid(id string, width, height int) *Grid {
 	g := &Grid{
+		ID:     id,
 		Width:  width,
 		Height: height,
 		Tiles:  make(map[Position]*Tile),

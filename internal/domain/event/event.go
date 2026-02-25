@@ -23,8 +23,6 @@ const (
 	TileMatched        Type = "tile_matched"
 	EntityCreated      Type = "entity_created"
 	EntityRemoved      Type = "entity_removed"
-	Victory            Type = "victory"
-	GameOver           Type = "game_over"
 )
 
 // Event structure de base
@@ -215,29 +213,6 @@ func NewEntityRemovedEvent(entityID string, reason string) Event {
 		Type:     EntityRemoved,
 		SourceID: entityID,
 		Payload: map[string]interface{}{
-			"reason": reason,
-		},
-		Timestamp: time.Now(),
-	}
-}
-
-func NewVictoryEvent(turns int) Event {
-	return Event{
-		Type:     Victory,
-		SourceID: "system",
-		Payload: map[string]interface{}{
-			"turns": turns,
-		},
-		Timestamp: time.Now(),
-	}
-}
-
-func NewGameOverEvent(turns int, reason string) Event {
-	return Event{
-		Type:     GameOver,
-		SourceID: "system",
-		Payload: map[string]interface{}{
-			"turns":  turns,
 			"reason": reason,
 		},
 		Timestamp: time.Now(),

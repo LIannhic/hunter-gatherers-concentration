@@ -2,8 +2,6 @@ package domain
 
 import (
 	"testing"
-
-	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/system"
 )
 
 // Test that re-exported types work correctly
@@ -15,7 +13,7 @@ func TestReexportedTypes(t *testing.T) {
 	}
 
 	// Test grid creation
-	grid := NewGrid(4, 4)
+	grid := NewGrid("test", 4, 4)
 	if grid.Width != 4 {
 		t.Error("Grid width should be 4")
 	}
@@ -31,21 +29,24 @@ func TestReexportedTypes(t *testing.T) {
 
 func TestIntegrationGameFlow(t *testing.T) {
 	// Create a world
-	world := system.NewWorld(6, 6)
+	world := NewWorld()
+
+	// Create a grid
+	world.CreateGrid("main", 6, 6)
 
 	// Spawn some resources
-	_, err := world.SpawnResource("dreamberry", Position{X: 0, Y: 0})
+	_, err := world.SpawnResource("main", "dreamberry", Position{X: 0, Y: 0})
 	if err != nil {
 		t.Errorf("Failed to spawn resource: %v", err)
 	}
 
-	_, err = world.SpawnResource("moonstone", Position{X: 1, Y: 1})
+	_, err = world.SpawnResource("main", "moonstone", Position{X: 1, Y: 1})
 	if err != nil {
 		t.Errorf("Failed to spawn resource: %v", err)
 	}
 
 	// Spawn a creature
-	_, err = world.SpawnCreature("lumifly", Position{X: 2, Y: 2})
+	_, err = world.SpawnCreature("main", "lumifly", Position{X: 2, Y: 2})
 	if err != nil {
 		t.Errorf("Failed to spawn creature: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestIntegrationGameFlow(t *testing.T) {
 	}
 
 	// Create and run engine
-	engine := system.NewEngine(world)
+	engine := NewEngine(world)
 	engine.Start()
 
 	// Run a few turns

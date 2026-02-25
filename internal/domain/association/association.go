@@ -142,11 +142,11 @@ type ElementalStrategy struct {
 func NewElementalStrategy() *ElementalStrategy {
 	return &ElementalStrategy{
 		Affinities: map[string][]string{
-			"fire":  {"wood", "oil", "ice"},
-			"water": {"fire", "lava", "salt"},
-			"earth": {"water", "air"},
-			"air":   {"earth", "poison"},
-			"life":  {"ethereal", "water"},
+			"fire":     {"wood", "oil", "ice"},
+			"water":    {"fire", "lava", "salt"},
+			"earth":    {"water", "air"},
+			"air":      {"earth", "poison"},
+			"life":     {"ethereal", "water"},
 			"ethereal": {"life", "crystal"},
 		},
 	}
