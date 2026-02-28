@@ -3,6 +3,7 @@ package event
 import (
 	"time"
 
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
@@ -162,13 +163,14 @@ func NewAssociationMadeEvent(playerID string, assocType string, success bool) Ev
 	}
 }
 
-func NewTileRevealedEvent(tilePos entity.Position, entityID string) Event {
+func NewTileRevealedEvent(tilePos entity.Position, entityID string, flipDir board.FlipDirection) Event {
 	return Event{
 		Type:     TileRevealed,
 		SourceID: entityID,
 		Payload: map[string]interface{}{
-			"position":  tilePos,
-			"entity_id": entityID,
+			"position":       tilePos,
+			"entity_id":      entityID,
+			"flip_direction": flipDir,
 		},
 		Timestamp: time.Now(),
 	}

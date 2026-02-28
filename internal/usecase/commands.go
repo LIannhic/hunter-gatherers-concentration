@@ -10,15 +10,19 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 )
 
+// DefaultFlipDirection est la direction par défaut si non spécifiée
+var DefaultFlipDirection = domain.FlipCenter
+
 type Command interface {
 	Execute() error
 	CanExecute() bool
 }
 
 type RevealTileCommand struct {
-	World    *domain.World
-	GridID   string
-	Position board.Position
+	World         *domain.World
+	GridID        string
+	Position      board.Position
+	FlipDirection domain.FlipDirection
 }
 
 func (c *RevealTileCommand) CanExecute() bool {
@@ -38,18 +42,32 @@ func (c *RevealTileCommand) Execute() error {
 		return errors.New("cannot reveal this tile")
 	}
 
-	_, err := c.World.RevealTile(c.GridID, c.Position)
+	// Récupère le grid et révèle la tuile directement
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
+		return errors.New("grid not found")
+	}
+
+	tile, err := grid.Reveal(c.Position)
 	if err != nil {
 		return err
 	}
 
-	c.World.EventBus.Publish(domain.Event{
-		Type:     domain.EventType("action_reveal"),
-		SourceID: "player",
-		Payload:  map[string]interface{}{"position": c.Position, "grid_id": c.GridID},
-	})
+	// Publie l'événement avec la direction de flip
+	c.World.EventBus.Publish(event.NewTileRevealedEvent(
+		entity.Position{X: c.Position.X, Y: c.Position.Y},
+		tile.EntityID,
+		c.FlipDirection,
+	))
 
 	return nil
+}
+
+type MatchResult struct {
+	Success   bool
+	IsMatch   bool
+	Positions [2]board.Position
+	Entities  [2]domain.Entity
 }
 
 type MatchTilesCommand struct {
@@ -57,6 +75,8 @@ type MatchTilesCommand struct {
 	AssocEng   *domain.AssocEngine
 	GridID     string
 	Pos1, Pos2 board.Position
+	OnSuccess  func() // Callback appelé en cas de succès
+	OnFailure  func() // Callback appelé en cas d'échec (pour cacher les cartes et passer le tour)
 }
 
 func (c *MatchTilesCommand) CanExecute() bool {
@@ -100,36 +120,84 @@ func (c *MatchTilesCommand) Execute() error {
 		return errors.New("entities not found")
 	}
 
+	// Vérifie si c'est une association valide
+	isMatch := false
+	matchType := ""
+
+	// Essaie d'abord l'association via le système d'association (pour les ressources)
 	res1, isRes1 := entity1.(*domain.Resource)
 	res2, isRes2 := entity2.(*domain.Resource)
 
-	if !isRes1 || !isRes2 {
-		return errors.New("can only match resources")
+	if isRes1 && isRes2 {
+		result, err := c.AssocEng.TryAssociate(res1, res2)
+		if err == nil && result.Success {
+			isMatch = true
+			matchType = result.Type.String()
+		}
 	}
 
-	result, err := c.AssocEng.TryAssociate(res1, res2)
-	if err != nil || !result.Success {
-		return fmt.Errorf("association failed: %v", err)
+	// Si ce n'est pas des ressources, vérifie si ce sont des créatures identiques
+	if !isMatch {
+		cre1, isCre1 := entity1.(*domain.Creature)
+		cre2, isCre2 := entity2.(*domain.Creature)
+
+		if isCre1 && isCre2 && cre1.Species == cre2.Species {
+			isMatch = true
+			matchType = "creature_capture"
+		}
 	}
 
-	c.World.MatchTile(c.GridID, c.Pos1)
-	c.World.MatchTile(c.GridID, c.Pos2)
+	if isMatch {
+		// Succès : les tuiles restent visibles et sont marquées comme appairées
+		c.World.MatchTile(c.GridID, c.Pos1)
+		c.World.MatchTile(c.GridID, c.Pos2)
 
-	c.World.RemoveEntity(entity1.GetID())
-	c.World.RemoveEntity(entity2.GetID())
+		c.World.RemoveEntity(entity1.GetID())
+		c.World.RemoveEntity(entity2.GetID())
 
-	c.World.EventBus.Publish(domain.Event{
-		Type:     domain.EventType("tiles_matched"),
-		SourceID: "player",
-		Payload: map[string]interface{}{
-			"position1":  c.Pos1,
-			"position2":  c.Pos2,
-			"grid_id":    c.GridID,
-			"assoc_type": result.Type.String(),
-		},
-	})
+		c.World.EventBus.Publish(domain.Event{
+			Type:     domain.EventType("tiles_matched"),
+			SourceID: "player",
+			Payload: map[string]interface{}{
+				"position1":  c.Pos1,
+				"position2":  c.Pos2,
+				"grid_id":    c.GridID,
+				"assoc_type": matchType,
+			},
+		})
 
-	return nil
+		if c.OnSuccess != nil {
+			c.OnSuccess()
+		}
+
+		fmt.Println("[MATCH] Association réussie !")
+		return nil
+	} else {
+		// Échec : cacher les tuiles et passer le tour
+		fmt.Println("[MATCH] Échec de l'association - les cartes sont différentes")
+
+		// Publie un événement d'échec
+		c.World.EventBus.Publish(domain.Event{
+			Type:     domain.EventType("match_failed"),
+			SourceID: "player",
+			Payload: map[string]interface{}{
+				"position1": c.Pos1,
+				"position2": c.Pos2,
+				"grid_id":   c.GridID,
+			},
+		})
+
+		// Cache les tuiles
+		grid.Hide(c.Pos1)
+		grid.Hide(c.Pos2)
+
+		// Appelle le callback d'échec (pour passer le tour)
+		if c.OnFailure != nil {
+			c.OnFailure()
+		}
+
+		return errors.New("association échouée : les cartes ne correspondent pas")
+	}
 }
 
 type EndTurnCommand struct {

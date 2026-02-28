@@ -3,6 +3,7 @@ package input
 import (
 	"fmt"
 	"image/color"
+	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -15,6 +16,7 @@ type Renderer interface {
 	GetTileSize() int
 	GetGridOffset() (int, int)
 	ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool)
+	ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool)
 	RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, color color.Color, world *domain.World)
 }
 
@@ -30,6 +32,12 @@ type Handler struct {
 	OnSpawnEntities func(gridID string)
 	OnClearBoard    func(gridID string)
 	OnSwitchGrid    func(gridID string)
+	OnRotateBoard   func(delta float64) // Callback pour la rotation du plateau
+	OnResetRotation func()              // Callback pour réinitialiser la rotation
+
+	// Gestion du tour de jeu memory
+	revealedTiles []board.Position // Liste des tuiles révélées ce tour
+	isProcessing  bool             // Évite les clics pendant l'animation
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
@@ -63,6 +71,11 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
+	if h.isProcessing {
+		fmt.Println("[INPUT] Traitement en cours, veuillez patienter...")
+		return nil
+	}
+
 	pos, gridID, ok := h.getHoveredTile()
 	if !ok {
 		return nil
@@ -82,18 +95,34 @@ func (h *Handler) handleMouse() error {
 			return nil
 		}
 
-		if h.countRevealedTiles(grid) >= 2 {
-			fmt.Println("[INPUT] Action bloquée : Déjà 2 tuiles révélées. Appuyez sur M pour valider.")
+		// Vérifie si on a déjà révélé 2 tuiles ce tour
+		if len(h.revealedTiles) >= 2 {
+			fmt.Println("[INPUT] Déjà 2 tuiles révélées ce tour. Veuillez attendre la fin du traitement.")
 			return nil
 		}
 
-		cmd := &usecase.RevealTileCommand{World: h.world, GridID: gridID, Position: pos}
+		// Calcule la direction de flip basée sur la position du clic dans la tuile
+		flipDir := h.calculateFlipDirection(gridID, pos)
+
+		cmd := &usecase.RevealTileCommand{
+			World:         h.world,
+			GridID:        gridID,
+			Position:      pos,
+			FlipDirection: flipDir,
+		}
 		if err := cmd.Execute(); err == nil {
-			fmt.Printf("[INPUT] Tuile révélée en %v sur %s\n", pos, gridID)
+			fmt.Printf("[INPUT] Tuile révélée en %v sur %s (flip: %s)\n", pos, gridID, flipDir.String())
+			h.revealedTiles = append(h.revealedTiles, pos)
 		}
 
 		h.selectedTile = &pos
 		h.selectedGridID = gridID
+
+		// Si on a révélé 2 tuiles, tente le match automatiquement
+		if len(h.revealedTiles) == 2 {
+			h.isProcessing = true
+			go h.processMatchAttempt()
+		}
 
 	case board.Revealed:
 		if h.selectedTile != nil && h.selectedGridID == gridID && *h.selectedTile == pos {
@@ -106,6 +135,54 @@ func (h *Handler) handleMouse() error {
 		}
 	}
 	return nil
+}
+
+// processMatchAttempt tente d'associer les 2 tuiles révélées
+func (h *Handler) processMatchAttempt() {
+	// Petit délai pour que le joueur puisse voir la 2ème carte
+	time.Sleep(800 * time.Millisecond)
+
+	if len(h.revealedTiles) != 2 {
+		h.isProcessing = false
+		return
+	}
+
+	pos1 := h.revealedTiles[0]
+	pos2 := h.revealedTiles[1]
+
+	fmt.Printf("[MATCH] Tentative d'association entre %v et %v...\n", pos1, pos2)
+
+	cmd := &usecase.MatchTilesCommand{
+		World:    h.world,
+		AssocEng: h.assocEngine,
+		GridID:   h.selectedGridID,
+		Pos1:     pos1,
+		Pos2:     pos2,
+		OnSuccess: func() {
+			fmt.Println("[MATCH] ✅ Association réussie ! Les tuiles restent visibles.")
+			h.revealedTiles = nil
+			h.isProcessing = false
+			h.ClearSelection()
+		},
+		OnFailure: func() {
+			fmt.Println("[MATCH] ❌ Association échouée ! Les tuiles sont retournées.")
+			h.revealedTiles = nil
+			h.isProcessing = false
+			h.ClearSelection()
+			// Passe le tour
+			if h.OnTurnEnd != nil {
+				fmt.Println("[TURN] Fin du tour après échec")
+				h.OnTurnEnd()
+			}
+		},
+	}
+
+	if err := cmd.Execute(); err != nil {
+		fmt.Printf("[MATCH] %v\n", err)
+		// En cas d'erreur, réinitialise quand même
+		h.revealedTiles = nil
+		h.isProcessing = false
+	}
 }
 
 func (h *Handler) countRevealedTiles(g *board.Grid) int {
@@ -163,6 +240,28 @@ func (h *Handler) handleKeyboard() {
 		fmt.Println("[KEY] Echap : Sélection nettoyée")
 		h.ClearSelection()
 	}
+
+	// Rotation du plateau
+	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
+		fmt.Println("[KEY] R : Réinitialisation de la rotation")
+		if h.OnResetRotation != nil {
+			h.OnResetRotation()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyEqual) || inpututil.IsKeyJustPressed(ebiten.KeyKPEqual) {
+		fmt.Println("[KEY] + : Rotation horaire")
+		if h.OnRotateBoard != nil {
+			h.OnRotateBoard(15)
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyMinus) || inpututil.IsKeyJustPressed(ebiten.KeyKPSubtract) {
+		fmt.Println("[KEY] - : Rotation anti-horaire")
+		if h.OnRotateBoard != nil {
+			h.OnRotateBoard(-15)
+		}
+	}
 }
 
 func (h *Handler) tryMatchSelected() {
@@ -195,14 +294,28 @@ func (h *Handler) tryMatchSelected() {
 				GridID:   h.selectedGridID,
 				Pos1:     *h.selectedTile,
 				Pos2:     tile.Position,
+				OnSuccess: func() {
+					fmt.Println("[MATCH] Paire trouvée ! Le joueur peut continuer.")
+					h.ClearSelection()
+				},
+				OnFailure: func() {
+					fmt.Println("[MATCH] Échec ! Les cartes sont retournées et le tour passe.")
+					h.ClearSelection()
+					// Déclenche la fin de tour
+					if h.OnTurnEnd != nil {
+						fmt.Println("[TURN] Fin du tour après échec d'association")
+						h.OnTurnEnd()
+					}
+				},
 			}
 
 			if err := cmd.Execute(); err == nil {
-				fmt.Println("[MATCH] SUCCÈS !")
-				h.ClearSelection()
+				// Succès géré par OnSuccess
 				return
 			} else {
-				fmt.Printf("[MATCH] ÉCHEC : %v\n", err)
+				// Échec géré par OnFailure
+				fmt.Printf("[MATCH] %v\n", err)
+				return
 			}
 		}
 	}
@@ -214,6 +327,23 @@ func (h *Handler) getHoveredTile() (board.Position, string, bool) {
 	}
 	x, y := ebiten.CursorPosition()
 	return h.renderer.ScreenToGrid(x, y, h.world)
+}
+
+// calculateFlipDirection détermine la direction de flip basée sur la position du clic dans la tuile
+func (h *Handler) calculateFlipDirection(gridID string, pos board.Position) domain.FlipDirection {
+	if h.renderer == nil {
+		return usecase.DefaultFlipDirection
+	}
+
+	// Récupère la position locale du clic dans la tuile
+	cursorX, cursorY := ebiten.CursorPosition()
+	localX, localY, gID, ok := h.renderer.ScreenToLocalTile(cursorX, cursorY, h.world)
+	if !ok || gID != gridID {
+		return usecase.DefaultFlipDirection
+	}
+
+	tileSize := h.renderer.GetTileSize()
+	return board.CalculateFlipDirection(tileSize, localX, localY)
 }
 
 func (h *Handler) renderHighlights(screen *ebiten.Image) {
@@ -251,4 +381,5 @@ func (h *Handler) GetCurrentGridID() string {
 func (h *Handler) ClearSelection() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
+	// Note: on ne réinitialise pas revealedTiles ici car c'est géré par processMatchAttempt
 }

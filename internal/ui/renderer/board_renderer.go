@@ -4,6 +4,7 @@ package renderer
 import (
 	"fmt"
 	"image/color"
+	"math"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -22,17 +23,49 @@ type BoardRenderer struct {
 	gridOffsetY int
 	gridSpacing int // Espace entre les grids
 	gridsPerRow int // Nombre de grids par ligne
+
+	// Rotation visuelle globale du plateau (en degrés)
+	boardRotation float64
+
+	// Animations de flip en cours: clé = "gridID:x,y", valeur = état de l'animation
+	flipAnimations map[string]*FlipAnimation
+}
+
+// FlipAnimation représente l'état d'une animation de flip
+type FlipAnimation struct {
+	GridID        string
+	Position      board.Position
+	FlipDirection board.FlipDirection
+	Progress      float64 // 0.0 à 1.0
+	Speed         float64
+	EntityID      string  // L'entité à afficher à la fin
+	TileState     board.TileState // État final de la tuile
+}
+
+// IsActive retourne true si l'animation est en cours
+func (a *FlipAnimation) IsActive() bool {
+	return a.Progress < 1.0
+}
+
+// GetCurrentRotation retourne les angles de rotation actuels (X, Y) en fonction du progrès
+func (a *FlipAnimation) GetCurrentRotation() (rotateX, rotateY float64) {
+	targetX, targetY := a.FlipDirection.ToRotationAngles()
+	// Interpole entre 0 et l'angle cible basé sur le progrès
+	// Utilise une courbe ease-out pour un effet plus naturel
+	eased := 1 - math.Pow(1-a.Progress, 3)
+	return targetX * eased, targetY * eased
 }
 
 // NewBoardRenderer crée un nouveau renderer
 func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 	return &BoardRenderer{
-		assets:      am,
-		tileSize:    64,
-		gridOffsetX: 50,
-		gridOffsetY: 100,
-		gridSpacing: 30,
-		gridsPerRow: 2,
+		assets:         am,
+		tileSize:       64,
+		gridOffsetX:    50,
+		gridOffsetY:    100,
+		gridSpacing:    30,
+		gridsPerRow:    2,
+		flipAnimations: make(map[string]*FlipAnimation),
 	}
 }
 
@@ -40,6 +73,47 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 func (r *BoardRenderer) SetGridOffset(x, y int) {
 	r.gridOffsetX = x
 	r.gridOffsetY = y
+}
+
+// SetBoardRotation définit la rotation visuelle globale du plateau (en degrés)
+func (r *BoardRenderer) SetBoardRotation(degrees float64) {
+	r.boardRotation = math.Mod(degrees, 360)
+}
+
+// GetBoardRotation retourne la rotation actuelle du plateau
+func (r *BoardRenderer) GetBoardRotation() float64 {
+	return r.boardRotation
+}
+
+// RotateBoard ajoute une rotation au plateau (delta en degrés)
+func (r *BoardRenderer) RotateBoard(delta float64) {
+	r.SetBoardRotation(r.boardRotation + delta)
+}
+
+// StartFlipAnimation démarre une animation de flip pour une tuile
+func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir board.FlipDirection, entityID string, finalState board.TileState) {
+	key := fmt.Sprintf("%s:%d,%d", gridID, pos.X, pos.Y)
+	r.flipAnimations[key] = &FlipAnimation{
+		GridID:        gridID,
+		Position:      pos,
+		FlipDirection: flipDir,
+		Progress:      0.0,
+		Speed:         0.15, // Vitesse de l'animation
+		EntityID:      entityID,
+		TileState:     finalState,
+	}
+}
+
+// UpdateAnimations met à jour toutes les animations de flip
+func (r *BoardRenderer) UpdateAnimations() {
+	for key, anim := range r.flipAnimations {
+		anim.Progress += anim.Speed
+		if anim.Progress >= 1.0 {
+			anim.Progress = 1.0
+			// Animation terminée, on peut la supprimer après un délai
+			delete(r.flipAnimations, key)
+		}
+	}
 }
 
 // GetTileSize retourne la taille des tuiles
@@ -86,6 +160,9 @@ func (r *BoardRenderer) getGridLayout(gridID string, world *domain.World) (offse
 
 // Render dessine le plateau complet
 func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
+	// Met à jour les animations
+	r.UpdateAnimations()
+
 	// Dessine le titre
 	title := fmt.Sprintf("Hunter-Gatherers Concentration - Tour %d", world.Turn)
 	text.Draw(screen, title, basicfont.Face7x13, 10, 20, color.White)
@@ -93,10 +170,16 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 	// Instructions
 	text.Draw(screen, "Click to reveal, M to match selected", basicfont.Face7x13, 10, 40, color.White)
 	text.Draw(screen, "S: Spawn test | C: Clear | SPACE: End turn | 1-9: Switch Grid", basicfont.Face7x13, 10, 55, color.White)
+	if r.boardRotation != 0 {
+		text.Draw(screen, "R: Reset rotation | +/-: Rotate board", basicfont.Face7x13, 10, 70, color.White)
+	}
 
-	// Affiche le grid actuel
+	// Affiche le grid actuel et la rotation
 	currentGridInfo := fmt.Sprintf("Current Grid: %s", world.CurrentGridID)
-	text.Draw(screen, currentGridInfo, basicfont.Face7x13, 10, 70, color.RGBA{255, 255, 0, 255})
+	if r.boardRotation != 0 {
+		currentGridInfo += fmt.Sprintf(" (Rotation: %.0f°)", r.boardRotation)
+	}
+	text.Draw(screen, currentGridInfo, basicfont.Face7x13, 10, 85, color.RGBA{255, 255, 0, 255})
 
 	// Dessine tous les grids dans l'ordre de création (évite le clignotement)
 	for _, gridID := range world.GridOrder {
@@ -142,9 +225,21 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 
 // renderTileAt dessine une tuile à une position écran spécifique
 func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board.Tile, world *domain.World) {
-	// Fond de la tuile selon son état
+	// Détermine l'état visuel de la tuile (animation ou état réel)
+	visualState := tile.State
+	var animation *FlipAnimation
+
+	// Cherche une animation active pour cette tuile
+	for _, anim := range r.flipAnimations {
+		if anim.Position == tile.Position {
+			animation = anim
+			break
+		}
+	}
+
+	// Fond de la tuile selon son état visuel
 	var tileImg *ebiten.Image
-	switch tile.State {
+	switch visualState {
 	case board.Hidden:
 		tileImg = r.assets.GetImage("tile_hidden")
 	case board.Revealed:
@@ -155,17 +250,53 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board
 		tileImg = r.assets.GetImage("tile_hidden")
 	}
 
+	// Configure les options de dessin avec rotation et flip
 	op := &ebiten.DrawImageOptions{}
+
+	// Centre de la tuile pour les transformations
+	centerX := float64(r.tileSize) / 2
+	centerY := float64(r.tileSize) / 2
+
+	// Applique la rotation du plateau si définie
+	if r.boardRotation != 0 {
+		// Translate au centre de la tuile, rotate, puis translate en arrière
+		op.GeoM.Translate(-centerX, -centerY)
+		op.GeoM.Rotate(r.boardRotation * math.Pi / 180)
+		op.GeoM.Translate(centerX, centerY)
+	}
+
+	// Applique l'animation de flip si active
+	if animation != nil && animation.IsActive() {
+		rotateX, rotateY := animation.GetCurrentRotation()
+		// Rotation X (flip vertical)
+		if rotateX != 0 {
+			op.GeoM.Translate(0, -centerY)
+			op.GeoM.Scale(1, math.Abs(math.Cos(rotateX*math.Pi/180)))
+			op.GeoM.Translate(0, centerY)
+		}
+		// Rotation Y (flip horizontal)
+		if rotateY != 0 {
+			op.GeoM.Translate(-centerX, 0)
+			op.GeoM.Scale(math.Abs(math.Cos(rotateY*math.Pi/180)), 1)
+			op.GeoM.Translate(centerX, 0)
+		}
+	}
+
+	// Translate à la position finale
 	op.GeoM.Translate(float64(x), float64(y))
 	screen.DrawImage(tileImg, op)
 
 	// Si la tuile est révélée ou appairée, montre le contenu
-	if tile.State == board.Revealed || tile.State == board.Matched {
-		if tile.EntityID != "" {
-			// Cherche l'entité
-			if e, ok := world.Entities.Get(domain.ID(tile.EntityID)); ok {
-				r.renderEntityAt(screen, x, y, e)
-			}
+	// Affiche aussi pendant l'animation si elle est avancée (> 50%)
+	shouldShowContent := tile.State == board.Revealed || tile.State == board.Matched
+	if animation != nil && animation.IsActive() && animation.Progress > 0.5 {
+		shouldShowContent = true
+	}
+
+	if shouldShowContent && tile.EntityID != "" {
+		// Cherche l'entité
+		if e, ok := world.Entities.Get(domain.ID(tile.EntityID)); ok {
+			r.renderEntityAt(screen, x, y, e)
 		}
 	}
 }
@@ -183,11 +314,13 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e domain.
 
 	switch ent := e.(type) {
 	case *domain.Creature:
-		// Icône de créature
+		// Icône de créature - centrée dans la tuile
 		icon := r.assets.GetCreatureIcon(ent.Species)
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(float64(x+8), float64(y+8))
+		// Mise à l'échelle d'abord (depuis le centre de l'icône)
+		op.GeoM.Translate(-float64(r.tileSize)/2, -float64(r.tileSize)/2)
 		op.GeoM.Scale(0.75, 0.75)
+		op.GeoM.Translate(float64(x+r.tileSize/2), float64(y+r.tileSize/2))
 		screen.DrawImage(icon, op)
 
 		// Petit indicateur de comportement
@@ -203,11 +336,13 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e domain.
 		vector.DrawFilledCircle(screen, centerX, float32(y+10), 4, behaviorColor, true)
 
 	case *domain.Resource:
-		// Icône de ressource
+		// Icône de ressource - centrée dans la tuile
 		icon := r.assets.GetResourceIcon(ent.ResourceType)
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(float64(x+8), float64(y+8))
+		// Mise à l'échelle d'abord (depuis le centre de l'icône)
+		op.GeoM.Translate(-float64(r.tileSize)/2, -float64(r.tileSize)/2)
 		op.GeoM.Scale(0.75, 0.75)
+		op.GeoM.Translate(float64(x+r.tileSize/2), float64(y+r.tileSize/2))
 		screen.DrawImage(icon, op)
 
 		// Indicateur de stade
@@ -319,6 +454,30 @@ func (r *BoardRenderer) ScreenToGrid(screenX, screenY int, world *domain.World) 
 	}
 
 	return board.Position{}, "", false
+}
+
+// ScreenToLocalTile convertit les coordonnées écran en coordonnées locales dans une tuile
+// Retourne les coordonnées locales (localX, localY) relatives au coin supérieur gauche de la tuile
+func (r *BoardRenderer) ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool) {
+	pos, gID, found := r.ScreenToGrid(screenX, screenY, world)
+	if !found {
+		return 0, 0, "", false
+	}
+
+	offsetX, offsetY, grid := r.getGridLayout(gID, world)
+	if grid == nil {
+		return 0, 0, "", false
+	}
+
+	// Calcule la position de la tuile à l'écran
+	tileScreenX := offsetX + pos.X*r.tileSize
+	tileScreenY := offsetY + pos.Y*r.tileSize
+
+	// Calcule les coordonnées locales dans la tuile
+	lx := screenX - tileScreenX
+	ly := screenY - tileScreenY
+
+	return lx, ly, gID, true
 }
 
 // RenderSelectionHighlight dessine une surbrillance sur une tuile sélectionnée d'un grid spécifique
