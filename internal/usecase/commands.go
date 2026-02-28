@@ -120,31 +120,47 @@ func (c *MatchTilesCommand) Execute() error {
 		return errors.New("entities not found")
 	}
 
+	// Détermine les types des entités
+	res1, isRes1 := entity1.(*domain.Resource)
+	res2, isRes2 := entity2.(*domain.Resource)
+	cre1, isCre1 := entity1.(*domain.Creature)
+	cre2, isCre2 := entity2.(*domain.Creature)
+
+	fmt.Printf("[MATCH DEBUG] Entité 1: Resource=%v, Creature=%v\n", isRes1, isCre1)
+	fmt.Printf("[MATCH DEBUG] Entité 2: Resource=%v, Creature=%v\n", isRes2, isCre2)
+
 	// Vérifie si c'est une association valide
 	isMatch := false
 	matchType := ""
 
-	// Essaie d'abord l'association via le système d'association (pour les ressources)
-	res1, isRes1 := entity1.(*domain.Resource)
-	res2, isRes2 := entity2.(*domain.Resource)
-
+	// Cas 1 : Deux ressources - utilise le système d'association
 	if isRes1 && isRes2 {
+		fmt.Printf("[MATCH DEBUG] Comparaison de ressources: %s vs %s\n", res1.ResourceType, res2.ResourceType)
 		result, err := c.AssocEng.TryAssociate(res1, res2)
 		if err == nil && result.Success {
 			isMatch = true
 			matchType = result.Type.String()
+			fmt.Printf("[MATCH DEBUG] Association ressource réussie: %s\n", matchType)
+		} else {
+			fmt.Printf("[MATCH DEBUG] Association ressource échouée: %v\n", err)
 		}
 	}
 
-	// Si ce n'est pas des ressources, vérifie si ce sont des créatures identiques
-	if !isMatch {
-		cre1, isCre1 := entity1.(*domain.Creature)
-		cre2, isCre2 := entity2.(*domain.Creature)
-
-		if isCre1 && isCre2 && cre1.Species == cre2.Species {
+	// Cas 2 : Deux créatures - compare les espèces
+	if !isMatch && isCre1 && isCre2 {
+		fmt.Printf("[MATCH DEBUG] Comparaison de créatures: %s vs %s\n", cre1.Species, cre2.Species)
+		if cre1.Species == cre2.Species {
 			isMatch = true
 			matchType = "creature_capture"
+			fmt.Printf("[MATCH DEBUG] Créatures identiques !\n")
+		} else {
+			fmt.Printf("[MATCH DEBUG] Créatures différentes !\n")
 		}
+	}
+
+	// Cas 3 : Mix ressource/créature - pas de match
+	if !isMatch && ((isRes1 && isCre2) || (isCre1 && isRes2)) {
+		fmt.Printf("[MATCH DEBUG] Mix ressource/créature - pas de match possible\n")
 	}
 
 	if isMatch {
