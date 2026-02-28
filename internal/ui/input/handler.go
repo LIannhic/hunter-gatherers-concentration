@@ -38,6 +38,7 @@ type Handler struct {
 	// Gestion du tour de jeu memory
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
 	isProcessing  bool             // Évite les clics pendant l'animation
+	matchTimer    int              // Compteur de frames pour le délai de matching
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
@@ -56,7 +57,18 @@ func (h *Handler) Update() error {
 		return err
 	}
 	h.handleKeyboard()
+	h.updateMatchTimer()
 	return nil
+}
+
+// updateMatchTimer gère le délai avant le matching automatique
+func (h *Handler) updateMatchTimer() {
+	if h.matchTimer > 0 {
+		h.matchTimer--
+		if h.matchTimer == 0 {
+			h.processMatchAttempt()
+		}
+	}
 }
 
 func (h *Handler) Draw(screen *ebiten.Image) {
@@ -118,10 +130,12 @@ func (h *Handler) handleMouse() error {
 		h.selectedTile = &pos
 		h.selectedGridID = gridID
 
-		// Si on a révélé 2 tuiles, tente le match automatiquement
+		// Si on a révélé 2 tuiles, démarre le timer pour le match automatique
+		// (environ 800ms à 60fps = 48 frames)
 		if len(h.revealedTiles) == 2 {
 			h.isProcessing = true
-			go h.processMatchAttempt()
+			h.matchTimer = 48 // 48 frames = 800ms à 60fps
+			fmt.Println("[MATCH] Délai de 800ms avant résolution...")
 		}
 
 	case board.Revealed:
@@ -137,11 +151,8 @@ func (h *Handler) handleMouse() error {
 	return nil
 }
 
-// processMatchAttempt tente d'associer les 2 tuiles révélées
+// processMatchAttempt tente d'associer les 2 tuiles révélées (appelé après le délai)
 func (h *Handler) processMatchAttempt() {
-	// Petit délai pour que le joueur puisse voir la 2ème carte
-	time.Sleep(800 * time.Millisecond)
-
 	if len(h.revealedTiles) != 2 {
 		h.isProcessing = false
 		return
