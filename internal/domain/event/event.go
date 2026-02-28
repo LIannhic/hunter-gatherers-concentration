@@ -220,3 +220,24 @@ func NewEntityRemovedEvent(entityID string, reason string) Event {
 		Timestamp: time.Now(),
 	}
 }
+
+// GameState représente l'état actuel du jeu
+type GameState string
+
+const (
+	StateMenu     GameState = "menu"
+	StatePlaying  GameState = "playing"
+	StateGameOver GameState = "game_over"
+)
+
+func NewPhaseChangedEvent(from, to GameState) Event {
+	return Event{
+		Type:     PhaseChanged,
+		SourceID: "game",
+		Payload: map[string]interface{}{
+			"from": string(from),
+			"to":   string(to),
+		},
+		Timestamp: time.Now(),
+	}
+}
