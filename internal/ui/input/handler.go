@@ -3,6 +3,7 @@ package input
 import (
 	"fmt"
 	"image/color"
+	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
