@@ -33,6 +33,7 @@ type Handler struct {
 	OnSwitchGrid    func(gridID string)
 	OnRotateBoard   func(delta float64) // Callback pour la rotation du plateau
 	OnResetRotation func()              // Callback pour réinitialiser la rotation
+	OnExitToMenu    func()              // Callback pour retourner au menu
 
 	// Gestion du tour de jeu memory
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
@@ -195,16 +196,6 @@ func (h *Handler) processMatchAttempt() {
 	}
 }
 
-func (h *Handler) countRevealedTiles(g *board.Grid) int {
-	count := 0
-	for _, tile := range g.Tiles {
-		if tile.State == board.Revealed {
-			count++
-		}
-	}
-	return count
-}
-
 func (h *Handler) handleKeyboard() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
 		fmt.Println("[KEY] Touche M pressée : tentative de Match...")
@@ -270,6 +261,14 @@ func (h *Handler) handleKeyboard() {
 		fmt.Println("[KEY] - : Rotation anti-horaire")
 		if h.OnRotateBoard != nil {
 			h.OnRotateBoard(-15)
+		}
+	}
+
+	// Touche $ pour retourner au menu
+	if inpututil.IsKeyJustPressed(ebiten.KeyBackslash) {
+		fmt.Println("[KEY] \\ : Retour au menu")
+		if h.OnExitToMenu != nil {
+			h.OnExitToMenu()
 		}
 	}
 }
@@ -392,4 +391,13 @@ func (h *Handler) ClearSelection() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
 	// Note: on ne réinitialise pas revealedTiles ici car c'est géré par processMatchAttempt
+}
+
+// ResetGameState réinitialise l'état du jeu (pour retour au menu)
+func (h *Handler) ResetGameState() {
+	h.selectedTile = nil
+	h.selectedGridID = ""
+	h.revealedTiles = nil
+	h.isProcessing = false
+	h.matchTimer = 0
 }
