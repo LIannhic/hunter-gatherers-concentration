@@ -15,6 +15,7 @@ type Renderer interface {
 	GetTileSize() int
 	GetGridOffset() (int, int)
 	ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool)
+	ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool)
 	RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, color color.Color, world *domain.World)
 }
 
@@ -30,6 +31,8 @@ type Handler struct {
 	OnSpawnEntities func(gridID string)
 	OnClearBoard    func(gridID string)
 	OnSwitchGrid    func(gridID string)
+	OnRotateBoard   func(delta float64) // Callback pour la rotation du plateau
+	OnResetRotation func()              // Callback pour réinitialiser la rotation
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
@@ -87,9 +90,17 @@ func (h *Handler) handleMouse() error {
 			return nil
 		}
 
-		cmd := &usecase.RevealTileCommand{World: h.world, GridID: gridID, Position: pos}
+		// Calcule la direction de flip basée sur la position du clic dans la tuile
+		flipDir := h.calculateFlipDirection(gridID, pos)
+
+		cmd := &usecase.RevealTileCommand{
+			World:         h.world,
+			GridID:        gridID,
+			Position:      pos,
+			FlipDirection: flipDir,
+		}
 		if err := cmd.Execute(); err == nil {
-			fmt.Printf("[INPUT] Tuile révélée en %v sur %s\n", pos, gridID)
+			fmt.Printf("[INPUT] Tuile révélée en %v sur %s (flip: %s)\n", pos, gridID, flipDir.String())
 		}
 
 		h.selectedTile = &pos
@@ -163,6 +174,28 @@ func (h *Handler) handleKeyboard() {
 		fmt.Println("[KEY] Echap : Sélection nettoyée")
 		h.ClearSelection()
 	}
+
+	// Rotation du plateau
+	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
+		fmt.Println("[KEY] R : Réinitialisation de la rotation")
+		if h.OnResetRotation != nil {
+			h.OnResetRotation()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyEqual) || inpututil.IsKeyJustPressed(ebiten.KeyKPEqual) {
+		fmt.Println("[KEY] + : Rotation horaire")
+		if h.OnRotateBoard != nil {
+			h.OnRotateBoard(15)
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyMinus) || inpututil.IsKeyJustPressed(ebiten.KeyKPSubtract) {
+		fmt.Println("[KEY] - : Rotation anti-horaire")
+		if h.OnRotateBoard != nil {
+			h.OnRotateBoard(-15)
+		}
+	}
 }
 
 func (h *Handler) tryMatchSelected() {
@@ -214,6 +247,23 @@ func (h *Handler) getHoveredTile() (board.Position, string, bool) {
 	}
 	x, y := ebiten.CursorPosition()
 	return h.renderer.ScreenToGrid(x, y, h.world)
+}
+
+// calculateFlipDirection détermine la direction de flip basée sur la position du clic dans la tuile
+func (h *Handler) calculateFlipDirection(gridID string, pos board.Position) domain.FlipDirection {
+	if h.renderer == nil {
+		return usecase.DefaultFlipDirection
+	}
+
+	// Récupère la position locale du clic dans la tuile
+	cursorX, cursorY := ebiten.CursorPosition()
+	localX, localY, gID, ok := h.renderer.ScreenToLocalTile(cursorX, cursorY, h.world)
+	if !ok || gID != gridID {
+		return usecase.DefaultFlipDirection
+	}
+
+	tileSize := h.renderer.GetTileSize()
+	return board.CalculateFlipDirection(tileSize, localX, localY)
 }
 
 func (h *Handler) renderHighlights(screen *ebiten.Image) {

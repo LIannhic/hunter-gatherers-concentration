@@ -23,11 +23,12 @@ type (
 	Type     = entity.Type
 
 	// Board
-	Grid        = board.Grid
-	Tile        = board.Tile
-	TileState   = board.TileState
-	Direction   = board.Direction
-	TileModifier = board.TileModifier
+	Grid           = board.Grid
+	Tile           = board.Tile
+	TileState      = board.TileState
+	Direction      = board.Direction
+	FlipDirection  = board.FlipDirection
+	TileModifier   = board.TileModifier
 
 	// Component
 	Component   = component.Component
@@ -87,6 +88,17 @@ const (
 	South = board.South
 	East  = board.East
 	West  = board.West
+
+	// Flip directions
+	FlipTop         = board.FlipTop
+	FlipTopRight    = board.FlipTopRight
+	FlipRight       = board.FlipRight
+	FlipBottomRight = board.FlipBottomRight
+	FlipBottom      = board.FlipBottom
+	FlipBottomLeft  = board.FlipBottomLeft
+	FlipLeft        = board.FlipLeft
+	FlipTopLeft     = board.FlipTopLeft
+	FlipCenter      = board.FlipCenter
 )
 
 // Factory functions

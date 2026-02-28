@@ -54,7 +54,7 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 		mm.grid.Reveal(pos)
 		fmt.Printf("[Sélection] Première tuile choisie : %s (ID: %s)\n", pos.String(), entityID)
 
-		mm.eventBus.PublishImmediate(event.NewTileRevealedEvent(entity.Position(pos), string(entityID)))
+		mm.eventBus.PublishImmediate(event.NewTileRevealedEvent(entity.Position(pos), string(entityID), board.FlipCenter))
 		return nil, nil
 	}
 

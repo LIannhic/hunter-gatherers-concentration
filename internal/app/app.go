@@ -7,6 +7,9 @@ import (
 	"image/color"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/hud"
@@ -68,7 +71,10 @@ func NewApplication() (*Application, error) {
 	// 7. Configure les callbacks
 	app.setupCallbacks()
 
-	// 8. Debug
+	// 8. Subscribe aux événements pour les animations
+	app.setupEventSubscriptions()
+
+	// 9. Debug
 	app.debug = NewDebugStats()
 
 	// 9. Spawne quelques entités de test au démarrage
@@ -170,6 +176,38 @@ func (app *Application) setupCallbacks() {
 			fmt.Printf("[ERROR] Failed to switch grid: %v\n", err)
 		}
 	}
+
+	// Callback rotation du plateau
+	app.Input.OnRotateBoard = func(delta float64) {
+		app.Renderer.RotateBoard(delta)
+	}
+
+	// Callback réinitialisation rotation
+	app.Input.OnResetRotation = func() {
+		app.Renderer.SetBoardRotation(0)
+	}
+}
+
+// setupEventSubscriptions abonne le renderer aux événements pour les animations
+func (app *Application) setupEventSubscriptions() {
+	// Abonne le renderer aux événements TileRevealed pour démarrer les animations
+	app.World.EventBus.SubscribeFunc(event.TileRevealed, func(e event.Event) {
+		position, ok1 := e.Payload["position"].(entity.Position)
+		flipDir, ok2 := e.Payload["flip_direction"].(board.FlipDirection)
+		entityID, ok3 := e.Payload["entity_id"].(string)
+		gridID := e.SourceID
+
+		if ok1 && ok2 && ok3 {
+			// Démarre l'animation de flip
+			app.Renderer.StartFlipAnimation(
+				gridID,
+				board.Position{X: position.X, Y: position.Y},
+				flipDir,
+				entityID,
+				board.Revealed,
+			)
+		}
+	})
 }
 
 // spawnInitialEntities crée quelques entités au démarrage sur différents grids

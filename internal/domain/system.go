@@ -155,6 +155,7 @@ func (w *World) SpawnCreature(gridID string, species string, pos entity.Position
 }
 
 // RevealTile révèle une tuile sur un grid spécifique
+// Note: Cette méthode ne publie pas d'événement - c'est à l'appelant de le faire avec la direction de flip
 func (w *World) RevealTile(gridID string, pos board.Position) (*board.Tile, error) {
 	grid, ok := w.Grids[gridID]
 	if !ok {
@@ -165,10 +166,7 @@ func (w *World) RevealTile(gridID string, pos board.Position) (*board.Tile, erro
 	if err != nil {
 		return nil, err
 	}
-	w.EventBus.Publish(event.NewTileRevealedEvent(
-		entity.Position{X: pos.X, Y: pos.Y},
-		tile.EntityID,
-	))
+	// L'événement doit être publié par l'appelant avec la direction de flip appropriée
 	return tile, nil
 }
 

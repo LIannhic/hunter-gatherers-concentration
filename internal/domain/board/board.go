@@ -54,6 +54,136 @@ func (d Direction) Vector() Position {
 	return Position{0, 0}
 }
 
+// FlipDirection représente la direction de flip d'une tuile lors du reveal
+// Cette information est purement visuelle et n'impacte pas la logique métier
+type FlipDirection int
+
+const (
+	FlipTop FlipDirection = iota
+	FlipTopRight
+	FlipRight
+	FlipBottomRight
+	FlipBottom
+	FlipBottomLeft
+	FlipLeft
+	FlipTopLeft
+	FlipCenter // Flip direct (clic au centre)
+)
+
+func (f FlipDirection) String() string {
+	switch f {
+	case FlipTop:
+		return "top"
+	case FlipTopRight:
+		return "top-right"
+	case FlipRight:
+		return "right"
+	case FlipBottomRight:
+		return "bottom-right"
+	case FlipBottom:
+		return "bottom"
+	case FlipBottomLeft:
+		return "bottom-left"
+	case FlipLeft:
+		return "left"
+	case FlipTopLeft:
+		return "top-left"
+	case FlipCenter:
+		return "center"
+	}
+	return "unknown"
+}
+
+// ToRotationAngles retourne les angles de rotation (X, Y) pour l'animation de flip
+// en degrés, selon la direction. Utilisé par le renderer pour l'animation.
+func (f FlipDirection) ToRotationAngles() (rotateX, rotateY float64) {
+	switch f {
+	case FlipTop:
+		return -90, 0
+	case FlipTopRight:
+		return -45, 45
+	case FlipRight:
+		return 0, 90
+	case FlipBottomRight:
+		return 45, 45
+	case FlipBottom:
+		return 90, 0
+	case FlipBottomLeft:
+		return 45, -45
+	case FlipLeft:
+		return 0, -90
+	case FlipTopLeft:
+		return -45, -45
+	case FlipCenter:
+		return 0, 0
+	}
+	return 0, 0
+}
+
+// CalculateFlipDirection détermine la direction de flip basée sur la position
+// du clic dans une tuile. tileSize est la taille de la tuile, localX et localY
+// sont les coordonnées du clic relatives à la tuile (0,0 = coin supérieur gauche)
+func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
+	// Définit les zones (en pourcentage de la taille de la tuile)
+	// Centre : 40% au milieu
+	// Bords : 30% de chaque côté
+	centerStart := tileSize * 35 / 100
+	centerEnd := tileSize * 65 / 100
+
+	// Détermine la zone verticale
+	var vertical int // 0 = top, 1 = center, 2 = bottom
+	if localY < centerStart {
+		vertical = 0 // top
+	} else if localY > centerEnd {
+		vertical = 2 // bottom
+	} else {
+		vertical = 1 // center
+	}
+
+	// Détermine la zone horizontale
+	var horizontal int // 0 = left, 1 = center, 2 = right
+	if localX < centerStart {
+		horizontal = 0 // left
+	} else if localX > centerEnd {
+		horizontal = 2 // right
+	} else {
+		horizontal = 1 // center
+	}
+
+	// Combine pour obtenir la direction
+	switch vertical {
+	case 0: // top
+		switch horizontal {
+		case 0:
+			return FlipTopLeft
+		case 1:
+			return FlipTop
+		case 2:
+			return FlipTopRight
+		}
+	case 1: // center
+		switch horizontal {
+		case 0:
+			return FlipLeft
+		case 1:
+			return FlipCenter
+		case 2:
+			return FlipRight
+		}
+	case 2: // bottom
+		switch horizontal {
+		case 0:
+			return FlipBottomLeft
+		case 1:
+			return FlipBottom
+		case 2:
+			return FlipBottomRight
+		}
+	}
+
+	return FlipCenter
+}
+
 // TileState représente l'état visuel d'une tuile
 type TileState int
 

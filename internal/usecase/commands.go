@@ -10,15 +10,19 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 )
 
+// DefaultFlipDirection est la direction par défaut si non spécifiée
+var DefaultFlipDirection = domain.FlipCenter
+
 type Command interface {
 	Execute() error
 	CanExecute() bool
 }
 
 type RevealTileCommand struct {
-	World    *domain.World
-	GridID   string
-	Position board.Position
+	World         *domain.World
+	GridID        string
+	Position      board.Position
+	FlipDirection domain.FlipDirection
 }
 
 func (c *RevealTileCommand) CanExecute() bool {
@@ -38,16 +42,23 @@ func (c *RevealTileCommand) Execute() error {
 		return errors.New("cannot reveal this tile")
 	}
 
-	_, err := c.World.RevealTile(c.GridID, c.Position)
+	// Récupère le grid et révèle la tuile directement
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
+		return errors.New("grid not found")
+	}
+
+	tile, err := grid.Reveal(c.Position)
 	if err != nil {
 		return err
 	}
 
-	c.World.EventBus.Publish(domain.Event{
-		Type:     domain.EventType("action_reveal"),
-		SourceID: "player",
-		Payload:  map[string]interface{}{"position": c.Position, "grid_id": c.GridID},
-	})
+	// Publie l'événement avec la direction de flip
+	c.World.EventBus.Publish(event.NewTileRevealedEvent(
+		entity.Position{X: c.Position.X, Y: c.Position.Y},
+		tile.EntityID,
+		c.FlipDirection,
+	))
 
 	return nil
 }

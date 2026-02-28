@@ -207,3 +207,93 @@ func TestCountByState(t *testing.T) {
 		t.Error("Expected 2 revealed tiles")
 	}
 }
+
+func TestFlipDirectionString(t *testing.T) {
+	tests := []struct {
+		dir      FlipDirection
+		expected string
+	}{
+		{FlipTop, "top"},
+		{FlipTopRight, "top-right"},
+		{FlipRight, "right"},
+		{FlipBottomRight, "bottom-right"},
+		{FlipBottom, "bottom"},
+		{FlipBottomLeft, "bottom-left"},
+		{FlipLeft, "left"},
+		{FlipTopLeft, "top-left"},
+		{FlipCenter, "center"},
+		{FlipDirection(99), "unknown"},
+	}
+	
+	for _, tc := range tests {
+		result := tc.dir.String()
+		if result != tc.expected {
+			t.Errorf("FlipDirection(%d).String() = %s, expected %s", tc.dir, result, tc.expected)
+		}
+	}
+}
+
+func TestFlipDirectionToRotationAngles(t *testing.T) {
+	tests := []struct {
+		dir          FlipDirection
+		expectedRotX float64
+		expectedRotY float64
+	}{
+		{FlipTop, -90, 0},
+		{FlipTopRight, -45, 45},
+		{FlipRight, 0, 90},
+		{FlipBottomRight, 45, 45},
+		{FlipBottom, 90, 0},
+		{FlipBottomLeft, 45, -45},
+		{FlipLeft, 0, -90},
+		{FlipTopLeft, -45, -45},
+		{FlipCenter, 0, 0},
+	}
+	
+	for _, tc := range tests {
+		rotX, rotY := tc.dir.ToRotationAngles()
+		if rotX != tc.expectedRotX || rotY != tc.expectedRotY {
+			t.Errorf("FlipDirection(%d).ToRotationAngles() = (%f, %f), expected (%f, %f)",
+				tc.dir, rotX, rotY, tc.expectedRotX, tc.expectedRotY)
+		}
+	}
+}
+
+func TestCalculateFlipDirection(t *testing.T) {
+	tileSize := 100
+	
+	tests := []struct {
+		localX   int
+		localY   int
+		expected FlipDirection
+	}{
+		// Centre (35-65%)
+		{50, 50, FlipCenter},
+		{40, 40, FlipCenter},
+		{60, 60, FlipCenter},
+		
+		// Top (Y < 35)
+		{50, 10, FlipTop},
+		{20, 10, FlipTopLeft},
+		{80, 10, FlipTopRight},
+		
+		// Bottom (Y > 65)
+		{50, 90, FlipBottom},
+		{20, 90, FlipBottomLeft},
+		{80, 90, FlipBottomRight},
+		
+		// Left (X < 35, Y in center)
+		{10, 50, FlipLeft},
+		
+		// Right (X > 65, Y in center)
+		{90, 50, FlipRight},
+	}
+	
+	for _, tc := range tests {
+		result := CalculateFlipDirection(tileSize, tc.localX, tc.localY)
+		if result != tc.expected {
+			t.Errorf("CalculateFlipDirection(%d, %d, %d) = %d (%s), expected %d (%s)",
+				tileSize, tc.localX, tc.localY, result, result.String(), tc.expected, tc.expected.String())
+		}
+	}
+}
