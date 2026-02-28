@@ -1,5 +1,3 @@
-// Package usecase définit les actions applicatives (Command Pattern)
-// Chaque usecase représente une action que le joueur peut effectuer
 package usecase
 
 import (
@@ -12,13 +10,11 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 )
 
-// Command est l'interface pour toutes les actions
 type Command interface {
 	Execute() error
 	CanExecute() bool
 }
 
-// RevealTileCommand dévoile une tuile
 type RevealTileCommand struct {
 	World    *domain.World
 	GridID   string
@@ -47,7 +43,6 @@ func (c *RevealTileCommand) Execute() error {
 		return err
 	}
 
-	// Consomme un tour
 	c.World.EventBus.Publish(domain.Event{
 		Type:     domain.EventType("action_reveal"),
 		SourceID: "player",
@@ -57,7 +52,6 @@ func (c *RevealTileCommand) Execute() error {
 	return nil
 }
 
-// MatchTilesCommand tente d'appairer deux tuiles révélées
 type MatchTilesCommand struct {
 	World      *domain.World
 	AssocEng   *domain.AssocEngine
@@ -78,12 +72,10 @@ func (c *MatchTilesCommand) CanExecute() bool {
 		return false
 	}
 
-	// Les deux tuiles doivent être révélées
 	if tile1.State != board.Revealed || tile2.State != board.Revealed {
 		return false
 	}
 
-	// Les deux doivent avoir des entités
 	if tile1.EntityID == "" || tile2.EntityID == "" {
 		return false
 	}
@@ -98,7 +90,6 @@ func (c *MatchTilesCommand) Execute() error {
 
 	grid, _ := c.World.GetGrid(c.GridID)
 
-	// Récupère les entités
 	tile1, _ := grid.Get(c.Pos1)
 	tile2, _ := grid.Get(c.Pos2)
 
@@ -109,7 +100,6 @@ func (c *MatchTilesCommand) Execute() error {
 		return errors.New("entities not found")
 	}
 
-	// Vérifie si ce sont des ressources avec Matchable
 	res1, isRes1 := entity1.(*domain.Resource)
 	res2, isRes2 := entity2.(*domain.Resource)
 
@@ -117,28 +107,24 @@ func (c *MatchTilesCommand) Execute() error {
 		return errors.New("can only match resources")
 	}
 
-	// Tente l'association
 	result, err := c.AssocEng.TryAssociate(res1, res2)
 	if err != nil || !result.Success {
 		return fmt.Errorf("association failed: %v", err)
 	}
 
-	// Marque les tuiles comme appairées
 	c.World.MatchTile(c.GridID, c.Pos1)
 	c.World.MatchTile(c.GridID, c.Pos2)
 
-	// Supprime les ressources (collectées)
 	c.World.RemoveEntity(entity1.GetID())
 	c.World.RemoveEntity(entity2.GetID())
 
-	// Événement
 	c.World.EventBus.Publish(domain.Event{
 		Type:     domain.EventType("tiles_matched"),
 		SourceID: "player",
 		Payload: map[string]interface{}{
-			"position1": c.Pos1,
-			"position2": c.Pos2,
-			"grid_id":   c.GridID,
+			"position1":  c.Pos1,
+			"position2":  c.Pos2,
+			"grid_id":    c.GridID,
 			"assoc_type": result.Type.String(),
 		},
 	})
@@ -146,7 +132,6 @@ func (c *MatchTilesCommand) Execute() error {
 	return nil
 }
 
-// EndTurnCommand termine le tour actuel
 type EndTurnCommand struct {
 	World *domain.World
 }
@@ -156,14 +141,12 @@ func (c *EndTurnCommand) CanExecute() bool {
 }
 
 func (c *EndTurnCommand) Execute() error {
-	// Met à jour tous les systèmes
 	c.World.EventBus.Publish(event.NewTurnEndedEvent(c.World.Turn))
 	c.World.EventBus.ProcessQueue()
 
 	return nil
 }
 
-// SpawnTestEntitiesCommand crée des entités de test (debug)
 type SpawnTestEntitiesCommand struct {
 	World  *domain.World
 	GridID string
@@ -174,7 +157,6 @@ func (c *SpawnTestEntitiesCommand) CanExecute() bool {
 }
 
 func (c *SpawnTestEntitiesCommand) Execute() error {
-	// Crée quelques ressources pour tester
 	positions := []board.Position{
 		{X: 1, Y: 1}, {X: 2, Y: 1},
 		{X: 3, Y: 2}, {X: 4, Y: 2},
@@ -192,13 +174,11 @@ func (c *SpawnTestEntitiesCommand) Execute() error {
 		}
 	}
 
-	// Crée une créature
 	c.World.SpawnCreature(c.GridID, "lumifly", entity.Position{X: 3, Y: 3})
 
 	return nil
 }
 
-// ClearBoardCommand nettoie le plateau (debug)
 type ClearBoardCommand struct {
 	World  *domain.World
 	GridID string
@@ -230,7 +210,6 @@ func (c *ClearBoardCommand) Execute() error {
 	return nil
 }
 
-// ClearAllBoardsCommand nettoie tous les plateaux (debug)
 type ClearAllBoardsCommand struct {
 	World *domain.World
 }
@@ -258,7 +237,6 @@ func (c *ClearAllBoardsCommand) Execute() error {
 	return nil
 }
 
-// SwitchGridCommand change le grid actuel du joueur
 type SwitchGridCommand struct {
 	World  *domain.World
 	GridID string
