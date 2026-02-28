@@ -3,6 +3,7 @@ package input
 import (
 	"fmt"
 	"image/color"
+	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -33,6 +34,10 @@ type Handler struct {
 	OnSwitchGrid    func(gridID string)
 	OnRotateBoard   func(delta float64) // Callback pour la rotation du plateau
 	OnResetRotation func()              // Callback pour réinitialiser la rotation
+
+	// Gestion du tour de jeu memory
+	revealedTiles []board.Position // Liste des tuiles révélées ce tour
+	isProcessing  bool             // Évite les clics pendant l'animation
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
@@ -66,6 +71,11 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
+	if h.isProcessing {
+		fmt.Println("[INPUT] Traitement en cours, veuillez patienter...")
+		return nil
+	}
+
 	pos, gridID, ok := h.getHoveredTile()
 	if !ok {
 		return nil
@@ -85,8 +95,9 @@ func (h *Handler) handleMouse() error {
 			return nil
 		}
 
-		if h.countRevealedTiles(grid) >= 2 {
-			fmt.Println("[INPUT] Action bloquée : Déjà 2 tuiles révélées. Appuyez sur M pour valider.")
+		// Vérifie si on a déjà révélé 2 tuiles ce tour
+		if len(h.revealedTiles) >= 2 {
+			fmt.Println("[INPUT] Déjà 2 tuiles révélées ce tour. Veuillez attendre la fin du traitement.")
 			return nil
 		}
 
@@ -101,10 +112,17 @@ func (h *Handler) handleMouse() error {
 		}
 		if err := cmd.Execute(); err == nil {
 			fmt.Printf("[INPUT] Tuile révélée en %v sur %s (flip: %s)\n", pos, gridID, flipDir.String())
+			h.revealedTiles = append(h.revealedTiles, pos)
 		}
 
 		h.selectedTile = &pos
 		h.selectedGridID = gridID
+
+		// Si on a révélé 2 tuiles, tente le match automatiquement
+		if len(h.revealedTiles) == 2 {
+			h.isProcessing = true
+			go h.processMatchAttempt()
+		}
 
 	case board.Revealed:
 		if h.selectedTile != nil && h.selectedGridID == gridID && *h.selectedTile == pos {
@@ -117,6 +135,54 @@ func (h *Handler) handleMouse() error {
 		}
 	}
 	return nil
+}
+
+// processMatchAttempt tente d'associer les 2 tuiles révélées
+func (h *Handler) processMatchAttempt() {
+	// Petit délai pour que le joueur puisse voir la 2ème carte
+	time.Sleep(800 * time.Millisecond)
+
+	if len(h.revealedTiles) != 2 {
+		h.isProcessing = false
+		return
+	}
+
+	pos1 := h.revealedTiles[0]
+	pos2 := h.revealedTiles[1]
+
+	fmt.Printf("[MATCH] Tentative d'association entre %v et %v...\n", pos1, pos2)
+
+	cmd := &usecase.MatchTilesCommand{
+		World:    h.world,
+		AssocEng: h.assocEngine,
+		GridID:   h.selectedGridID,
+		Pos1:     pos1,
+		Pos2:     pos2,
+		OnSuccess: func() {
+			fmt.Println("[MATCH] ✅ Association réussie ! Les tuiles restent visibles.")
+			h.revealedTiles = nil
+			h.isProcessing = false
+			h.ClearSelection()
+		},
+		OnFailure: func() {
+			fmt.Println("[MATCH] ❌ Association échouée ! Les tuiles sont retournées.")
+			h.revealedTiles = nil
+			h.isProcessing = false
+			h.ClearSelection()
+			// Passe le tour
+			if h.OnTurnEnd != nil {
+				fmt.Println("[TURN] Fin du tour après échec")
+				h.OnTurnEnd()
+			}
+		},
+	}
+
+	if err := cmd.Execute(); err != nil {
+		fmt.Printf("[MATCH] %v\n", err)
+		// En cas d'erreur, réinitialise quand même
+		h.revealedTiles = nil
+		h.isProcessing = false
+	}
 }
 
 func (h *Handler) countRevealedTiles(g *board.Grid) int {
@@ -228,14 +294,28 @@ func (h *Handler) tryMatchSelected() {
 				GridID:   h.selectedGridID,
 				Pos1:     *h.selectedTile,
 				Pos2:     tile.Position,
+				OnSuccess: func() {
+					fmt.Println("[MATCH] Paire trouvée ! Le joueur peut continuer.")
+					h.ClearSelection()
+				},
+				OnFailure: func() {
+					fmt.Println("[MATCH] Échec ! Les cartes sont retournées et le tour passe.")
+					h.ClearSelection()
+					// Déclenche la fin de tour
+					if h.OnTurnEnd != nil {
+						fmt.Println("[TURN] Fin du tour après échec d'association")
+						h.OnTurnEnd()
+					}
+				},
 			}
 
 			if err := cmd.Execute(); err == nil {
-				fmt.Println("[MATCH] SUCCÈS !")
-				h.ClearSelection()
+				// Succès géré par OnSuccess
 				return
 			} else {
-				fmt.Printf("[MATCH] ÉCHEC : %v\n", err)
+				// Échec géré par OnFailure
+				fmt.Printf("[MATCH] %v\n", err)
+				return
 			}
 		}
 	}
@@ -301,4 +381,5 @@ func (h *Handler) GetCurrentGridID() string {
 func (h *Handler) ClearSelection() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
+	// Note: on ne réinitialise pas revealedTiles ici car c'est géré par processMatchAttempt
 }
