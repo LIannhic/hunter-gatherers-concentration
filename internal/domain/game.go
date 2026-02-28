@@ -55,6 +55,7 @@ type (
 	Bus       = event.Bus
 	Event     = event.Event
 	EventType = event.Type
+	GameState = event.GameState
 
 	// Player
 	Player       = player.Player
@@ -99,6 +100,11 @@ const (
 	FlipLeft        = board.FlipLeft
 	FlipTopLeft     = board.FlipTopLeft
 	FlipCenter      = board.FlipCenter
+
+	// Game states
+	StateMenu     = event.StateMenu
+	StatePlaying  = event.StatePlaying
+	StateGameOver = event.StateGameOver
 )
 
 // Factory functions
@@ -126,4 +132,6 @@ var (
 	NewHub = meta.NewHub
 
 	NewAssocEngine = association.NewEngine
+
+	NewPhaseChangedEvent = event.NewPhaseChangedEvent
 )

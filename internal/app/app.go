@@ -33,9 +33,13 @@ type Application struct {
 	Config *loader.GameConfig
 
 	// UI
-	Renderer *renderer.BoardRenderer
-	Input    *input.Handler
-	HUD      *hud.HUD
+	Renderer    *renderer.BoardRenderer
+	TitleScreen *renderer.TitleScreen
+	Input       *input.Handler
+	HUD         *hud.HUD
+
+	// Game State
+	State domain.GameState
 
 	// Debug
 	debug *DebugStats
@@ -62,6 +66,7 @@ func NewApplication() (*Application, error) {
 
 	// 5. UI
 	app.Renderer = renderer.NewBoardRenderer(app.Assets)
+	app.TitleScreen = renderer.NewTitleScreen()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
 
@@ -77,10 +82,9 @@ func NewApplication() (*Application, error) {
 	// 9. Debug
 	app.debug = NewDebugStats()
 
-	// 9. Spawne quelques entités de test au démarrage
-	fmt.Println("=== Spawning initial entities ===")
-	app.spawnInitialEntities()
-	fmt.Printf("=== Total entities: %d ===\n", app.World.Entities.Count())
+	// 10. État initial : Menu
+	app.State = domain.StateMenu
+	fmt.Println("[STATE] État initial: MENU")
 
 	return app, nil
 }
@@ -186,6 +190,11 @@ func (app *Application) setupCallbacks() {
 	app.Input.OnResetRotation = func() {
 		app.Renderer.SetBoardRotation(0)
 	}
+
+	// Callback retour au menu
+	app.Input.OnExitToMenu = func() {
+		app.ReturnToMenu()
+	}
 }
 
 // setupEventSubscriptions abonne le renderer aux événements pour les animations
@@ -254,14 +263,100 @@ func (app *Application) Update() error {
 	// Stats debug
 	app.debug.Frame()
 
-	// Gère les entrées
-	err := app.Input.Update()
+	// Gestion selon l'état du jeu
+	switch app.State {
+	case domain.StateMenu:
+		return app.updateMenu()
+	case domain.StatePlaying:
+		return app.updatePlaying()
+	case domain.StateGameOver:
+		return app.updateGameOver()
+	}
 
-	return err
+	return nil
+}
+
+// updateMenu gère l'écran titre
+func (app *Application) updateMenu() error {
+	// Vérifie le clic sur le bouton démarrer
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		x, y := ebiten.CursorPosition()
+		if app.TitleScreen.IsStartButtonClicked(x, y) {
+			app.StartGame()
+		}
+	}
+	return nil
+}
+
+// updatePlaying gère le jeu en cours
+func (app *Application) updatePlaying() error {
+	// Gère les entrées
+	return app.Input.Update()
+}
+
+// updateGameOver gère l'écran de fin
+func (app *Application) updateGameOver() error {
+	// TODO: Gérer le redémarrage
+	return nil
+}
+
+// StartGame démarre le jeu depuis le menu
+func (app *Application) StartGame() {
+	oldState := app.State
+	app.State = domain.StatePlaying
+
+	// Publie l'événement de changement de phase
+	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
+
+	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
+
+	// Spawn les entités initiales si nécessaire
+	if app.World.Entities.Count() == 0 {
+		fmt.Println("=== Spawning initial entities ===")
+		app.spawnInitialEntities()
+		fmt.Printf("=== Total entities: %d ===\n", app.World.Entities.Count())
+	}
+}
+
+// ReturnToMenu retourne au menu principal
+func (app *Application) ReturnToMenu() {
+	oldState := app.State
+	app.State = domain.StateMenu
+
+	// Publie l'événement de changement de phase
+	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
+
+	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
+
+	// Réinitialise l'état du jeu
+	app.Input.ResetGameState()
+
+	// Réinitialise la rotation du plateau
+	app.Renderer.SetBoardRotation(0)
+
+	fmt.Println("[MENU] Retour au menu principal")
 }
 
 // Draw dessine l'application
 func (app *Application) Draw(screen *ebiten.Image) {
+	// Gestion selon l'état du jeu
+	switch app.State {
+	case domain.StateMenu:
+		app.drawMenu(screen)
+	case domain.StatePlaying:
+		app.drawPlaying(screen)
+	case domain.StateGameOver:
+		app.drawGameOver(screen)
+	}
+}
+
+// drawMenu dessine l'écran titre
+func (app *Application) drawMenu(screen *ebiten.Image) {
+	app.TitleScreen.Render(screen)
+}
+
+// drawPlaying dessine le jeu en cours
+func (app *Application) drawPlaying(screen *ebiten.Image) {
 	// Fond noir
 	screen.Fill(color.Black)
 
@@ -282,8 +377,20 @@ func (app *Application) Draw(screen *ebiten.Image) {
 	}
 }
 
+// drawGameOver dessine l'écran de fin
+func (app *Application) drawGameOver(screen *ebiten.Image) {
+	// TODO: Implémenter l'écran de fin
+	screen.Fill(color.Black)
+	text.Draw(screen, "GAME OVER", basicfont.Face7x13, 350, 300, color.White)
+}
+
 // Layout retourne la taille de la fenêtre
 func (app *Application) Layout(outsideWidth, outsideHeight int) (int, int) {
+	// En mode menu, utilise la taille de l'écran titre
+	if app.State == domain.StateMenu {
+		return app.TitleScreen.Layout()
+	}
+
 	// Calcule la taille nécessaire pour afficher tous les grids
 	numGrids := len(app.World.Grids)
 	if numGrids == 0 {
