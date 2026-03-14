@@ -146,14 +146,38 @@ go test ./internal/domain/... -v
 
 ## Contrôles
 
+### Jeu de base
+
 | Touche | Action |
 |--------|--------|
 | Click | Révéler tuile / Sélectionner |
 | M | Matcher la sélection |
-| S | Spawner des entités de test |
-| C | Nettoyer le plateau |
 | Espace | Fin de tour |
 | Échap | Désélectionner |
+
+### Navigation
+
+| Touche | Action |
+|--------|--------|
+| 1-9 | Changer de grille (grid 1-9) |
+| R | Réinitialiser la rotation |
+| + / - | Rotation horaire / anti-horaire |
+| \ | Retour au menu |
+
+### Debug / Test
+
+| Touche | Action |
+|--------|--------|
+| S | Spawner des entités de test (ressources + lumifly) |
+| Shift+S | Spawner toutes les créatures de test |
+| C | Nettoyer le plateau |
+| F1 | Info debug (FPS, entités) |
+| F2 | Afficher les profils de mouvement |
+| F3 | Forcer le prochain tour |
+| F5 | Révéler toutes les tuiles (cheat debug) |
+| F6 | Cacher toutes les tuiles (cheat debug) |
+| F9 | Spawn créature aléatoire |
+| F10 | Toggle mouvement automatique ON/OFF |
 
 ## Ajouter une fonctionnalité
 
@@ -196,7 +220,100 @@ if inpututil.IsKeyJustPressed(ebiten.KeyH) {
 }
 ```
 
-### 3. Nouveau système ECS
+### 3. Système de Mouvement des Créatures
+
+Le système de mouvement avancé (`CreatureMovementSystem`) permet de définir finement le comportement de déplacement des créatures via des profils configurables.
+
+#### Structure du MovementProfile
+
+```go
+// Dans domain/creature/movement.go
+type MovementProfile struct {
+    Trigger     MovementTrigger    // Quand se déplacer
+    Navigation  NavigationLogic    // Où aller
+    Mode        MovementMode       // Comment se déplacer
+    Frequency   MovementFrequency  // À quelle fréquence
+    Orientation Orientation        // Direction du regard
+    Collision   CollisionHandler   // Gestion des obstacles
+}
+```
+
+#### Types de déclencheurs (Trigger)
+
+| Type | Description |
+|------|-------------|
+| `TriggerPassive` | Aucun mouvement (ressource fixe) |
+| `TriggerAuto` | Se déplace à la fin de chaque tour |
+| `TriggerOnReveal` | Se déplace dès qu'elle est révélée |
+| `TriggerOnEcho` | Se déplace si une autre tuile est révélée |
+| `TriggerProximity` | Se déplace si action dans rayon N cases |
+
+#### Types de navigation
+
+| Type | Description |
+|------|-------------|
+| `NavWander` | Errance aléatoire |
+| `NavPatrol` | Suit un itinéraire prédéfini |
+| `NavOrientation` | Selon la direction du regard |
+| `NavAttraction` | Vise une cible (joueur, ressource...) |
+| `NavRepulsion` | S'éloigne d'une cible |
+
+#### Modes de déplacement
+
+| Mode | Description |
+|------|-------------|
+| `ModeBento` | Déplacement visible (glissement) |
+| `ModeShadow` | Déplacement invisible (face cachée) |
+| `ModeSwap` | Échange de position avec la cible |
+| `ModeOver` | Au-dessus des tuiles (vole) |
+| `ModeUnder` | Sous les tuiles (terrier) |
+
+#### Gestion des collisions
+
+| Type | Description |
+|------|-------------|
+| `CollideStop` | S'arrête devant l'obstacle |
+| `CollideBounce` | Rebondit (change d'orientation 180°) |
+| `CollideSlide` | Glisse le long de l'obstacle |
+| `CollidePhase` | Traverse certains types de tuiles |
+
+#### Créer une créature avec un profil de mouvement
+
+```go
+// Utilisation des profils prédéfinis
+specter, _ := world.SpawnCreature("cave", "specter", pos)
+
+// Création d'un patrouilleur personnalisé
+route := []entity.Position{
+    {X: 1, Y: 1}, {X: 1, Y: 5}, 
+    {X: 5, Y: 5}, {X: 5, Y: 1},
+}
+warden, _ := factory.CreatePatroller("stonewarden", pos, route)
+
+// Profil personnalisé
+profile := &creature.MovementProfile{
+    Trigger: creature.MovementTrigger{
+        Type: creature.TriggerProximity,
+        Radius: 3,
+    },
+    Navigation: creature.NavigationLogic{
+        Type: creature.NavRepulsion,
+        Target: creature.TargetPlayer,
+    },
+    Mode: creature.MovementMode{
+        Type: creature.ModeShadow,
+    },
+    Frequency: creature.MovementFrequency{
+        Type: creature.FreqVelocity,
+        Velocity: 2,
+    },
+    Collision: creature.CollisionHandler{
+        Type: creature.CollideSlide,
+    },
+}
+```
+
+### 4. Nouveau système ECS
 
 Dans `domain/system.go` :
 ```go
