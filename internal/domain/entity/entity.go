@@ -2,6 +2,7 @@ package entity
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 )
@@ -195,10 +196,14 @@ func (m *Manager) UpdatePosition(id ID, newPos Position) error {
 }
 
 func (m *Manager) GetByType(t Type) []Entity {
-	result := make([]Entity, 0)
+	result := make([]Entity, 0, len(m.byType[t]))
 	for _, e := range m.byType[t] {
 		result = append(result, e)
 	}
+	// Trie par ID pour avoir un ordre stable entre les frames
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].GetID() < result[j].GetID()
+	})
 	return result
 }
 

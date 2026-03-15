@@ -11,10 +11,11 @@ import (
 // Creature est une entité vivante avec comportement
 type Creature struct {
 	entity.BaseEntity
-	Species  string
-	Behavior component.Behavior
-	Mobility component.Mobility
-	Visual   component.Visual
+	Species         string
+	Behavior        component.Behavior
+	Mobility        component.Mobility
+	Visual          component.Visual
+	MovementProfile *MovementProfile // Nouveau: configuration complète du mouvement
 }
 
 func New(species string, pos entity.Position) *Creature {
@@ -34,6 +35,24 @@ func (c *Creature) SetBehavior(b component.Behavior) {
 
 func (c *Creature) SetMobility(m component.Mobility) {
 	c.Mobility = m
+}
+
+func (c *Creature) SetMovementProfile(m *MovementProfile) {
+	c.MovementProfile = m
+}
+
+func (c *Creature) GetComponent(name string) interface{} {
+	switch name {
+	case "orientation":
+		if c.MovementProfile != nil {
+			return &c.MovementProfile.Orientation
+		}
+	case "behavior":
+		return &c.Behavior
+	case "mobility":
+		return &c.Mobility
+	}
+	return nil
 }
 
 // Action représente une intention de la créature
@@ -190,6 +209,28 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			MovePattern: "random",
 			Speed:       1,
 		})
+		c.SetMovementProfile(&MovementProfile{
+			Trigger: MovementTrigger{
+				Type: TriggerAuto,
+			},
+			Navigation: NavigationLogic{
+				Type:       NavWander,
+				WanderBias: entity.Position{X: 0, Y: -1},
+			},
+			Mode: MovementMode{
+				Type: ModeOver,
+			},
+			Frequency: MovementFrequency{
+				Type:  FreqDelay,
+				Delay: 1,
+			},
+			Orientation: Orientation{
+				Direction: DirNorth,
+			},
+			Collision: CollisionHandler{
+				Type: CollideSlide,
+			},
+		})
 		c.AddTag("flying")
 		c.AddTag("passive")
 
@@ -203,6 +244,29 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			CanMove:     true,
 			MovePattern: "hunter",
 			Speed:       2,
+		})
+		c.SetMovementProfile(&MovementProfile{
+			Trigger: MovementTrigger{
+				Type: TriggerProximity,
+				Radius: 4,
+			},
+			Navigation: NavigationLogic{
+				Type:   NavAttraction,
+				Target: TargetPlayer,
+			},
+			Mode: MovementMode{
+				Type: ModeShadow,
+			},
+			Frequency: MovementFrequency{
+				Type:     FreqVelocity,
+				Velocity: 2,
+			},
+			Orientation: Orientation{
+				Direction: DirNorth,
+			},
+			Collision: CollisionHandler{
+				Type: CollideBounce,
+			},
 		})
 		c.AddTag("dangerous")
 		c.AddTag("aggressive")
@@ -218,11 +282,137 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			MovePattern: "burrow",
 			Speed:       1,
 		})
+		c.SetMovementProfile(&MovementProfile{
+			Trigger: MovementTrigger{
+				Type: TriggerOnReveal,
+			},
+			Navigation: NavigationLogic{
+				Type: NavWander,
+			},
+			Mode: MovementMode{
+				Type: ModeUnder,
+			},
+			Frequency: MovementFrequency{
+				Type:  FreqDelay,
+				Delay: 2,
+			},
+			Orientation: Orientation{
+				Direction: DirNorth,
+			},
+			Collision: CollisionHandler{
+				Type: CollidePhase,
+				CanPhaseThrough: []string{"dirt", "soil"},
+			},
+		})
+		c.AddTag("elusive")
+
+	case "specter":
+		c.SetBehavior(component.Behavior{
+			State:       "haunting",
+			Aggression:  60,
+			Territorial: false,
+		})
+		c.SetMobility(component.Mobility{
+			CanMove:     true,
+			MovePattern: "phase",
+			Speed:       1,
+		})
+		c.SetMovementProfile(SpecterProfile())
+		c.AddTag("ethereal")
+		c.AddTag("dangerous")
+
+	case "stonewarden":
+		c.SetBehavior(component.Behavior{
+			State:       "guarding",
+			Aggression:  40,
+			Territorial: true,
+		})
+		c.SetMobility(component.Mobility{
+			CanMove:     true,
+			MovePattern: "patrol",
+			Speed:       1,
+		})
+		// Patrouille: doit être configurée après création
+		c.SetMovementProfile(PassiveProfile())
+		c.AddTag("static")
+
+	case "echo_hound":
+		c.SetBehavior(component.Behavior{
+			State:       "echoing",
+			Aggression:  50,
+			Territorial: false,
+		})
+		c.SetMobility(component.Mobility{
+			CanMove:     true,
+			MovePattern: "echo",
+			Speed:       3,
+		})
+		c.SetMovementProfile(&MovementProfile{
+			Trigger: MovementTrigger{
+				Type: TriggerOnEcho,
+			},
+			Navigation: NavigationLogic{
+				Type:   NavAttraction,
+				Target: TargetCursor,
+			},
+			Mode: MovementMode{
+				Type: ModeBento,
+			},
+			Frequency: MovementFrequency{
+				Type:     FreqVelocity,
+				Velocity: 3,
+			},
+			Orientation: Orientation{
+				Direction: DirNorth,
+			},
+			Collision: CollisionHandler{
+				Type: CollideSlide,
+			},
+		})
+		c.AddTag("fast")
+
+	case "fleeing_sprite":
+		c.SetBehavior(component.Behavior{
+			State:       "fleeing",
+			Aggression:  0,
+			Territorial: false,
+		})
+		c.SetMobility(component.Mobility{
+			CanMove:     true,
+			MovePattern: "flee",
+			Speed:       2,
+		})
+		c.SetMovementProfile(FleeingProfile())
+		c.AddTag("passive")
 		c.AddTag("elusive")
 
 	default:
 		return nil, fmt.Errorf("espèce inconnue: %s", species)
 	}
+
+	return c, nil
+}
+
+// CreatePatroller crée une créature avec un itinéraire de patrouille
+func (f *Factory) CreatePatroller(species string, pos entity.Position, route []entity.Position) (*Creature, error) {
+	c, err := f.Create(species, pos)
+	if err != nil {
+		return nil, err
+	}
+
+	// Remplace le profil par un profil de patrouille
+	c.SetMovementProfile(PatrollerProfile(route))
+	c.SetBehavior(component.Behavior{
+		State:       "patrolling",
+		Aggression:  30,
+		Territorial: true,
+	})
+	c.SetMobility(component.Mobility{
+		CanMove:     true,
+		MovePattern: "patrol",
+		Speed:       1,
+	})
+	c.AddTag("patroller")
 
 	return c, nil
 }

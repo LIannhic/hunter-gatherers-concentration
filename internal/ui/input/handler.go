@@ -27,13 +27,19 @@ type Handler struct {
 	selectedTile   *board.Position
 	selectedGridID string
 
-	OnTurnEnd       func()
-	OnSpawnEntities func(gridID string)
-	OnClearBoard    func(gridID string)
-	OnSwitchGrid    func(gridID string)
-	OnRotateBoard   func(delta float64) // Callback pour la rotation du plateau
-	OnResetRotation func()              // Callback pour réinitialiser la rotation
-	OnExitToMenu    func()              // Callback pour retourner au menu
+	OnTurnEnd           func()
+	OnSpawnEntities     func(gridID string)
+	OnSpawnAllCreatures func(gridID string) // Shift+S: Spawn toutes les créatures
+	OnSpawnRandomCreature func(gridID string) // F9: Spawn créature aléatoire
+	OnClearBoard        func(gridID string)
+	OnSwitchGrid        func(gridID string)
+	OnRotateBoard       func(delta float64) // Callback pour la rotation du plateau
+	OnResetRotation     func()              // Callback pour réinitialiser la rotation
+	OnExitToMenu        func()              // Callback pour retourner au menu
+	OnRevealAll         func(gridID string) // F5: Cheat - révéler tout
+	OnHideAll           func(gridID string) // F6: Cheat - cacher tout
+	OnForceTurn         func()              // F3: Forcer le prochain tour
+	OnToggleAutoMove    func()              // F10: Toggle mouvement auto
 
 	// Gestion du tour de jeu memory
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
@@ -209,10 +215,58 @@ func (h *Handler) handleKeyboard() {
 		}
 	}
 
+	// S: Spawn entités de base, Shift+S: Spawn toutes les créatures
 	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
-		fmt.Println("[KEY] S : Spawn entités")
-		if h.OnSpawnEntities != nil {
-			h.OnSpawnEntities(h.GetCurrentGridID())
+		if ebiten.IsKeyPressed(ebiten.KeyShift) {
+			fmt.Println("[KEY] Shift+S : Spawn toutes les créatures")
+			if h.OnSpawnAllCreatures != nil {
+				h.OnSpawnAllCreatures(h.GetCurrentGridID())
+			}
+		} else {
+			fmt.Println("[KEY] S : Spawn entités")
+			if h.OnSpawnEntities != nil {
+				h.OnSpawnEntities(h.GetCurrentGridID())
+			}
+		}
+	}
+
+	// F9: Spawn créature aléatoire
+	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
+		fmt.Println("[KEY] F9 : Spawn créature aléatoire")
+		if h.OnSpawnRandomCreature != nil {
+			h.OnSpawnRandomCreature(h.GetCurrentGridID())
+		}
+	}
+
+	// F3: Forcer le prochain tour
+	if inpututil.IsKeyJustPressed(ebiten.KeyF3) {
+		fmt.Println("[KEY] F3 : Forcer le prochain tour")
+		if h.OnForceTurn != nil {
+			h.OnForceTurn()
+		}
+	}
+
+	// F5: Cheat - révéler toutes les tuiles
+	if inpututil.IsKeyJustPressed(ebiten.KeyF5) {
+		fmt.Println("[KEY] F5 : CHEAT - Révéler toutes les tuiles")
+		if h.OnRevealAll != nil {
+			h.OnRevealAll(h.GetCurrentGridID())
+		}
+	}
+
+	// F6: Cheat - cacher toutes les tuiles
+	if inpututil.IsKeyJustPressed(ebiten.KeyF6) {
+		fmt.Println("[KEY] F6 : CHEAT - Cacher toutes les tuiles")
+		if h.OnHideAll != nil {
+			h.OnHideAll(h.GetCurrentGridID())
+		}
+	}
+
+	// F10: Toggle mouvement automatique
+	if inpututil.IsKeyJustPressed(ebiten.KeyF10) {
+		fmt.Println("[KEY] F10 : Toggle mouvement automatique")
+		if h.OnToggleAutoMove != nil {
+			h.OnToggleAutoMove()
 		}
 	}
 

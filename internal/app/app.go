@@ -5,6 +5,8 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"math/rand"
+	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -47,6 +49,9 @@ type Application struct {
 
 // NewApplication crée et configure l'application
 func NewApplication() (*Application, error) {
+	// Initialise le générateur aléatoire
+	rand.Seed(time.Now().UnixNano())
+	
 	app := &Application{}
 
 	// 1. Charge la configuration
@@ -151,6 +156,99 @@ func (app *Application) setupCallbacks() {
 
 		// Spawn une créature
 		app.World.SpawnCreature(gridID, "lumifly", domain.Position{X: 3, Y: 3})
+		
+		// Log des créatures disponibles
+		fmt.Println("[DEBUG] Créatures disponibles sur ce grid:")
+		fmt.Println("  - lumifly: Insecte volant (Mode: Over)")
+		fmt.Println("  - shadowstalker: Prédateur (Mode: Shadow)")
+		fmt.Println("  - burrower: Fouisseur (Mode: Under)")
+		fmt.Println("  - specter: Fantôme (Mode: Shadow, traverse murs)")
+		fmt.Println("  - echo_hound: Chien rapide (Déclencheur: Echo)")
+		fmt.Println("  - fleeing_sprite: Esprit fuyard (Répulsion joueur)")
+	}
+
+	// Callback spawn toutes les créatures de test (Shift+S)
+	app.Input.OnSpawnAllCreatures = func(gridID string) {
+		fmt.Printf("[ACTION] Spawn ALL creatures on grid %s\n", gridID)
+		app.debug.Action()
+
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+
+		creatures := []struct {
+			species string
+			desc    string
+		}{
+			{"lumifly", "Volant (Over)"},
+			{"shadowstalker", "Chasseur (Shadow)"},
+			{"burrower", "Fouisseur (Under)"},
+			{"specter", "Fantôme (Phase)"},
+			{"echo_hound", "Rapide (Echo)"},
+			{"fleeing_sprite", "Fuyard (Repulsion)"},
+		}
+
+		spawned := 0
+		for _, c := range creatures {
+			// Trouve une position vide pour chaque créature
+			pos := app.findEmptyPosition(gridID)
+			if pos == nil {
+				fmt.Printf("[ERROR] No empty position for %s\n", c.species)
+				continue
+			}
+			
+			if _, err := app.World.SpawnCreature(gridID, c.species, *pos); err != nil {
+				fmt.Printf("[ERROR] Failed to spawn %s: %v\n", c.species, err)
+			} else {
+				fmt.Printf("[SPAWN] %s at %v - %s\n", c.species, *pos, c.desc)
+				spawned++
+			}
+		}
+		
+		// Spawn un patrouilleur avec route sur une case vide
+		route := []domain.Position{
+			{X: 0, Y: 0}, {X: 0, Y: 5}, {X: 5, Y: 5}, {X: 5, Y: 0},
+		}
+		patrollerPos := app.findEmptyPosition(gridID)
+		if patrollerPos != nil {
+			if patroller, err := app.World.CreatureFactory.CreatePatroller("stonewarden", *patrollerPos, route); err == nil {
+				patroller.SetGridID(gridID)
+				app.World.Entities.Register(patroller)
+				// Met à jour la tuile
+				if grid, ok := app.World.GetGrid(gridID); ok {
+					tile, _ := grid.Get(board.Position{X: patrollerPos.X, Y: patrollerPos.Y})
+					tile.EntityID = string(patroller.GetID())
+				}
+				fmt.Printf("[SPAWN] stonewarden (patrouilleur) at %v - Route: 4 points\n", *patrollerPos)
+				spawned++
+			}
+		}
+		
+		fmt.Printf("[SPAWN] Total spawned: %d\n", spawned)
+	}
+
+	// Callback spawn créature aléatoire (F9)
+	app.Input.OnSpawnRandomCreature = func(gridID string) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+		
+		creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite"}
+		species := creatures[rand.Intn(len(creatures))]
+		
+		// Trouve une position libre aléatoire
+		pos := app.findEmptyPosition(gridID)
+		if pos == nil {
+			fmt.Println("[ERROR] No empty position available")
+			return
+		}
+		
+		if _, err := app.World.SpawnCreature(gridID, species, *pos); err != nil {
+			fmt.Printf("[ERROR] Failed to spawn %s: %v\n", species, err)
+		} else {
+			fmt.Printf("[SPAWN RANDOM] %s at %v\n", species, *pos)
+			app.debug.Spawn()
+		}
 	}
 
 	// Callback clear board
@@ -194,6 +292,62 @@ func (app *Application) setupCallbacks() {
 	// Callback retour au menu
 	app.Input.OnExitToMenu = func() {
 		app.ReturnToMenu()
+	}
+
+	// Configure les callbacks de débogage
+	app.setupDebugCallbacks()
+}
+
+// setupDebugCallbacks configure les callbacks de débogage
+func (app *Application) setupDebugCallbacks() {
+	// F3: Forcer le prochain tour
+	app.Input.OnForceTurn = func() {
+		fmt.Println("[DEBUG] Forcing turn end")
+		app.Engine.Update()
+	}
+
+	// F5: Révéler toutes les tuiles (cheat)
+	app.Input.OnRevealAll = func(gridID string) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+		grid, ok := app.World.GetGrid(gridID)
+		if !ok {
+			return
+		}
+		fmt.Printf("[CHEAT] Révélation de toutes les tuiles sur %s\n", gridID)
+		for _, tile := range grid.Tiles {
+			if tile.State == board.Hidden {
+				tile.State = board.Revealed
+			}
+		}
+	}
+
+	// F6: Cacher toutes les tuiles (cheat)
+	app.Input.OnHideAll = func(gridID string) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+		grid, ok := app.World.GetGrid(gridID)
+		if !ok {
+			return
+		}
+		fmt.Printf("[CHEAT] Masquage de toutes les tuiles sur %s\n", gridID)
+		for _, tile := range grid.Tiles {
+			if tile.State == board.Revealed {
+				tile.State = board.Hidden
+			}
+		}
+	}
+
+	// F10: Toggle mouvement automatique
+	app.Input.OnToggleAutoMove = func() {
+		app.Engine.Running = !app.Engine.Running
+		if app.Engine.Running {
+			fmt.Println("[DEBUG] Mouvement automatique: ON")
+		} else {
+			fmt.Println("[DEBUG] Mouvement automatique: OFF")
+		}
 	}
 }
 
@@ -251,11 +405,32 @@ func (app *Application) spawnInitialEntities() {
 		}
 	}
 
-	// Spawn quelques créatures
+	// Spawn les créatures avec leurs profils de mouvement
+	fmt.Println("[INIT] Spawning creatures with MovementProfiles...")
+	
+	// Forest: Lumifly (volant)
 	app.World.SpawnCreature("forest", "lumifly", domain.Position{X: 3, Y: 3})
+	fmt.Println("  [forest] lumifly at (3,3) - Mode: Over, Trigger: Auto")
+	
+	// Cave: Shadowstalker (chasseur furtif)
 	app.World.SpawnCreature("cave", "shadowstalker", domain.Position{X: 4, Y: 2})
+	fmt.Println("  [cave] shadowstalker at (4,2) - Mode: Shadow, Trigger: Proximity(4)")
+	
+	// Meadow: Burrower (fouisseur)
 	app.World.SpawnCreature("meadow", "burrower", domain.Position{X: 2, Y: 4})
-	app.World.SpawnCreature("swamp", "lumifly", domain.Position{X: 1, Y: 1})
+	fmt.Println("  [meadow] burrower at (2,4) - Mode: Under, Trigger: OnReveal")
+	
+	// Swamp: Specter (fantôme)
+	app.World.SpawnCreature("swamp", "specter", domain.Position{X: 3, Y: 3})
+	fmt.Println("  [swamp] specter at (3,3) - Mode: Shadow, Trigger: OnEcho")
+	
+	// Echo Hound (réactif aux échos)
+	app.World.SpawnCreature("forest", "echo_hound", domain.Position{X: 5, Y: 5})
+	fmt.Println("  [forest] echo_hound at (5,5) - Mode: Bento, Trigger: OnEcho, Velocity: 3")
+	
+	// Fleeing Sprite (fuyard)
+	app.World.SpawnCreature("meadow", "fleeing_sprite", domain.Position{X: 1, Y: 1})
+	fmt.Println("  [meadow] fleeing_sprite at (1,1) - Mode: Shadow, Trigger: Proximity(3)")
 }
 
 // Update met à jour l'application
@@ -309,6 +484,10 @@ func (app *Application) StartGame() {
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
 
 	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
+
+	// Démarre l'engine (nécessaire pour les mouvements des créatures)
+	app.Engine.Start()
+	fmt.Println("[ENGINE] Started")
 
 	// Spawn les entités initiales si nécessaire
 	if app.World.Entities.Count() == 0 {
@@ -382,6 +561,34 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	// TODO: Implémenter l'écran de fin
 	screen.Fill(color.Black)
 	text.Draw(screen, "GAME OVER", basicfont.Face7x13, 350, 300, color.White)
+}
+
+// findEmptyPosition trouve une position vide aléatoire sur le grid
+func (app *Application) findEmptyPosition(gridID string) *domain.Position {
+	grid, ok := app.World.GetGrid(gridID)
+	if !ok {
+		return nil
+	}
+
+	// Collecte toutes les positions vides
+	var emptyPositions []domain.Position
+	for y := 0; y < grid.Height; y++ {
+		for x := 0; x < grid.Width; x++ {
+			pos := domain.Position{X: x, Y: y}
+			tile, _ := grid.Get(board.Position{X: x, Y: y})
+			if tile.EntityID == "" && !tile.Modifier.Obstructed {
+				emptyPositions = append(emptyPositions, pos)
+			}
+		}
+	}
+
+	if len(emptyPositions) == 0 {
+		return nil
+	}
+
+	// Choisit une position aléatoire parmi les vides
+	pos := emptyPositions[rand.Intn(len(emptyPositions))]
+	return &pos
 }
 
 // Layout retourne la taille de la fenêtre

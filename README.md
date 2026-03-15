@@ -58,6 +58,43 @@ Pour les créatures :
 * Transformer : Agir sur les ressources pour les faire évoluer, les dégrader ou modifier leur accessibilité (ex: polliniser, briser, fertiliser).
 * Marquer : Laisser des traces persistantes de son passage sur le plateau (empreintes, griffures), offrant au joueur des indices sur sa position ou son trajet.
 
+### Système de Déplacement Avancé
+
+Les créatures disposent d'un système de mouvement configurable avec les paramètres suivants :
+
+#### Déclencheurs (quand se déplacer)
+- **Passif** : Aucun mouvement
+- **Auto** : À la fin de chaque tour
+- **Vue** : Dès que révélée
+- **Echo** : Quand une autre tuile est révélée
+- **Proximité** : Si action dans un rayon de N cases
+
+#### Navigation (où aller)
+- **Errance** : Direction aléatoire
+- **Patrouille** : Suit un itinéraire défini
+- **Orientation** : Selon la direction du regard
+- **Attraction** : Vise une cible spécifique
+- **Répulsion** : S'éloigne d'une cible
+
+#### Modes de déplacement
+- **Bento** : Déplacement visible (le joueur voit le mouvement)
+- **Shadow** : Déplacement invisible (face cachée, le joueur doit deviner)
+- **Swap** : Échange de place avec la cible
+- **Over** : Au-dessus des tuiles (vole)
+- **Under** : Sous les tuiles (terrier)
+
+### Bestiaire
+
+| Créature | Déclencheur | Navigation | Mode | Collision | Description |
+|----------|-------------|------------|------|-----------|-------------|
+| **Lumifly** | Auto | Errance (nord) | Over | Glisse | Insecte lumineux qui vole au-dessus du plateau |
+| **Shadowstalker** | Proximité (4) | Attraction joueur | Shadow | Rebond | Prédateur qui chasse discrètement le joueur |
+| **Burrower** | Vue | Errance | Under | Phase (terre) | Créature fouisseuse qui se cache sous terre |
+| **Specter** | Echo | Errance | Shadow | Phase (murs) | Fantôme qui traverse les murs |
+| **Stonewarden** | Passif | Patrouille | Bento | Stop | Gardien immobile qui patrouille si révélé |
+| **Echo Hound** | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations |
+| **Fleeing Sprite** | Proximité (3) | Répulsion joueur | Shadow | Glisse | Esprit qui fuit le joueur |
+
 Pour les ressources :
 
 * Mûrir / Maturer : Évoluer d'un stade initial (ex: bourgeon) vers un stade optimal (ex: fruit mûr) puis vers un stade dégradé (ex: fruit gâté), changeant ainsi sa valeur et ses propriétés d'association.
@@ -105,5 +142,31 @@ go mod download
 ### Lancer le projet
 
 ```bash
+# Mode normal
 go run ./cmd/game
+
+# Mode debug (avec logs détaillés)
+go run ./cmd/game -debug
+
+# Build production
+go build -o game ./cmd/game
+./game
 ```
+
+### Contrôles
+
+| Action | Touche |
+|--------|--------|
+| Révéler tuile | Click souris |
+| Matcher | M |
+| Fin de tour | Espace |
+| Désélectionner | Échap |
+| Changer de grille | 1-9 |
+| Rotation plateau | + / - |
+| Reset rotation | R |
+| Spawn entités (debug) | S |
+| Spawn toutes créatures (debug) | Shift+S |
+| Nettoyer plateau (debug) | C |
+| Cheat: tout révéler | F5 |
+| Cheat: tout cacher | F6 |
+| Retour menu | \ |

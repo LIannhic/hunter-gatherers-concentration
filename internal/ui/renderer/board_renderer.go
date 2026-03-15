@@ -163,30 +163,26 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 	// Met à jour les animations
 	r.UpdateAnimations()
 
-	// Dessine le titre
-	title := fmt.Sprintf("Hunter-Gatherers Concentration - Tour %d", world.Turn)
-	text.Draw(screen, title, basicfont.Face7x13, 10, 20, color.White)
-
-	// Instructions
-	text.Draw(screen, "Click to reveal, M to match selected", basicfont.Face7x13, 10, 40, color.White)
-	text.Draw(screen, "S: Spawn test | C: Clear | SPACE: End turn | 1-9: Switch Grid", basicfont.Face7x13, 10, 55, color.White)
+	// Affiche le grid actuel et la rotation (en haut, pas de titre qui double le HUD)
+	currentGridInfo := fmt.Sprintf("Grid: %s", world.CurrentGridID)
 	if r.boardRotation != 0 {
-		text.Draw(screen, "R: Reset rotation | +/-: Rotate board", basicfont.Face7x13, 10, 70, color.White)
+		currentGridInfo += fmt.Sprintf(" (Rot: %.0f°)", r.boardRotation)
 	}
+	text.Draw(screen, currentGridInfo, basicfont.Face7x13, 250, 20, color.RGBA{255, 255, 0, 255})
 
-	// Affiche le grid actuel et la rotation
-	currentGridInfo := fmt.Sprintf("Current Grid: %s", world.CurrentGridID)
+	// Message d'aide rapide (une seule ligne)
+	helpText := "S:Spawn | C:Clear | SPACE:Tour | 1-9:Grid | F9:Random"
 	if r.boardRotation != 0 {
-		currentGridInfo += fmt.Sprintf(" (Rotation: %.0f°)", r.boardRotation)
+		helpText += " | R:Reset Rot"
 	}
-	text.Draw(screen, currentGridInfo, basicfont.Face7x13, 10, 85, color.RGBA{255, 255, 0, 255})
+	text.Draw(screen, helpText, basicfont.Face7x13, 250, 35, color.Gray{180})
 
 	// Dessine tous les grids dans l'ordre de création (évite le clignotement)
 	for _, gridID := range world.GridOrder {
 		r.renderGrid(screen, gridID, world)
 	}
 
-	// Dessine les infos sur les entités
+	// Dessine les infos sur les entités à droite
 	r.renderEntityInfo(screen, world)
 }
 
@@ -360,7 +356,7 @@ func (r *BoardRenderer) renderEntity(screen *ebiten.Image, x, y int, e domain.En
 	r.renderEntityAt(screen, x, y, e)
 }
 
-// renderEntityInfo affiche les informations sur les entités visibles
+// renderEntityInfo affiche les informations sur les entités visibles (panneau de droite)
 func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.World) {
 	// Calcule la position d'info à droite de tous les grids
 	maxWidth := 0
@@ -376,17 +372,14 @@ func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.Wor
 	if infoX < 500 {
 		infoX = 500
 	}
-	infoY := r.gridOffsetY
+	infoY := r.gridOffsetY + 30 // Commence un peu plus bas pour laisser de la place au titre du plateau
 
-	text.Draw(screen, "=== ENTITIES ===", basicfont.Face7x13, infoX, infoY, color.White)
-	infoY += 20
+	// Titre compact
+	text.Draw(screen, "-- ENTITIES --", basicfont.Face7x13, infoX, infoY, color.RGBA{100, 255, 100, 255})
+	infoY += 18
 
-	// Compte les entités par grid dans l'ordre de création
+	// Compte les entités par grid de façon compacte
 	for _, gridID := range world.GridOrder {
-		gridInfo := fmt.Sprintf("Grid %s:", gridID)
-		text.Draw(screen, gridInfo, basicfont.Face7x13, infoX, infoY, color.RGBA{200, 200, 100, 255})
-		infoY += 15
-
 		resources := 0
 		creatures := 0
 
@@ -401,29 +394,35 @@ func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.Wor
 			}
 		}
 
-		info := fmt.Sprintf("  Resources: %d", resources)
-		text.Draw(screen, info, basicfont.Face7x13, infoX+10, infoY, color.White)
-		infoY += 15
-
-		info = fmt.Sprintf("  Creatures: %d", creatures)
-		text.Draw(screen, info, basicfont.Face7x13, infoX+10, infoY, color.White)
-		infoY += 20
+		// Affichage compact: [grid] R:3 C:2
+		info := fmt.Sprintf("[%s] R:%d C:%d", gridID, resources, creatures)
+		text.Draw(screen, info, basicfont.Face7x13, infoX, infoY, color.White)
+		infoY += 14
 	}
 
-	// Liste des créatures par grid
-	infoY += 10
-	text.Draw(screen, "=== CREATURES ===", basicfont.Face7x13, infoX, infoY, color.White)
-	infoY += 20
+	// Liste des créatures (limite pour éviter débordement)
+	infoY += 8
+	text.Draw(screen, "-- CREATURES --", basicfont.Face7x13, infoX, infoY, color.RGBA{100, 255, 100, 255})
+	infoY += 16
 
+	maxToShow := 12
+	shown := 0
+	
 	for _, gridID := range world.GridOrder {
 		for _, c := range world.Entities.GetByType(domain.TypeCreature) {
+			if shown >= maxToShow {
+				text.Draw(screen, "...", basicfont.Face7x13, infoX, infoY, color.Gray{128})
+				return
+			}
 			if c.GetGridID() != gridID {
 				continue
 			}
 			if creature, ok := c.(*domain.Creature); ok {
-				info := fmt.Sprintf("[%s] %s (%s)", gridID, creature.Species, creature.Behavior.State)
-				text.Draw(screen, info, basicfont.Face7x13, infoX, infoY, color.White)
-				infoY += 12
+				// Format compact: [forest] lumifly
+				info := fmt.Sprintf("[%s] %s", gridID, creature.Species)
+				text.Draw(screen, info, basicfont.Face7x13, infoX, infoY, color.Gray{200})
+				infoY += 13
+				shown++
 			}
 		}
 	}

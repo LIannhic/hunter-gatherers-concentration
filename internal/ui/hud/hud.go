@@ -23,60 +23,50 @@ func NewHUD(world *domain.World) *HUD {
 	}
 }
 
-// Render dessine le HUD
+// Render dessine le HUD compact en haut à gauche
 func (h *HUD) Render(screen *ebiten.Image) {
-	y := 20
+	x, y := 10, 15
 	
-	// Titre
-	title := "=== HUNTER-GATHERERS ==="
-	text.Draw(screen, title, basicfont.Face7x13, 10, y, color.RGBA{255, 200, 100, 255})
-	y += 25
+	// Ligne 1: Titre + Tour sur la même ligne
+	title := fmt.Sprintf("HUNTER-GATHERERS - Tour %d", h.world.Turn)
+	text.Draw(screen, title, basicfont.Face7x13, x, y, color.RGBA{255, 200, 100, 255})
+	y += 16
 	
-	// Tour actuel
-	text.Draw(screen, fmt.Sprintf("Tour: %d", h.world.Turn), basicfont.Face7x13, 10, y, color.White)
-	y += 20
-	
-	// Entités
+	// Ligne 2: Compteurs côte à côte
 	resources := h.world.Entities.GetByType(domain.TypeResource)
 	creatures := h.world.Entities.GetByType(domain.TypeCreature)
 	
-	text.Draw(screen, fmt.Sprintf("Ressources: %d", len(resources)), basicfont.Face7x13, 10, y, color.White)
-	y += 15
-	text.Draw(screen, fmt.Sprintf("Creatures: %d", len(creatures)), basicfont.Face7x13, 10, y, color.White)
-	y += 25
+	counters := fmt.Sprintf("R:%d C:%d", len(resources), len(creatures))
+	text.Draw(screen, counters, basicfont.Face7x13, x, y, color.White)
+	y += 18
 	
-	// Contrôles
-	text.Draw(screen, "CONTROLES:", basicfont.Face7x13, 10, y, color.RGBA{150, 150, 255, 255})
-	y += 15
-	text.Draw(screen, "Click: Reveler/Selectionner", basicfont.Face7x13, 10, y, color.Gray{150})
-	y += 12
-	text.Draw(screen, "M: Matcher selection", basicfont.Face7x13, 10, y, color.Gray{150})
-	y += 12
-	text.Draw(screen, "S: Spawn test", basicfont.Face7x13, 10, y, color.Gray{150})
-	y += 12
-	text.Draw(screen, "C: Nettoyer plateau", basicfont.Face7x13, 10, y, color.Gray{150})
-	y += 12
-	text.Draw(screen, "SPACE: Fin tour", basicfont.Face7x13, 10, y, color.Gray{150})
-	y += 12
-	text.Draw(screen, "ESC: Deselectionner", basicfont.Face7x13, 10, y, color.Gray{150})
+	// Ligne 3-5: Contrôles essentiels uniquement (compact)
+	text.Draw(screen, "Click:Reveler M:Matcher", basicfont.Face7x13, x, y, color.Gray{150})
+	y += 13
+	text.Draw(screen, "S:Spawn Shift+S:Toutes", basicfont.Face7x13, x, y, color.Gray{150})
+	y += 13
+	text.Draw(screen, "SPACE:Fin ESC:Reset", basicfont.Face7x13, x, y, color.Gray{150})
 }
 
-// RenderEntityList affiche la liste des entités à droite
+// RenderEntityList affiche la liste des entités à droite (utilisé par le menu debug)
 func (h *HUD) RenderEntityList(screen *ebiten.Image, startX, startY int) {
 	x, y := startX, startY
 	
 	text.Draw(screen, "=== ENTITES ===", basicfont.Face7x13, x, y, color.RGBA{100, 255, 100, 255})
 	y += 20
 	
-	// Ressources
+	// Récupère les listes une seule fois pour éviter les changements pendant l'affichage
 	resources := h.world.Entities.GetByType(domain.TypeResource)
+	creatures := h.world.Entities.GetByType(domain.TypeCreature)
+	
+	// Ressources - groupe par type pour stabilité
 	if len(resources) > 0 {
 		text.Draw(screen, "Ressources:", basicfont.Face7x13, x, y, color.White)
 		y += 15
 		
 		for _, e := range resources {
 			if res, ok := e.(*domain.Resource); ok {
-				info := fmt.Sprintf("  %s (%s)", res.ResourceType, res.Lifecycle.GetCurrentStageName())
+				info := fmt.Sprintf("  %s", res.ResourceType)
 				text.Draw(screen, info, basicfont.Face7x13, x, y, color.Gray{180})
 				y += 12
 			}
@@ -84,17 +74,23 @@ func (h *HUD) RenderEntityList(screen *ebiten.Image, startX, startY int) {
 		y += 5
 	}
 	
-	// Creatures
-	creatures := h.world.Entities.GetByType(domain.TypeCreature)
+	// Creatures - limite pour éviter débordement
 	if len(creatures) > 0 {
 		text.Draw(screen, "Creatures:", basicfont.Face7x13, x, y, color.White)
 		y += 15
 		
+		maxToShow := 15
+		shown := 0
 		for _, e := range creatures {
+			if shown >= maxToShow {
+				text.Draw(screen, "  ...", basicfont.Face7x13, x, y, color.Gray{128})
+				break
+			}
 			if c, ok := e.(*domain.Creature); ok {
-				info := fmt.Sprintf("  %s [%s]", c.Species, c.Behavior.State)
+				info := fmt.Sprintf("  %s", c.Species)
 				text.Draw(screen, info, basicfont.Face7x13, x, y, color.Gray{180})
 				y += 12
+				shown++
 			}
 		}
 	}
