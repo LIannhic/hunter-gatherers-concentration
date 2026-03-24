@@ -21,9 +21,9 @@ type System interface {
 
 // World contient tout l'état du jeu
 type World struct {
-	Grids    map[string]*board.Grid // Plusieurs grids indexés par ID
-	GridOrder []string              // Ordre stable des IDs de grid (pour affichage)
-	Entities *entity.Manager
+	Grids      map[string]*board.Grid // Plusieurs grids indexés par ID
+	GridOrder  []string               // Ordre stable des IDs de grid (pour affichage)
+	Entities   *entity.Manager
 	Components *component.Store
 	EventBus   *event.Bus
 	Turn       int
@@ -39,7 +39,7 @@ type World struct {
 
 	// Player
 	playerPosition entity.Position
-	
+
 	// Turn state tracking
 	tilesFlippedThisTurn []board.Position // Tracks tiles flipped in current turn (max 2)
 	lastTurnNumber       int              // Used to detect turn changes
@@ -47,19 +47,19 @@ type World struct {
 
 func NewWorld() *World {
 	return &World{
-		Grids:           make(map[string]*board.Grid),
-		GridOrder:       make([]string, 0),
-		Entities:        entity.NewManager(),
-		Components:      component.NewStore(),
-		EventBus:        event.NewBus(),
-		Turn:            0,
-		MaxTurns:        100,
-		CurrentGridID:   "",
-		CreatureFactory: creature.NewFactory(),
-		ResourceFactory: resource.NewFactory(),
-		playerPosition:  entity.Position{X: 0, Y: 0},
+		Grids:                make(map[string]*board.Grid),
+		GridOrder:            make([]string, 0),
+		Entities:             entity.NewManager(),
+		Components:           component.NewStore(),
+		EventBus:             event.NewBus(),
+		Turn:                 0,
+		MaxTurns:             100,
+		CurrentGridID:        "",
+		CreatureFactory:      creature.NewFactory(),
+		ResourceFactory:      resource.NewFactory(),
+		playerPosition:       entity.Position{X: 0, Y: 0},
 		tilesFlippedThisTurn: make([]board.Position, 0),
-		lastTurnNumber:  0,
+		lastTurnNumber:       0,
 	}
 }
 
@@ -971,9 +971,9 @@ func (s *TriggerSystem) executeAction(action string, tile *board.Tile, world *Wo
 
 // Engine orchestre tous les systèmes
 type Engine struct {
-	systems []System
-	world   *World
-	Running bool
+	systems        []System
+	world          *World
+	Running        bool
 	movementSystem *CreatureMovementSystem // Référence directe pour les mises à jour
 }
 
