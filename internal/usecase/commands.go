@@ -31,7 +31,7 @@ func (c *RevealTileCommand) CanExecute() bool {
 	if !ok {
 		return false
 	}
-	
+
 	// 2. Check tile exists and is hidden
 	tile, err := grid.Get(c.Position)
 	if err != nil {
@@ -40,12 +40,12 @@ func (c *RevealTileCommand) CanExecute() bool {
 	if tile.State != board.Hidden {
 		return false
 	}
-	
+
 	// 3. Check only 2 tiles can be flipped per turn (across all grids)
 	if !c.World.CanFlipTile() {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -351,11 +351,11 @@ func (c *SwitchGridCommand) Execute() error {
 		return errors.New("grid not found")
 	}
 	c.World.SetCurrentGrid(c.GridID)
-	
+
 	// Update player position to center of new grid
 	grid, _ := c.World.GetGrid(c.GridID)
 	playerPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
 	c.World.SetPlayerPosition(playerPos)
-	
+
 	return nil
 }
