@@ -39,6 +39,10 @@ type World struct {
 
 	// Player
 	playerPosition entity.Position
+	
+	// Turn state tracking
+	tilesFlippedThisTurn []board.Position // Tracks tiles flipped in current turn (max 2)
+	lastTurnNumber       int              // Used to detect turn changes
 }
 
 func NewWorld() *World {
@@ -54,6 +58,8 @@ func NewWorld() *World {
 		CreatureFactory: creature.NewFactory(),
 		ResourceFactory: resource.NewFactory(),
 		playerPosition:  entity.Position{X: 0, Y: 0},
+		tilesFlippedThisTurn: make([]board.Position, 0),
+		lastTurnNumber:  0,
 	}
 }
 
@@ -106,6 +112,27 @@ func (w *World) SetPlayerPosition(pos entity.Position) {
 
 func (w *World) GetPlayerPosition() entity.Position {
 	return w.playerPosition
+}
+
+// AddFlippedTile adds a flipped tile to the current turn's tracking
+func (w *World) AddFlippedTile(pos board.Position) {
+	w.tilesFlippedThisTurn = append(w.tilesFlippedThisTurn, pos)
+}
+
+// GetFlippedTilesCount returns how many tiles have been flipped this turn
+func (w *World) GetFlippedTilesCount() int {
+	// Reset if turn has changed
+	if w.lastTurnNumber != w.Turn {
+		w.tilesFlippedThisTurn = make([]board.Position, 0)
+		w.lastTurnNumber = w.Turn
+	}
+	return len(w.tilesFlippedThisTurn)
+}
+
+// CanFlipTile checks if another tile can be flipped this turn (max 2 per turn)
+func (w *World) CanFlipTile() bool {
+	w.GetFlippedTilesCount() // Sync turn tracking
+	return len(w.tilesFlippedThisTurn) < 2
 }
 
 // SpawnResource crée une ressource dans le monde sur un grid spécifique
