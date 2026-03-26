@@ -32,6 +32,11 @@ func (c *RevealTileCommand) CanExecute() bool {
 		return false
 	}
 
+	// 2. Check player is on this grid
+	if c.World.CurrentGridID != c.GridID {
+		return false
+	}
+
 	// 2. Check tile exists and is hidden
 	tile, err := grid.Get(c.Position)
 	if err != nil {
@@ -50,6 +55,12 @@ func (c *RevealTileCommand) CanExecute() bool {
 }
 
 func (c *RevealTileCommand) Execute() error {
+	if c.World.CurrentGridID != c.GridID {
+		fmt.Println("Player is not on this grid")
+		fmt.Printf("Player on %s but tried %s\n", c.World.CurrentGridID, c.GridID)
+		return errors.New("player is not on this grid")
+	}
+
 	if !c.CanExecute() {
 		return errors.New("cannot reveal this tile")
 	}
