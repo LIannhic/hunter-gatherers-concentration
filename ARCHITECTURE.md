@@ -16,11 +16,11 @@ cmd/game              # Point d'entrée
     /domain           # Cœur métier (pur, testable)
         README.md     # Documentation des patterns
         game.go       # Ré-export des types
-        system.go     # World, Systems, Engine
-        /board        # Plateau, tuiles, positions
-        /entity       # Identités, Manager
+        system.go     # World, Systems, Engine (CreatureAISystem, CreatureMovementSystem)
+        /board        # Plateau, grilles, positions (gère la géométrie)
+        /entity       # Identités, Manager, États (TileState, Type)
         /component    # Données ECS (Lifecycle, Matchable...)
-        /creature     # Créatures et IA
+        /creature     # Créatures, IA et mouvements avancés
         /resource     # Ressources récoltables
         /event        # Bus d'événements
         /player       # Stats, inventaire
@@ -65,6 +65,33 @@ cmd/game              # Point d'entrée
 - Les règles métier (associations, maturation...)
 - Les tests unitaires
 
+**Architecture interne :**
+
+Le domaine utilise une architecture **Entity-Component-System (ECS)** améliorée :
+
+- **Entities** : Chaque entité (créature, ressource, structure, piège) possède :
+  - Un identifiant unique (ID)
+  - Une position sur la grille
+  - Un état (TileState : Hidden, Revealed, Matched, Blocked)
+  - Des composants optionnels (Lifecycle, Matchable, CreatureAI, etc.)
+
+- **Board/Grid** : Gère la géométrie du plateau
+  - Chaque tuile contient une référence optionnelle à une entité
+  - Les tuiles ne portent plus d'état ; c'est l'entité qui le porte
+  - Permet la recherche rapide des entités par position
+
+- **Systems** : Mettent à jour l'état du monde
+  - **CreatureAISystem** : Gère les comportements de base des créatures
+  - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
+  - **ResourceLifecycleSystem** : Gère la maturation des ressources
+
+- **Types d'entités** :
+  - `TypeResource` : Ressources récoltables
+  - `TypeCreature` : Créatures avec IA
+  - `TypeStructure` : Structures fixes (terriers, etc.)
+  - `TypeArtefact` : Objets spéciaux
+  - `TypeTrap` : Pièges / tuiles vides
+
 ```go
 // Exemple: Créer un monde et spawner des entités
 world := domain.NewWorld(6, 6)
@@ -74,7 +101,7 @@ world.SpawnCreature("lumifly", domain.Position{X: 3, Y: 3})
 
 ### 2. Usecase (Actions)
 
-Encapsule les actions joueur en Commandes :
+Encapsule les actions joueur en Commandes. Les commandes manipulent les entités et mettent à jour leur état :
 
 ```go
 revealCmd := &usecase.RevealTileCommand{
@@ -82,13 +109,23 @@ revealCmd := &usecase.RevealTileCommand{
     Position: board.Position{X: x, Y: y},
 }
 if revealCmd.CanExecute() {
-    revealCmd.Execute()
+    entity, err := revealCmd.Execute() // Retourne l'entité révélée
 }
 ```
+
+**Commandes principales :**
+- `RevealTileCommand` : Révèle une entité (passe son état de Hidden à Revealed)
+- `MatchTilesCommand` : Appaire deux entités (passe leur état à Matched)
+- `SwitchGridCommand` : Change de grille active
 
 ### 3. Infrastructure
 
 - **Assets**: Cache d'images, génération de placeholders
+  - Génération procédurale des tuiles avec thèmes visuels
+  - Thèmes disponibles : Default (bleu-violet), Forest (forestier), Cave (obscur), etc.
+  - Motifs visuels différents pour chaque état (`Hidden`, `Revealed`, `Matched`)
+  - TODO: Remplacer par des assets finaux avant release
+  
 - **Loader**: Configuration depuis JSON (avec fallback par défaut)
 
 ### 4. UI

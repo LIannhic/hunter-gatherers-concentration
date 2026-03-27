@@ -59,9 +59,20 @@ func (s *LifecycleSystem) Update(world *World) {
 
 ### Implémentation
 
-- **`entity/`** : Gestion des identités (`ID`, `Manager`)
+- **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
+  - `TileState` : Hidden, Revealed, Matched, Blocked
+  - `Type` : Resource, Creature, Structure, Artefact, Trap
+  - `Manager` : Stockage et accès rapide aux entités
 - **`component/`** : Stockage et définition des composants (`Store`)
-- **`system.go`** : Systèmes qui traitent les données (`LifecycleSystem`, `CreatureAISystem`)
+- **`system.go`** : Systèmes qui traitent les données
+  - `CreatureAISystem` : Gère les comportements de base des créatures
+  - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes
+  - `ResourceLifecycleSystem` : Gère la maturation des ressources
+
+**Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
+- Une gestion cohérente des états (l'entité contrôle son visibilité)
+- Une séparation claire : le plateau fournit la géométrie, les entités portent la logique
+- Un système plus flexible pour les entités spéciales
 
 ---
 
