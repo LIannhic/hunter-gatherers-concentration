@@ -102,12 +102,25 @@ func (m *Manager) generateAllAssets() {
 		// Tuile appairée
 		matchedImg := generateTileMatched(size, theme)
 		m.images["tile_matched_"+themeName] = matchedImg
+
+		// Tuile bloquée
+		blockedImg := generateTileBlocked(size, theme)
+		m.images["tile_blocked_"+themeName] = blockedImg
+
+		// Tuile piège (trap)
+		trapTileImg := generateTileTrap(size, theme)
+		m.images["tile_trap_"+themeName] = trapTileImg
 	}
 
 	// Tuiles par défaut (sans suffixe de thème)
 	m.images["tile_hidden"] = m.images["tile_hidden_default"]
 	m.images["tile_revealed"] = m.images["tile_revealed_default"]
 	m.images["tile_matched"] = m.images["tile_matched_default"]
+	m.images["tile_blocked"] = m.images["tile_blocked_default"]
+	m.images["tile_trap"] = m.images["tile_trap_default"]
+
+	// Compatibilité
+	m.images["tile_empty"] = m.images["tile_trap"]
 
 	// === RESSOURCES ===
 	// Dreamberry

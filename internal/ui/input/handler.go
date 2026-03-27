@@ -6,6 +6,7 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/usecase"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -27,19 +28,19 @@ type Handler struct {
 	selectedTile   *board.Position
 	selectedGridID string
 
-	OnTurnEnd           func()
-	OnSpawnEntities     func(gridID string)
-	OnSpawnAllCreatures func(gridID string) // Shift+S: Spawn toutes les créatures
+	OnTurnEnd             func()
+	OnSpawnEntities       func(gridID string)
+	OnSpawnAllCreatures   func(gridID string) // Shift+S: Spawn toutes les créatures
 	OnSpawnRandomCreature func(gridID string) // F9: Spawn créature aléatoire
-	OnClearBoard        func(gridID string)
-	OnSwitchGrid        func(gridID string)
-	OnRotateBoard       func(delta float64) // Callback pour la rotation du plateau
-	OnResetRotation     func()              // Callback pour réinitialiser la rotation
-	OnExitToMenu        func()              // Callback pour retourner au menu
-	OnRevealAll         func(gridID string) // F5: Cheat - révéler tout
-	OnHideAll           func(gridID string) // F6: Cheat - cacher tout
-	OnForceTurn         func()              // F3: Forcer le prochain tour
-	OnToggleAutoMove    func()              // F10: Toggle mouvement auto
+	OnClearBoard          func(gridID string)
+	OnSwitchGrid          func(gridID string)
+	OnRotateBoard         func(delta float64) // Callback pour la rotation du plateau
+	OnResetRotation       func()              // Callback pour réinitialiser la rotation
+	OnExitToMenu          func()              // Callback pour retourner au menu
+	OnRevealAll           func(gridID string) // F5: Cheat - révéler tout
+	OnHideAll             func(gridID string) // F6: Cheat - cacher tout
+	OnForceTurn           func()              // F3: Forcer le prochain tour
+	OnToggleAutoMove      func()              // F10: Toggle mouvement auto
 
 	// Gestion du tour de jeu memory
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
@@ -105,14 +106,15 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
-	switch tile.State {
-	case board.Hidden:
-		if tile.EntityID == "" {
-			fmt.Printf("[EASY MODE] Tuile vide en %v : Retrait automatique.\n", pos)
-			tile.State = board.Blocked
-			return nil
-		}
+	// Récupère l'entité présente sur la tuile
+	ent, hasEntity := h.world.Entities.Get(entity.ID(tile.EntityID))
+	if !hasEntity {
+		fmt.Printf("[INPUT] Case vide (sol nu) en %v\n", pos)
+		return nil
+	}
 
+	switch ent.GetState() {
+	case entity.Hidden:
 		// Vérifie si on a déjà révélé 2 tuiles ce tour
 		if len(h.revealedTiles) >= 2 {
 			fmt.Println("[INPUT] Déjà 2 tuiles révélées ce tour. Veuillez attendre la fin du traitement.")
@@ -133,18 +135,35 @@ func (h *Handler) handleMouse() error {
 			h.revealedTiles = append(h.revealedTiles, pos)
 		}
 
-		h.selectedTile = &pos
+		// On met à jour le gridID pour la résolution du match
 		h.selectedGridID = gridID
 
+		// On sélectionne la tuile pour le match
+		h.selectedTile = &pos
+
 		// Si on a révélé 2 tuiles, démarre le timer pour le match automatique
-		// (environ 800ms à 60fps = 48 frames)
 		if len(h.revealedTiles) == 2 {
 			h.isProcessing = true
 			h.matchTimer = 48 // 48 frames = 800ms à 60fps
 			fmt.Println("[MATCH] Délai de 800ms avant résolution...")
 		}
 
-	case board.Revealed:
+	case entity.Revealed:
+		// LOGIQUE : Si on clique sur une tuile piège déjà révélée, on la supprime (Mode Normal)
+		if ent.GetType() == entity.TypeTrap {
+			fmt.Printf("[INPUT] Suppression manuelle de la tuile piège en %v\n", pos)
+			h.world.RemoveEntity(ent.GetID())
+
+			// On nettoie la liste des tuiles révélées pour ce tour si nécessaire
+			for i, p := range h.revealedTiles {
+				if p == pos {
+					h.revealedTiles = append(h.revealedTiles[:i], h.revealedTiles[i+1:]...)
+					break
+				}
+			}
+			return nil
+		}
+
 		if h.selectedTile != nil && h.selectedGridID == gridID && *h.selectedTile == pos {
 			fmt.Println("[INPUT] Sélection annulée")
 			h.ClearSelection()
@@ -167,16 +186,69 @@ func (h *Handler) processMatchAttempt() {
 	pos1 := h.revealedTiles[0]
 	pos2 := h.revealedTiles[1]
 
+	// SÉCURITÉ : Vérifie si le gridID est valide
+	gridID := h.selectedGridID
+	if gridID == "" {
+		gridID = h.world.CurrentGridID
+	}
+
+	grid, ok := h.world.GetGrid(gridID)
+	if !ok {
+		fmt.Printf("[MATCH] Erreur : Grid %s non trouvé\n", gridID)
+		h.revealedTiles = nil
+		h.isProcessing = false
+		return
+	}
+
+	tile1, _ := grid.Get(pos1)
+	tile2, _ := grid.Get(pos2)
+	e1, _ := h.world.Entities.Get(entity.ID(tile1.EntityID))
+	e2, _ := h.world.Entities.Get(entity.ID(tile2.EntityID))
+
+	if e1 == nil || e2 == nil {
+		h.revealedTiles = nil
+		h.isProcessing = false
+		return
+	}
+
+	// CAS SPÉCIAL : Match de deux pièges
+	if e1.GetType() == entity.TypeTrap && e2.GetType() == entity.TypeTrap {
+		fmt.Println("[MATCH] ✅ Deux pièges appairés ! Ils sont supprimés.")
+		h.world.RemoveEntity(e1.GetID())
+		h.world.RemoveEntity(e2.GetID())
+		h.revealedTiles = nil
+		h.isProcessing = false
+		h.ClearSelection()
+		return
+	}
+
+	// CAS ÉCHEC : Un piège et autre chose (Ressource ou Créature)
+	if e1.GetType() == entity.TypeTrap || e2.GetType() == entity.TypeTrap {
+		fmt.Println("[MATCH] ❌ Échec : Une tuile piège ne peut pas être appairée avec autre chose.")
+		h.revealedTiles = nil
+		h.isProcessing = false
+		h.ClearSelection()
+
+		// On recache les entités
+		e1.SetState(entity.Hidden)
+		e2.SetState(entity.Hidden)
+
+		if h.OnTurnEnd != nil {
+			h.OnTurnEnd()
+		}
+		return
+	}
+
 	fmt.Printf("[MATCH] Tentative d'association entre %v et %v...\n", pos1, pos2)
 
 	cmd := &usecase.MatchTilesCommand{
 		World:    h.world,
 		AssocEng: h.assocEngine,
-		GridID:   h.selectedGridID,
+		GridID:   gridID,
 		Pos1:     pos1,
 		Pos2:     pos2,
 		OnSuccess: func() {
-			fmt.Println("[MATCH] ✅ Association réussie ! Les tuiles restent visibles.")
+			fmt.Println("[MATCH] ✅ Association réussie ! Les tuiles sont supprimées.")
 			h.revealedTiles = nil
 			h.isProcessing = false
 			h.ClearSelection()
@@ -196,7 +268,6 @@ func (h *Handler) processMatchAttempt() {
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Printf("[MATCH] %v\n", err)
-		// En cas d'erreur, réinitialise quand même
 		h.revealedTiles = nil
 		h.isProcessing = false
 	}
@@ -343,13 +414,17 @@ func (h *Handler) tryMatchSelected() {
 			continue
 		}
 
-		if tile.State == board.Revealed {
-			fmt.Printf("[MATCH] Comparaison entre %v et %v...\n", *h.selectedTile, tile.Position)
+		if tile.EntityID == "" {
+			continue
+		}
 
-			if tile.EntityID == "" {
-				fmt.Println("[MATCH] Bug : Une tuile vide a été révélée par erreur.")
-				continue
-			}
+		ent, ok := h.world.Entities.Get(entity.ID(tile.EntityID))
+		if !ok {
+			continue
+		}
+
+		if ent.GetState() == entity.Revealed {
+			fmt.Printf("[MATCH] Comparaison entre %v et %v...\n", *h.selectedTile, tile.Position)
 
 			cmd := &usecase.MatchTilesCommand{
 				World:    h.world,
@@ -413,13 +488,21 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 	if hovered, gridID, ok := h.getHoveredTile(); ok {
 		if grid, ok := h.world.GetGrid(gridID); ok {
 			if tile, err := grid.Get(hovered); err == nil {
+				if tile.EntityID == "" {
+					return
+				}
+				ent, ok := h.world.Entities.Get(entity.ID(tile.EntityID))
+				if !ok {
+					return
+				}
+
 				var highlightColor color.Color
-				switch tile.State {
-				case board.Hidden:
+				switch ent.GetState() {
+				case entity.Hidden:
 					highlightColor = color.RGBA{255, 255, 0, 100} // Jaune : Survolé
-				case board.Revealed:
+				case entity.Revealed:
 					highlightColor = color.RGBA{0, 255, 255, 100} // Cyan : Déjà ouvert
-				case board.Blocked:
+				case entity.Blocked:
 					return // Pas de highlight pour les tuiles retirées
 				default:
 					highlightColor = color.RGBA{255, 255, 255, 50}

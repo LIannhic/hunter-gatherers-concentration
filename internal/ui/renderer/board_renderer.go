@@ -8,6 +8,7 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -39,7 +40,7 @@ type FlipAnimation struct {
 	Progress      float64 // 0.0 à 1.0
 	Speed         float64
 	EntityID      string  // L'entité à afficher à la fin
-	TileState     board.TileState // État final de la tuile
+	TileState     entity.TileState // État final de la tuile (changé board vers entity)
 }
 
 // IsActive retourne true si l'animation est en cours
@@ -91,7 +92,7 @@ func (r *BoardRenderer) RotateBoard(delta float64) {
 }
 
 // StartFlipAnimation démarre une animation de flip pour une tuile
-func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir board.FlipDirection, entityID string, finalState board.TileState) {
+func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir board.FlipDirection, entityID string, finalState entity.TileState) {
 	key := fmt.Sprintf("%s:%d,%d", gridID, pos.X, pos.Y)
 	r.flipAnimations[key] = &FlipAnimation{
 		GridID:        gridID,
@@ -208,23 +209,43 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
 			pos := board.Position{X: x, Y: y}
-			tile, ok := grid.Tiles[pos]
-			if !ok {
-				continue
-			}
 			sx := offsetX + x*r.tileSize
 			sy := offsetY + y*r.tileSize
+
+			tile, ok := grid.Tiles[pos]
+			if !ok {
+				// Dessine le sol nu pour les positions sans tuile
+				r.renderEmptySquareAt(screen, sx, sy)
+				continue
+			}
 			r.renderTileAt(screen, sx, sy, tile, world)
 		}
 	}
 }
 
+// renderEmptySquareAt dessine un carré vide (sol nu)
+func (r *BoardRenderer) renderEmptySquareAt(screen *ebiten.Image, x, y int) {
+	tileImg := r.assets.GetImage("square_empty")
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(x), float64(y))
+	screen.DrawImage(tileImg, op)
+}
+
 // renderTileAt dessine une tuile à une position écran spécifique
 func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board.Tile, world *domain.World) {
-	// Détermine l'état visuel de la tuile (animation ou état réel)
-	visualState := tile.State
-	var animation *FlipAnimation
+	// 1. Récupère l'entité présente sur cette case
+	ent, ok := world.Entities.Get(entity.ID(tile.EntityID))
 
+	// 2. Si pas d'entité, c'est le sol nu (square_empty)
+	if !ok {
+		r.renderEmptySquareAt(screen, x, y)
+		return
+	}
+
+	// 3. Détermine l'état visuel de l'entité (l'état appartient à l'entité)
+	visualState := ent.GetState()
+
+	var animation *FlipAnimation
 	// Cherche une animation active pour cette tuile
 	for _, anim := range r.flipAnimations {
 		if anim.Position == tile.Position {
@@ -236,14 +257,21 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board
 	// Fond de la tuile selon son état visuel
 	var tileImg *ebiten.Image
 	switch visualState {
-	case board.Hidden:
+	case entity.Hidden:
 		tileImg = r.assets.GetImage("tile_hidden")
-	case board.Revealed:
-		tileImg = r.assets.GetImage("tile_revealed")
-	case board.Matched:
+	case entity.Revealed:
+		// Si c'est une tuile piège (trap), utilise l'asset spécifique
+		if ent.GetType() == entity.TypeTrap {
+			tileImg = r.assets.GetImage("tile_trap")
+		} else {
+			tileImg = r.assets.GetImage("tile_revealed")
+		}
+	case entity.Matched:
 		tileImg = r.assets.GetImage("tile_matched")
+	case entity.Blocked:
+		tileImg = r.assets.GetImage("tile_blocked")
 	default:
-		tileImg = r.assets.GetImage("tile_hidden")
+		tileImg = r.assets.GetImage("square_empty")
 	}
 
 	// Configure les options de dessin avec rotation et flip
@@ -255,7 +283,6 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board
 
 	// Applique la rotation du plateau si définie
 	if r.boardRotation != 0 {
-		// Translate au centre de la tuile, rotate, puis translate en arrière
 		op.GeoM.Translate(-centerX, -centerY)
 		op.GeoM.Rotate(r.boardRotation * math.Pi / 180)
 		op.GeoM.Translate(centerX, centerY)
@@ -264,13 +291,11 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board
 	// Applique l'animation de flip si active
 	if animation != nil && animation.IsActive() {
 		rotateX, rotateY := animation.GetCurrentRotation()
-		// Rotation X (flip vertical)
 		if rotateX != 0 {
 			op.GeoM.Translate(0, -centerY)
 			op.GeoM.Scale(1, math.Abs(math.Cos(rotateX*math.Pi/180)))
 			op.GeoM.Translate(0, centerY)
 		}
-		// Rotation Y (flip horizontal)
 		if rotateY != 0 {
 			op.GeoM.Translate(-centerX, 0)
 			op.GeoM.Scale(math.Abs(math.Cos(rotateY*math.Pi/180)), 1)
@@ -282,18 +307,14 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board
 	op.GeoM.Translate(float64(x), float64(y))
 	screen.DrawImage(tileImg, op)
 
-	// Si la tuile est révélée ou appairée, montre le contenu
-	// Affiche aussi pendant l'animation si elle est avancée (> 50%)
-	shouldShowContent := tile.State == board.Revealed || tile.State == board.Matched
+	// Si la tuile est révélée ou appairée, montre le contenu (si ce n'est pas un piège)
+	shouldShowContent := visualState == entity.Revealed || visualState == entity.Matched
 	if animation != nil && animation.IsActive() && animation.Progress > 0.5 {
 		shouldShowContent = true
 	}
 
-	if shouldShowContent && tile.EntityID != "" {
-		// Cherche l'entité
-		if e, ok := world.Entities.Get(domain.ID(tile.EntityID)); ok {
-			r.renderEntityAt(screen, x, y, e)
-		}
+	if shouldShowContent && ent.GetType() != entity.TypeTrap {
+		r.renderEntityAt(screen, x, y, ent)
 	}
 }
 
@@ -305,7 +326,7 @@ func (r *BoardRenderer) renderTile(screen *ebiten.Image, pos board.Position, til
 }
 
 // renderEntityAt dessine une entité à une position écran spécifique
-func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e domain.Entity) {
+func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e entity.Entity) {
 	centerX := float32(x + r.tileSize/2)
 
 	switch ent := e.(type) {
@@ -313,7 +334,6 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e domain.
 		// Icône de créature - centrée dans la tuile
 		icon := r.assets.GetCreatureIcon(ent.Species)
 		op := &ebiten.DrawImageOptions{}
-		// Mise à l'échelle d'abord (depuis le centre de l'icône)
 		op.GeoM.Translate(-float64(r.tileSize)/2, -float64(r.tileSize)/2)
 		op.GeoM.Scale(0.75, 0.75)
 		op.GeoM.Translate(float64(x+r.tileSize/2), float64(y+r.tileSize/2))
@@ -335,7 +355,6 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e domain.
 		// Icône de ressource - centrée dans la tuile
 		icon := r.assets.GetResourceIcon(ent.ResourceType)
 		op := &ebiten.DrawImageOptions{}
-		// Mise à l'échelle d'abord (depuis le centre de l'icône)
 		op.GeoM.Translate(-float64(r.tileSize)/2, -float64(r.tileSize)/2)
 		op.GeoM.Scale(0.75, 0.75)
 		op.GeoM.Translate(float64(x+r.tileSize/2), float64(y+r.tileSize/2))
@@ -344,7 +363,6 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e domain.
 		// Indicateur de stade
 		stageName := ent.Lifecycle.GetCurrentStageName()
 		if len(stageName) > 0 {
-			// Première lettre du stade
 			label := string(stageName[0])
 			text.Draw(screen, label, basicfont.Face7x13, x+r.tileSize-12, y+r.tileSize-5, color.White)
 		}
@@ -352,7 +370,7 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e domain.
 }
 
 // renderEntity dessine une entité sur une tuile (ancienne méthode pour compatibilité)
-func (r *BoardRenderer) renderEntity(screen *ebiten.Image, x, y int, e domain.Entity) {
+func (r *BoardRenderer) renderEntity(screen *ebiten.Image, x, y int, e entity.Entity) {
 	r.renderEntityAt(screen, x, y, e)
 }
 
@@ -372,35 +390,31 @@ func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.Wor
 	if infoX < 500 {
 		infoX = 500
 	}
-	infoY := r.gridOffsetY + 30 // Commence un peu plus bas pour laisser de la place au titre du plateau
+	infoY := r.gridOffsetY + 30
 
-	// Titre compact
 	text.Draw(screen, "-- ENTITIES --", basicfont.Face7x13, infoX, infoY, color.RGBA{100, 255, 100, 255})
 	infoY += 18
 
-	// Compte les entités par grid de façon compacte
 	for _, gridID := range world.GridOrder {
 		resources := 0
 		creatures := 0
 
-		for _, e := range world.Entities.GetByType(domain.TypeResource) {
+		for _, e := range world.Entities.GetByType(entity.TypeResource) {
 			if e.GetGridID() == gridID {
 				resources++
 			}
 		}
-		for _, e := range world.Entities.GetByType(domain.TypeCreature) {
+		for _, e := range world.Entities.GetByType(entity.TypeCreature) {
 			if e.GetGridID() == gridID {
 				creatures++
 			}
 		}
 
-		// Affichage compact: [grid] R:3 C:2
 		info := fmt.Sprintf("[%s] R:%d C:%d", gridID, resources, creatures)
 		text.Draw(screen, info, basicfont.Face7x13, infoX, infoY, color.White)
 		infoY += 14
 	}
 
-	// Liste des créatures (limite pour éviter débordement)
 	infoY += 8
 	text.Draw(screen, "-- CREATURES --", basicfont.Face7x13, infoX, infoY, color.RGBA{100, 255, 100, 255})
 	infoY += 16
@@ -409,7 +423,7 @@ func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.Wor
 	shown := 0
 	
 	for _, gridID := range world.GridOrder {
-		for _, c := range world.Entities.GetByType(domain.TypeCreature) {
+		for _, c := range world.Entities.GetByType(entity.TypeCreature) {
 			if shown >= maxToShow {
 				text.Draw(screen, "...", basicfont.Face7x13, infoX, infoY, color.Gray{128})
 				return
@@ -418,7 +432,6 @@ func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.Wor
 				continue
 			}
 			if creature, ok := c.(*domain.Creature); ok {
-				// Format compact: [forest] lumifly
 				info := fmt.Sprintf("[%s] %s", gridID, creature.Species)
 				text.Draw(screen, info, basicfont.Face7x13, infoX, infoY, color.Gray{200})
 				infoY += 13
@@ -430,7 +443,6 @@ func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.Wor
 
 // ScreenToGrid convertit les coordonnées écran en coordonnées grille et gridID
 func (r *BoardRenderer) ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool) {
-	// Essaie chaque grid dans l'ordre de création
 	for _, gridID := range world.GridOrder {
 		offsetX, offsetY, grid := r.getGridLayout(gridID, world)
 		if grid == nil {
@@ -456,30 +468,22 @@ func (r *BoardRenderer) ScreenToGrid(screenX, screenY int, world *domain.World) 
 }
 
 // ScreenToLocalTile convertit les coordonnées écran en coordonnées locales dans une tuile
-// Retourne les coordonnées locales (localX, localY) relatives au coin supérieur gauche de la tuile
 func (r *BoardRenderer) ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool) {
 	pos, gID, found := r.ScreenToGrid(screenX, screenY, world)
 	if !found {
 		return 0, 0, "", false
 	}
 
-	offsetX, offsetY, grid := r.getGridLayout(gID, world)
-	if grid == nil {
-		return 0, 0, "", false
-	}
-
-	// Calcule la position de la tuile à l'écran
+	offsetX, offsetY, _ := r.getGridLayout(gID, world)
 	tileScreenX := offsetX + pos.X*r.tileSize
 	tileScreenY := offsetY + pos.Y*r.tileSize
-
-	// Calcule les coordonnées locales dans la tuile
 	lx := screenX - tileScreenX
 	ly := screenY - tileScreenY
 
 	return lx, ly, gID, true
 }
 
-// RenderSelectionHighlight dessine une surbrillance sur une tuile sélectionnée d'un grid spécifique
+// RenderSelectionHighlight dessine une surbrillance sur une tuile sélectionnée
 func (r *BoardRenderer) RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, highlightColor color.Color, world *domain.World) {
 	offsetX, offsetY, grid := r.getGridLayout(gridID, world)
 	if grid == nil {
@@ -488,7 +492,5 @@ func (r *BoardRenderer) RenderSelectionHighlight(screen *ebiten.Image, pos board
 
 	x := offsetX + pos.X*r.tileSize
 	y := offsetY + pos.Y*r.tileSize
-
-	// Dessine un rectangle de surbrillance
 	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, highlightColor, true)
 }

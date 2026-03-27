@@ -120,51 +120,6 @@ func TestWorldSpawnCreature(t *testing.T) {
 	}
 }
 
-func TestWorldRevealTile(t *testing.T) {
-	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
-
-	// Reveal an empty tile
-	tile, err := w.RevealTile("test", board.Position{X: 0, Y: 0})
-	if err != nil {
-		t.Errorf("Failed to reveal tile: %v", err)
-	}
-
-	if tile.State != board.Revealed {
-		t.Error("Tile should be revealed")
-	}
-
-	// Can't reveal twice
-	_, err = w.RevealTile("test", board.Position{X: 0, Y: 0})
-	if err == nil {
-		t.Error("Should not be able to reveal twice")
-	}
-}
-
-func TestWorldMatchTile(t *testing.T) {
-	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
-
-	// Can't match hidden tile
-	err := w.MatchTile("test", board.Position{X: 0, Y: 0})
-	if err == nil {
-		t.Error("Should not be able to match hidden tile")
-	}
-
-	// Reveal then match
-	w.RevealTile("test", board.Position{X: 0, Y: 0})
-	err = w.MatchTile("test", board.Position{X: 0, Y: 0})
-	if err != nil {
-		t.Errorf("Failed to match tile: %v", err)
-	}
-
-	grid, _ := w.GetGrid("test")
-	tile, _ := grid.Get(board.Position{X: 0, Y: 0})
-	if tile.State != board.Matched {
-		t.Error("Tile should be matched")
-	}
-}
-
 func TestWorldRemoveEntity(t *testing.T) {
 	w := NewWorld()
 	w.CreateGrid("test", 4, 4)

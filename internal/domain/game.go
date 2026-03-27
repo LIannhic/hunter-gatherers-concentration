@@ -21,11 +21,11 @@ type (
 	Entity   = entity.Entity
 	Position = entity.Position
 	Type     = entity.Type
+	TileState = entity.TileState // Changé de board vers entity
 
 	// Board
 	Grid           = board.Grid
 	Tile           = board.Tile
-	TileState      = board.TileState
 	Direction      = board.Direction
 	FlipDirection  = board.FlipDirection
 	TileModifier   = board.TileModifier
@@ -79,11 +79,13 @@ const (
 	TypeCreature  = entity.TypeCreature
 	TypeStructure = entity.TypeStructure
 	TypeArtefact  = entity.TypeArtefact
+	TypeTrap      = entity.TypeTrap // Changé de TypeEmptyTile à TypeTrap
 
-	Hidden  = board.Hidden
-	Revealed = board.Revealed
-	Matched = board.Matched
-	Blocked = board.Blocked
+	// Les constantes viennent maintenant de entity
+	Hidden   = entity.Hidden
+	Revealed = entity.Revealed
+	Matched  = entity.Matched
+	Blocked  = entity.Blocked
 
 	North = board.North
 	South = board.South

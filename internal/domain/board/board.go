@@ -184,41 +184,17 @@ func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
 	return FlipCenter
 }
 
-// TileState représente l'état visuel d'une tuile
-type TileState int
-
-const (
-	Hidden TileState = iota
-	Revealed
-	Matched
-	Blocked
-)
-
-func (s TileState) String() string {
-	switch s {
-	case Hidden:
-		return "hidden"
-	case Revealed:
-		return "revealed"
-	case Matched:
-		return "matched"
-	case Blocked:
-		return "blocked"
-	}
-	return "unknown"
-}
-
 // Tile représente une case du plateau de jeu
+// Elle ne porte plus d'état, car l'état appartient à l'entité posée dessus
 type Tile struct {
 	Position    Position
-	State       TileState
 	EntityID    string // Référence vers l'entité présente (si existante)
 	StructureID string // Référence vers une structure (terrier, etc.)
 	Modifier    TileModifier
 }
 
 func (t *Tile) String() string {
-	return fmt.Sprintf("Tile[%s state=%s entity=%s]", t.Position.String(), t.State.String(), t.EntityID)
+	return fmt.Sprintf("Tile[%s entity=%s]", t.Position.String(), t.EntityID)
 }
 
 type TileModifier struct {
@@ -247,7 +223,6 @@ func NewGrid(id string, width, height int) *Grid {
 			pos := Position{X: x, Y: y}
 			g.Tiles[pos] = &Tile{
 				Position: pos,
-				State:    Hidden,
 			}
 		}
 	}
@@ -282,56 +257,6 @@ func (g *Grid) GetNeighbors(pos Position) []*Tile {
 	return neighbors
 }
 
-// GetEmptyTiles retourne toutes les tuiles vides (sans entité)
-func (g *Grid) GetEmptyTiles() []*Tile {
-	var empty []*Tile
-	for _, tile := range g.Tiles {
-		if tile.EntityID == "" && !tile.Modifier.Obstructed {
-			empty = append(empty, tile)
-		}
-	}
-	return empty
-}
-
-// Reveal retourne une tuile (action de dévoiler)
-func (g *Grid) Reveal(pos Position) (*Tile, error) {
-	tile, err := g.Get(pos)
-	if err != nil {
-		return nil, err
-	}
-	if tile.State != Hidden {
-		return nil, errors.New("tuile déjà révélée ou appairée")
-	}
-	tile.State = Revealed
-	return tile, nil
-}
-
-// Hide remet une tuile face cachée (pour certains effets)
-func (g *Grid) Hide(pos Position) error {
-	tile, err := g.Get(pos)
-	if err != nil {
-		return err
-	}
-	if tile.State == Matched {
-		return errors.New("impossible de cacher une tuile appairée")
-	}
-	tile.State = Hidden
-	return nil
-}
-
-// Match marque une tuile comme appairée avec succès
-func (g *Grid) Match(pos Position) error {
-	tile, err := g.Get(pos)
-	if err != nil {
-		return err
-	}
-	if tile.State != Revealed {
-		return errors.New("seule une tuile révélée peut être appairée")
-	}
-	tile.State = Matched
-	return nil
-}
-
 // PlaceEntity place une entité sur une tuile
 func (g *Grid) PlaceEntity(pos Position, entityID string) error {
 	tile, err := g.Get(pos)
@@ -358,15 +283,4 @@ func (g *Grid) RemoveEntity(pos Position) error {
 // GetTileAt retourne la tuile à une position donnée (alias pour Get)
 func (g *Grid) GetTileAt(x, y int) (*Tile, error) {
 	return g.Get(Position{X: x, Y: y})
-}
-
-// CountByState compte les tuiles par état
-func (g *Grid) CountByState(state TileState) int {
-	count := 0
-	for _, tile := range g.Tiles {
-		if tile.State == state {
-			count++
-		}
-	}
-	return count
 }

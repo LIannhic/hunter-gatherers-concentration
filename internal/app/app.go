@@ -58,7 +58,7 @@ func NewApplication() (*Application, error) {
 	config := loader.DefaultConfig()
 	app.Config = config
 
-	// 2. Initialise le domaine (sans grid - on va en créer plusieurs)
+	// 2. Initialise le domaine
 	app.World = domain.NewWorld()
 	app.AssocEngine = domain.NewAssocEngine()
 	app.Engine = domain.NewEngine(app.World)
@@ -94,9 +94,8 @@ func NewApplication() (*Application, error) {
 	return app, nil
 }
 
-// setupGrids crée plusieurs grids pour le jeu
+// setupGrids crée les grids initiaux
 func (app *Application) setupGrids() {
-	// Crée 4 grids de 6x6
 	gridConfigs := []struct {
 		id     string
 		width  int
@@ -115,6 +114,37 @@ func (app *Application) setupGrids() {
 
 	// Définit le premier grid comme actif
 	app.World.SetCurrentGrid("forest")
+}
+
+// fillGridWithTraps remplit les cases encore vides d'un grid avec des entités TypeTrap
+func (app *Application) fillGridWithTraps(gridID string) {
+	grid, ok := app.World.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	for y := 0; y < grid.Height; y++ {
+		for x := 0; x < grid.Width; x++ {
+			tile, _ := grid.Get(board.Position{X: x, Y: y})
+
+			// On ne remplit QUE si la case est vide (pas de ressource ni créature)
+			if tile.EntityID == "" {
+				pos := entity.Position{X: x, Y: y}
+
+				// Crée l'entité piège (trap)
+				trap := entity.NewBaseEntity(entity.TypeTrap)
+				trap.SetGridID(gridID)
+				trap.SetPosition(pos)
+
+				// On crée une copie persistante pour l'interface
+				trapCopy := trap
+				app.World.Entities.Register(&trapCopy)
+
+				// Met à jour la tuile de la grille pour qu'elle pointe vers ce piège
+				tile.EntityID = string(trap.GetID())
+			}
+		}
+	}
 }
 
 // setupCallbacks connecte les actions aux use cases
@@ -156,15 +186,7 @@ func (app *Application) setupCallbacks() {
 
 		// Spawn une créature
 		app.World.SpawnCreature(gridID, "lumifly", domain.Position{X: 3, Y: 3})
-		
-		// Log des créatures disponibles
-		fmt.Println("[DEBUG] Créatures disponibles sur ce grid:")
-		fmt.Println("  - lumifly: Insecte volant (Mode: Over)")
-		fmt.Println("  - shadowstalker: Prédateur (Mode: Shadow)")
-		fmt.Println("  - burrower: Fouisseur (Mode: Under)")
-		fmt.Println("  - specter: Fantôme (Mode: Shadow, traverse murs)")
-		fmt.Println("  - echo_hound: Chien rapide (Déclencheur: Echo)")
-		fmt.Println("  - fleeing_sprite: Esprit fuyard (Répulsion joueur)")
+		app.World.SpawnCreature(gridID, "lumifly", domain.Position{X: 3, Y: 4})
 	}
 
 	// Callback spawn toutes les créatures de test (Shift+S)
@@ -196,7 +218,7 @@ func (app *Application) setupCallbacks() {
 				fmt.Printf("[ERROR] No empty position for %s\n", c.species)
 				continue
 			}
-			
+
 			if _, err := app.World.SpawnCreature(gridID, c.species, *pos); err != nil {
 				fmt.Printf("[ERROR] Failed to spawn %s: %v\n", c.species, err)
 			} else {
@@ -204,26 +226,7 @@ func (app *Application) setupCallbacks() {
 				spawned++
 			}
 		}
-		
-		// Spawn un patrouilleur avec route sur une case vide
-		route := []domain.Position{
-			{X: 0, Y: 0}, {X: 0, Y: 5}, {X: 5, Y: 5}, {X: 5, Y: 0},
-		}
-		patrollerPos := app.findEmptyPosition(gridID)
-		if patrollerPos != nil {
-			if patroller, err := app.World.CreatureFactory.CreatePatroller("stonewarden", *patrollerPos, route); err == nil {
-				patroller.SetGridID(gridID)
-				app.World.Entities.Register(patroller)
-				// Met à jour la tuile
-				if grid, ok := app.World.GetGrid(gridID); ok {
-					tile, _ := grid.Get(board.Position{X: patrollerPos.X, Y: patrollerPos.Y})
-					tile.EntityID = string(patroller.GetID())
-				}
-				fmt.Printf("[SPAWN] stonewarden (patrouilleur) at %v - Route: 4 points\n", *patrollerPos)
-				spawned++
-			}
-		}
-		
+
 		fmt.Printf("[SPAWN] Total spawned: %d\n", spawned)
 	}
 
@@ -232,17 +235,17 @@ func (app *Application) setupCallbacks() {
 		if gridID == "" {
 			gridID = app.World.CurrentGridID
 		}
-		
+
 		creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite"}
 		species := creatures[rand.Intn(len(creatures))]
-		
+
 		// Trouve une position libre aléatoire
 		pos := app.findEmptyPosition(gridID)
 		if pos == nil {
 			fmt.Println("[ERROR] No empty position available")
 			return
 		}
-		
+
 		if _, err := app.World.SpawnCreature(gridID, species, *pos); err != nil {
 			fmt.Printf("[ERROR] Failed to spawn %s: %v\n", species, err)
 		} else {
@@ -317,8 +320,10 @@ func (app *Application) setupDebugCallbacks() {
 		}
 		fmt.Printf("[CHEAT] Révélation de toutes les tuiles sur %s\n", gridID)
 		for _, tile := range grid.Tiles {
-			if tile.State == board.Hidden {
-				tile.State = board.Revealed
+			if e, ok := app.World.Entities.Get(entity.ID(tile.EntityID)); ok {
+				if e.GetState() == entity.Hidden {
+					e.SetState(entity.Revealed)
+				}
 			}
 		}
 	}
@@ -334,8 +339,8 @@ func (app *Application) setupDebugCallbacks() {
 		}
 		fmt.Printf("[CHEAT] Masquage de toutes les tuiles sur %s\n", gridID)
 		for _, tile := range grid.Tiles {
-			if tile.State == board.Revealed {
-				tile.State = board.Hidden
+			if e, ok := app.World.Entities.Get(entity.ID(tile.EntityID)); ok {
+				e.SetState(entity.Hidden)
 			}
 		}
 	}
@@ -356,26 +361,27 @@ func (app *Application) setupEventSubscriptions() {
 	// Abonne le renderer aux événements TileRevealed pour démarrer les animations
 	app.World.EventBus.SubscribeFunc(event.TileRevealed, func(e event.Event) {
 		position, ok1 := e.Payload["position"].(entity.Position)
-		flipDir, ok2 := e.Payload["flip_direction"].(board.FlipDirection)
 		entityID, ok3 := e.Payload["entity_id"].(string)
 		gridID := e.SourceID
 
-		if ok1 && ok2 && ok3 {
-			// Démarre l'animation de flip
-			app.Renderer.StartFlipAnimation(
-				gridID,
-				board.Position{X: position.X, Y: position.Y},
-				flipDir,
-				entityID,
-				board.Revealed,
-			)
+		if ok1 && ok3 {
+			if ent, ok := app.World.Entities.Get(entity.ID(entityID)); ok {
+				// Démarre l'animation de flip
+				app.Renderer.StartFlipAnimation(
+					gridID,
+					board.Position{X: position.X, Y: position.Y},
+					board.FlipCenter,
+					entityID,
+					ent.GetState(),
+				)
+			}
 		}
 	})
 }
 
 // spawnInitialEntities crée quelques entités au démarrage sur différents grids
 func (app *Application) spawnInitialEntities() {
-	// Spawn des entités sur chaque grid
+	// 1. Spawn des entités réelles (Ressources et Créatures)
 	gridSpawns := map[string][]struct {
 		typ string
 		pos domain.Position
@@ -405,32 +411,19 @@ func (app *Application) spawnInitialEntities() {
 		}
 	}
 
-	// Spawn les créatures avec leurs profils de mouvement
-	fmt.Println("[INIT] Spawning creatures with MovementProfiles...")
-	
-	// Forest: Lumifly (volant)
+	// Spawn les créatures
 	app.World.SpawnCreature("forest", "lumifly", domain.Position{X: 3, Y: 3})
-	fmt.Println("  [forest] lumifly at (3,3) - Mode: Over, Trigger: Auto")
-	
-	// Cave: Shadowstalker (chasseur furtif)
 	app.World.SpawnCreature("cave", "shadowstalker", domain.Position{X: 4, Y: 2})
-	fmt.Println("  [cave] shadowstalker at (4,2) - Mode: Shadow, Trigger: Proximity(4)")
-	
-	// Meadow: Burrower (fouisseur)
 	app.World.SpawnCreature("meadow", "burrower", domain.Position{X: 2, Y: 4})
-	fmt.Println("  [meadow] burrower at (2,4) - Mode: Under, Trigger: OnReveal")
-	
-	// Swamp: Specter (fantôme)
 	app.World.SpawnCreature("swamp", "specter", domain.Position{X: 3, Y: 3})
-	fmt.Println("  [swamp] specter at (3,3) - Mode: Shadow, Trigger: OnEcho")
-	
-	// Echo Hound (réactif aux échos)
 	app.World.SpawnCreature("forest", "echo_hound", domain.Position{X: 5, Y: 5})
-	fmt.Println("  [forest] echo_hound at (5,5) - Mode: Bento, Trigger: OnEcho, Velocity: 3")
-	
-	// Fleeing Sprite (fuyard)
 	app.World.SpawnCreature("meadow", "fleeing_sprite", domain.Position{X: 1, Y: 1})
-	fmt.Println("  [meadow] fleeing_sprite at (1,1) - Mode: Shadow, Trigger: Proximity(3)")
+
+	// 2. COMPLÉTION : Remplit les cases encore vides avec des pièges (Traps)
+	fmt.Println("[INIT] Filling remaining tiles with traps...")
+	for _, gridID := range app.World.GridOrder {
+		app.fillGridWithTraps(gridID)
+	}
 }
 
 // Update met à jour l'application
@@ -471,7 +464,6 @@ func (app *Application) updatePlaying() error {
 
 // updateGameOver gère l'écran de fin
 func (app *Application) updateGameOver() error {
-	// TODO: Gérer le redémarrage
 	return nil
 }
 
@@ -558,7 +550,6 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 
 // drawGameOver dessine l'écran de fin
 func (app *Application) drawGameOver(screen *ebiten.Image) {
-	// TODO: Implémenter l'écran de fin
 	screen.Fill(color.Black)
 	text.Draw(screen, "GAME OVER", basicfont.Face7x13, 350, 300, color.White)
 }

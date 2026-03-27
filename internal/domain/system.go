@@ -194,33 +194,50 @@ func (w *World) SpawnCreature(gridID string, species string, pos entity.Position
 	return c, nil
 }
 
-// RevealTile révèle une tuile sur un grid spécifique
-// Note: Cette méthode ne publie pas d'événement - c'est à l'appelant de le faire avec la direction de flip
-func (w *World) RevealTile(gridID string, pos board.Position) (*board.Tile, error) {
+// RevealTile révèle une entité sur une position
+func (w *World) RevealTile(gridID string, pos board.Position) (entity.Entity, error) {
 	grid, ok := w.Grids[gridID]
 	if !ok {
 		return nil, ErrGridNotFound
 	}
 
-	tile, err := grid.Reveal(pos)
+	tile, err := grid.Get(pos)
 	if err != nil {
 		return nil, err
 	}
-	// L'événement doit être publié par l'appelant avec la direction de flip appropriée
-	return tile, nil
+
+	if tile.EntityID == "" {
+		return nil, errors.New("pas d'entité sur cette case")
+	}
+
+	ent, ok := w.Entities.Get(entity.ID(tile.EntityID))
+	if !ok {
+		return nil, errors.New("entité non trouvée")
+	}
+
+	ent.SetState(entity.Revealed)
+	return ent, nil
 }
 
-// MatchTiles appaire deux tuiles sur un grid spécifique
+// MatchTile marque une entité comme appairée
 func (w *World) MatchTile(gridID string, pos board.Position) error {
 	grid, ok := w.Grids[gridID]
 	if !ok {
 		return ErrGridNotFound
 	}
 
-	if err := grid.Match(pos); err != nil {
-		return err
-	}
 	tile, _ := grid.Get(pos)
+	if tile.EntityID == "" {
+		return errors.New("aucune entité à appairer")
+	}
+
+	ent, ok := w.Entities.Get(entity.ID(tile.EntityID))
+	if !ok {
+		return errors.New("entité non trouvée")
+	}
+
+	ent.SetState(entity.Matched)
+
 	w.EventBus.Publish(event.NewTileMatchedEvent(
 		entity.Position{X: pos.X, Y: pos.Y},
 		tile.EntityID,
@@ -228,7 +245,7 @@ func (w *World) MatchTile(gridID string, pos board.Position) error {
 	return nil
 }
 
-// RemoveEntity supprime une entité du monde
+// RemoveEntity supprime une entité du monde et libère la case
 func (w *World) RemoveEntity(id entity.ID) {
 	e, ok := w.Entities.Get(id)
 	if !ok {
@@ -403,9 +420,19 @@ func (s *CreatureAISystem) Update(world *World) {
 			oldTile, _ := grid.Get(board.Position{X: c.GetPosition().X, Y: c.GetPosition().Y})
 			newTile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
 
+			// L'ancienne case devient réellement vide (sol nu)
 			oldTile.EntityID = ""
-			newTile.EntityID = string(c.GetID())
 
+			// Si la nouvelle case contenait un piège, on le supprime (écrasement)
+			if newTile.EntityID != "" {
+				if oldEnt, ok := world.Entities.Get(entity.ID(newTile.EntityID)); ok {
+					if oldEnt.GetType() == entity.TypeTrap {
+						world.RemoveEntity(oldEnt.GetID())
+					}
+				}
+			}
+
+			newTile.EntityID = string(c.GetID())
 			world.Entities.UpdatePosition(c.GetID(), newPos)
 
 			world.EventBus.Publish(event.NewCreatureMovedEvent(
@@ -429,7 +456,6 @@ func (s *CreatureAISystem) Update(world *World) {
 }
 
 // CreatureMovementSystem gère les déplacements avancés des créatures
-// Utilise les MovementProfile pour un contrôle fin du mouvement
 type CreatureMovementSystem struct {
 	recentReveals []board.Position // Tuiles récemment révélées pour TriggerOnEcho
 }
@@ -499,19 +525,15 @@ func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger,
 	case creature.TriggerAuto:
 		return true
 	case creature.TriggerOnReveal:
-		// Vérifie si la créature est sur une tuile révélée
-		tile, _ := grid.Get(board.Position{X: c.GetPosition().X, Y: c.GetPosition().Y})
-		if tile.State == board.Revealed && !trigger.WasRevealed {
+		if c.GetState() == entity.Revealed && !trigger.WasRevealed {
 			trigger.WasRevealed = true
 			return true
 		}
-		trigger.WasRevealed = tile.State == board.Revealed
+		trigger.WasRevealed = c.GetState() == entity.Revealed
 		return false
 	case creature.TriggerOnEcho:
-		// Se déclenche si une autre tuile a été révélée récemment
 		return len(s.recentReveals) > 0
 	case creature.TriggerProximity:
-		// Vérifie si une tuile a été révélée dans le rayon
 		for _, revealed := range s.recentReveals {
 			dist := abs(revealed.X-c.GetPosition().X) + abs(revealed.Y-c.GetPosition().Y)
 			if dist <= trigger.Radius {
@@ -524,30 +546,25 @@ func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger,
 }
 
 func (s *CreatureMovementSystem) executeMove(c *creature.Creature, profile *creature.MovementProfile, world *World, grid *board.Grid) bool {
-	// Détermine la direction selon la navigation
 	direction := s.getNavigationDirection(profile.Navigation, c, world, grid)
 
 	if direction == (entity.Position{X: 0, Y: 0}) {
-		return true // Pas de mouvement mais pas d'échec
+		return true
 	}
 
-	// Calcule la nouvelle position
 	currentPos := c.GetPosition()
 	newPos := entity.Position{
 		X: currentPos.X + direction.X,
 		Y: currentPos.Y + direction.Y,
 	}
 
-	// Met à jour l'orientation
 	profile.Orientation = directionToOrientation(direction)
 
-	// Vérifie la validité et gère les collisions
 	finalPos, success := s.handleCollision(profile.Collision, c, newPos, currentPos, world, grid)
 	if !success {
 		return false
 	}
 
-	// Exécute le mouvement selon le mode
 	return s.applyMoveMode(profile.Mode, c, currentPos, finalPos, world, grid)
 }
 
@@ -558,7 +575,6 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 			{X: 0, Y: -1}, {X: 0, Y: 1},
 			{X: -1, Y: 0}, {X: 1, Y: 0},
 		}
-		// 30% de chance de suivre la direction privilégiée
 		if nav.WanderBias != (entity.Position{}) && rand.Float32() < 0.3 {
 			newPos := entity.Position{
 				X: c.GetPosition().X + nav.WanderBias.X,
@@ -574,7 +590,6 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 		if len(nav.PatrolRoute) == 0 {
 			return s.getNavigationDirection(creature.NavigationLogic{Type: creature.NavWander}, c, world, grid)
 		}
-		// Patrouille simplifiée
 		target := nav.PatrolRoute[nav.PatrolIndex]
 		current := c.GetPosition()
 		dir := entity.Position{
@@ -595,7 +610,6 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 		return c.MovementProfile.Orientation.ToVector()
 
 	case creature.NavAttraction:
-		// Vers le joueur (simplifié)
 		playerPos := world.playerPosition
 		current := c.GetPosition()
 		return entity.Position{
@@ -604,7 +618,6 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 		}
 
 	case creature.NavRepulsion:
-		// S'éloigne du joueur
 		playerPos := world.playerPosition
 		current := c.GetPosition()
 		return entity.Position{
@@ -621,7 +634,14 @@ func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler,
 		return currentPos, false
 	}
 
-	canMove := tile.EntityID == "" && !tile.Modifier.Obstructed
+	// Une case est libre si elle n'a pas d'entité OU si elle a un piège (qu'on va écraser ou échanger)
+	isTrap := false
+	if tile.EntityID != "" {
+		if ent, ok := world.Entities.Get(entity.ID(tile.EntityID)); ok {
+			isTrap = ent.GetType() == entity.TypeTrap
+		}
+	}
+	canMove := (tile.EntityID == "" || isTrap) && !tile.Modifier.Obstructed
 
 	switch coll.Type {
 	case creature.CollideStop:
@@ -632,7 +652,6 @@ func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler,
 
 	case creature.CollideBounce:
 		if !canMove {
-			// Inverse l'orientation
 			c.MovementProfile.Orientation.Rotate(180)
 			return currentPos, false
 		}
@@ -642,39 +661,23 @@ func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler,
 		if canMove {
 			return newPos, true
 		}
-		// Essaie de glisser
 		dx := newPos.X - currentPos.X
 		dy := newPos.Y - currentPos.Y
-		// Glisse horizontalement
 		if dy != 0 {
 			slidePos := entity.Position{X: currentPos.X, Y: newPos.Y}
-			if t, err := grid.Get(board.Position{X: slidePos.X, Y: slidePos.Y}); err == nil && t.EntityID == "" && !t.Modifier.Obstructed {
+			if t, err := grid.Get(board.Position{X: slidePos.X, Y: slidePos.Y}); err == nil && (t.EntityID == "" || isTrap) && !t.Modifier.Obstructed {
 				return slidePos, true
 			}
 		}
-		// Glisse verticalement
 		if dx != 0 {
 			slidePos := entity.Position{X: newPos.X, Y: currentPos.Y}
-			if t, err := grid.Get(board.Position{X: slidePos.X, Y: slidePos.Y}); err == nil && t.EntityID == "" && !t.Modifier.Obstructed {
+			if t, err := grid.Get(board.Position{X: slidePos.X, Y: slidePos.Y}); err == nil && (t.EntityID == "" || isTrap) && !t.Modifier.Obstructed {
 				return slidePos, true
 			}
 		}
 		return currentPos, false
 
 	case creature.CollidePhase:
-		// Vérifie si on peut traverser
-		tileType := "empty"
-		if tile.Modifier.Obstructed {
-			tileType = "wall"
-		}
-		for _, phaseType := range coll.CanPhaseThrough {
-			if tileType == phaseType {
-				return newPos, true
-			}
-		}
-		if !canMove {
-			return currentPos, false
-		}
 		return newPos, true
 	}
 
@@ -682,74 +685,66 @@ func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler,
 }
 
 func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid) bool {
-	switch mode.Type {
-	case creature.ModeBento:
-		// Déplacement visible standard
-		return s.doMove(c, oldPos, newPos, world, grid, false)
-
-	case creature.ModeShadow:
-		// Déplacement invisible
-		return s.doMove(c, oldPos, newPos, world, grid, true)
-
-	case creature.ModeSwap:
-		// Échange avec l'entité à la position cible
+	// SPECIAL : Le ModeSwap permet d'échanger avec n'importe quelle TUILE (entité), pièges inclus.
+	// Mais on n'échange pas avec une case réellement vide (sol nu).
+	if mode.Type == creature.ModeSwap {
 		tile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
 		if tile.EntityID != "" {
-			// Trouve l'entité à échanger
 			swappedEntity, ok := world.Entities.Get(entity.ID(tile.EntityID))
 			if ok {
-				// Échange les positions
+				// ÉCHANGE : on permute les deux entités
 				swappedEntity.SetPosition(oldPos)
 				c.SetPosition(newPos)
-				// Met à jour la grille
+
 				oldTile, _ := grid.Get(board.Position{X: oldPos.X, Y: oldPos.Y})
 				newTile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+
 				oldTile.EntityID = tile.EntityID
 				newTile.EntityID = string(c.GetID())
-				// Met à jour le manager
+
 				world.Entities.UpdatePosition(swappedEntity.GetID(), oldPos)
 				world.Entities.UpdatePosition(c.GetID(), newPos)
-				// Événement spécial pour swap
-				world.EventBus.Publish(event.Event{
-					Type:     event.CreatureMoved,
-					SourceID: string(c.GetID()),
-					Payload: map[string]interface{}{
-						"from":         oldPos,
-						"to":           newPos,
-						"mode":         "swap",
-						"swapped_with": string(swappedEntity.GetID()),
-					},
-				})
+
+				fmt.Printf("[MOVE] %s (%s) SWAPPED from %v to %v with %s\n",
+					c.Species, c.GetID(), oldPos, newPos, swappedEntity.GetType().String())
+
 				return true
 			}
 		}
-		return s.doMove(c, oldPos, newPos, world, grid, false)
-
-	case creature.ModeOver:
-		c.AddTag("flying")
-		return s.doMove(c, oldPos, newPos, world, grid, false)
-
-	case creature.ModeUnder:
-		c.AddTag("burrowed")
-		return s.doMove(c, oldPos, newPos, world, grid, true)
 	}
 
-	return s.doMove(c, oldPos, newPos, world, grid, false)
+	// Dans tous les autres cas (ou si c'était du sol nu), on fait un déplacement normal (doMove)
+	silent := mode.Type == creature.ModeShadow || mode.Type == creature.ModeUnder
+	return s.doMove(c, oldPos, newPos, world, grid, silent)
 }
 
 func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid, silent bool) bool {
-	// Met à jour la grille
 	oldTile, _ := grid.Get(board.Position{X: oldPos.X, Y: oldPos.Y})
 	newTile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
 
+	// L'ancienne case devient réellement vide (sol nu)
 	oldTile.EntityID = ""
-	newTile.EntityID = string(c.GetID())
 
-	// Met à jour la position de l'entité
+	content := "empty space"
+	// Si la nouvelle case contenait un piège, on le supprime proprement du monde (écrasement)
+	if newTile.EntityID != "" {
+		if oldEnt, ok := world.Entities.Get(entity.ID(newTile.EntityID)); ok {
+			if oldEnt.GetType() == entity.TypeTrap {
+				content = "trap (crushed)"
+				world.RemoveEntity(oldEnt.GetID())
+			} else {
+				content = oldEnt.GetType().String()
+			}
+		}
+	}
+
+	newTile.EntityID = string(c.GetID())
 	c.SetPosition(newPos)
 	world.Entities.UpdatePosition(c.GetID(), newPos)
 
-	// Publie l'événement
+	fmt.Printf("[MOVE] %s (%s) MOVED from %v to %v. Arrival was %s. Start is now empty.\n",
+		c.Species, c.GetID(), oldPos, newPos, content)
+
 	if silent {
 		world.EventBus.Publish(event.Event{
 			Type:     event.CreatureMoved,
@@ -810,7 +805,6 @@ func (wa *worldAdapter) GetNearbyCreatures(pos entity.Position, radius int) []*c
 	creatures := wa.world.Entities.GetByType(entity.TypeCreature)
 
 	for _, e := range creatures {
-		// Vérifie que la créature est sur le même grid
 		if e.GetGridID() != wa.grid.ID {
 			continue
 		}
@@ -829,7 +823,6 @@ func (wa *worldAdapter) GetResources(pos entity.Position, radius int) []string {
 	resources := wa.world.Entities.GetByType(entity.TypeResource)
 
 	for _, e := range resources {
-		// Vérifie que la ressource est sur le même grid
 		if e.GetGridID() != wa.grid.ID {
 			continue
 		}
@@ -854,16 +847,13 @@ func (wa *worldAdapter) GetTileState(pos entity.Position) string {
 	if err != nil {
 		return "invalid"
 	}
-	switch tile.State {
-	case board.Hidden:
-		return "hidden"
-	case board.Revealed:
-		return "revealed"
-	case board.Matched:
-		return "matched"
-	default:
-		return "unknown"
+	if tile.EntityID == "" {
+		return "empty"
 	}
+	if ent, ok := wa.world.Entities.Get(entity.ID(tile.EntityID)); ok {
+		return ent.GetState().String()
+	}
+	return "unknown"
 }
 
 func abs(x int) int {
@@ -879,7 +869,6 @@ type TriggerSystem struct{}
 func (s *TriggerSystem) Priority() int { return 4 }
 
 func (s *TriggerSystem) Update(world *World) {
-	// Vérifie les conditions de trigger sur chaque tuile de chaque grid
 	for _, gridID := range world.GridOrder {
 		grid, ok := world.GetGrid(gridID)
 		if !ok {
@@ -889,20 +878,14 @@ func (s *TriggerSystem) Update(world *World) {
 			if tile.StructureID == "" {
 				continue
 			}
-
-			// Récupère le composant trigger de la structure
 			comp, ok := world.Components.Get(tile.StructureID, "trigger")
 			if !ok {
 				continue
 			}
-
 			trigger := comp.(*component.Trigger)
-
-			// Évalue la condition
 			if s.checkCondition(trigger.Condition, tile, world, grid) {
 				s.executeAction(trigger.Action, tile, world, grid)
 				if trigger.Consumed {
-					// Supprime le trigger
 					world.Components.Remove(tile.StructureID, "trigger")
 				}
 			}
@@ -913,15 +896,11 @@ func (s *TriggerSystem) Update(world *World) {
 func (s *TriggerSystem) checkCondition(condition string, tile *board.Tile, world *World, grid *board.Grid) bool {
 	switch condition {
 	case "reveal_with_creature":
-		// Si la tuile est révélée ET contient une créature
-		if tile.State != board.Revealed {
-			return false
-		}
 		if tile.EntityID == "" {
 			return false
 		}
 		e, ok := world.Entities.Get(entity.ID(tile.EntityID))
-		return ok && e.GetType() == entity.TypeCreature
+		return ok && e.GetType() == entity.TypeCreature && e.GetState() == entity.Revealed
 
 	case "creature_on_resource":
 		if tile.EntityID == "" {
@@ -931,7 +910,6 @@ func (s *TriggerSystem) checkCondition(condition string, tile *board.Tile, world
 		if !ok || e.GetType() != entity.TypeCreature {
 			return false
 		}
-		// Vérifie si une ressource est à proximité
 		neighbors := grid.GetNeighbors(tile.Position)
 		for _, n := range neighbors {
 			if n.EntityID != "" {
@@ -949,7 +927,6 @@ func (s *TriggerSystem) checkCondition(condition string, tile *board.Tile, world
 func (s *TriggerSystem) executeAction(action string, tile *board.Tile, world *World, grid *board.Grid) {
 	switch action {
 	case "creature_flee":
-		// La créature fuit (change de comportement)
 		if tile.EntityID != "" {
 			if e, ok := world.Entities.Get(entity.ID(tile.EntityID)); ok {
 				if c, ok := e.(*creature.Creature); ok {
@@ -959,11 +936,14 @@ func (s *TriggerSystem) executeAction(action string, tile *board.Tile, world *Wo
 		}
 
 	case "reveal_adjacent":
-		// Révèle les tuiles adjacentes
 		neighbors := grid.GetNeighbors(tile.Position)
 		for _, n := range neighbors {
-			if n.State == board.Hidden {
-				n.State = board.Revealed
+			if n.EntityID != "" {
+				if e, ok := world.Entities.Get(entity.ID(n.EntityID)); ok {
+					if e.GetState() == entity.Hidden {
+						e.SetState(entity.Revealed)
+					}
+				}
 			}
 		}
 	}
@@ -1006,7 +986,6 @@ func (e *Engine) Update() {
 		return
 	}
 
-	// Trie par priorité (bubble sort simple)
 	for i := 0; i < len(e.systems)-1; i++ {
 		for j := i + 1; j < len(e.systems); j++ {
 			if e.systems[i].Priority() > e.systems[j].Priority() {
@@ -1015,26 +994,20 @@ func (e *Engine) Update() {
 		}
 	}
 
-	// Réinitialise les révélations du tour précédent
 	if e.movementSystem != nil {
+		e.movementSystem.TrackReveal(board.Position{}) // Utilisation factice pour correspondre à l'ancienne signature si nécessaire
 		e.movementSystem.ClearReveals()
 	}
 
-	// Exécute chaque système
 	for _, sys := range e.systems {
 		sys.Update(e.world)
 	}
 
-	// Traite les événements
 	e.world.EventBus.ProcessQueue()
-
 	e.world.Turn++
-
 	e.world.EventBus.Publish(event.NewTurnEndedEvent(e.world.Turn))
 }
 
-// TrackTileReveal notifie le système de mouvement qu'une tuile a été révélée
-// Utilisé pour les triggers OnEcho et Proximity
 func (e *Engine) TrackTileReveal(pos board.Position) {
 	if e.movementSystem != nil {
 		e.movementSystem.TrackReveal(pos)

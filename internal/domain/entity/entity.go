@@ -14,6 +14,30 @@ func NewID() ID {
 	return ID(uuid.New().String())
 }
 
+// TileState représente l'état visuel d'une tuile (entité)
+type TileState int
+
+const (
+	Hidden TileState = iota
+	Revealed
+	Matched
+	Blocked
+)
+
+func (s TileState) String() string {
+	switch s {
+	case Hidden:
+		return "hidden"
+	case Revealed:
+		return "revealed"
+	case Matched:
+		return "matched"
+	case Blocked:
+		return "blocked"
+	}
+	return "unknown"
+}
+
 // Type d'entité
 type Type int
 
@@ -22,6 +46,7 @@ const (
 	TypeCreature
 	TypeStructure
 	TypeArtefact
+	TypeTrap // Changé de TypeEmptyTile à TypeTrap
 )
 
 func (t Type) String() string {
@@ -34,6 +59,8 @@ func (t Type) String() string {
 		return "structure"
 	case TypeArtefact:
 		return "artefact"
+	case TypeTrap:
+		return "trap"
 	}
 	return "unknown"
 }
@@ -69,6 +96,8 @@ type Entity interface {
 	SetGridID(string)
 	IsActive() bool
 	Deactivate()
+	GetState() TileState
+	SetState(TileState)
 }
 
 // BaseEntity implémentation commune
@@ -78,6 +107,7 @@ type BaseEntity struct {
 	Pos      Position
 	GridID   string // ID du grid sur lequel se trouve l'entité
 	Active   bool
+	State    TileState // L'état appartient maintenant à l'entité
 	Tags     []string
 	Metadata map[string]interface{}
 }
@@ -88,6 +118,7 @@ func NewBaseEntity(etype Type) BaseEntity {
 		EType:    etype,
 		GridID:   "", // Doit être défini après création
 		Active:   true,
+		State:    Hidden, // Par défaut caché
 		Tags:     make([]string, 0),
 		Metadata: make(map[string]interface{}),
 	}
@@ -109,6 +140,8 @@ func (e *BaseEntity) GetPosition() Position  { return e.Pos }
 func (e *BaseEntity) SetPosition(p Position) { e.Pos = p }
 func (e *BaseEntity) IsActive() bool         { return e.Active }
 func (e *BaseEntity) Deactivate()            { e.Active = false }
+func (e *BaseEntity) GetState() TileState    { return e.State }
+func (e *BaseEntity) SetState(s TileState)   { e.State = s }
 
 func (e *BaseEntity) AddTag(tag string) {
 	for _, t := range e.Tags {

@@ -181,6 +181,53 @@ func generateTileMatched(size int, theme TileTheme) *ebiten.Image {
 	return img
 }
 
+// generateTileBlocked crée une tuile bloquée (Hidden + Croix rouge)
+func generateTileBlocked(size int, theme TileTheme) *ebiten.Image {
+	img := generateTileHidden(size, theme)
+
+	padding := float32(size) * 0.25
+	crossColor := color.RGBA{200, 0, 0, 255}
+	vector.StrokeLine(img, padding, padding, float32(size)-padding, float32(size)-padding, 4, crossColor, true)
+	vector.StrokeLine(img, float32(size)-padding, padding, padding, float32(size)-padding, 4, crossColor, true)
+
+	return img
+}
+
+// generateTileTrap crée une tuile piège (style Hidden mais plus claire)
+func generateTileTrap(size int, theme TileTheme) *ebiten.Image {
+	// Version plus claire du thème Hidden
+	lighterTheme := theme
+	lighterTheme.HiddenBg = lighten(theme.HiddenBg, 35)
+	lighterTheme.HiddenPattern = lighten(theme.HiddenPattern, 35)
+	lighterTheme.HiddenBorder = lighten(theme.HiddenBorder, 35)
+
+	return generateTileHidden(size, lighterTheme)
+}
+
+// lighten augmente la luminosité d'une couleur
+func lighten(c color.Color, amount int) color.Color {
+	r, g, b, a := c.RGBA()
+	// RGBA() retourne des valeurs sur 16 bits (0-65535)
+	// On convertit en 8 bits (0-255)
+	r8 := int(r >> 8)
+	g8 := int(g >> 8)
+	b8 := int(b >> 8)
+	a8 := int(a >> 8)
+
+	r8 = min(255, r8+amount)
+	g8 = min(255, g8+amount)
+	b8 = min(255, b8+amount)
+
+	return color.RGBA{uint8(r8), uint8(g8), uint8(b8), uint8(a8)}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // generateFlipEffectOverlay crée une image pour l'effet de flip visuel
 func generateFlipEffectOverlay(size int, direction string) *ebiten.Image {
 	img := ebiten.NewImage(size, size)

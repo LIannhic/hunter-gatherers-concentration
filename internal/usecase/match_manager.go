@@ -48,10 +48,15 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 	}
 
 	entityID := entity.ID(tile.EntityID)
+	ent, ok := mm.entities.Get(entityID)
+	if !ok {
+		return nil, errors.New("entité non trouvée")
+	}
 
 	if mm.firstSelected == "" {
 		mm.firstSelected = entityID
-		mm.grid.Reveal(pos)
+		// L'état appartient maintenant à l'entité
+		ent.SetState(entity.Revealed)
 		fmt.Printf("[Sélection] Première tuile choisie : %s (ID: %s)\n", pos.String(), entityID)
 
 		mm.eventBus.PublishImmediate(event.NewTileRevealedEvent(entity.Position(pos), string(entityID), board.FlipCenter))
@@ -66,6 +71,8 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 	firstID := mm.firstSelected
 	secondID := entityID
 	fmt.Printf("[Analyse] Tentative d'association entre %s et %s\n", firstID, secondID)
+
+	ent1, _ := mm.entities.Get(firstID)
 
 	compA, okA := mm.components.Get(string(firstID), "matchable")
 	compB, okB := mm.components.Get(string(secondID), "matchable")
@@ -84,10 +91,9 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 	if result.Success {
 		fmt.Printf("[SUCCÈS] Type: %s | Message: %s\n", result.Type.String(), result.Message)
 
-		mm.grid.Match(pos)
-		if ent, ok := mm.entities.Get(firstID); ok {
-			mm.grid.Match(board.Position(ent.GetPosition()))
-		}
+		// L'état appartient aux entités
+		ent.SetState(entity.Matched)
+		ent1.SetState(entity.Matched)
 
 		for _, eff := range result.Effects {
 			fmt.Printf("  -> Effet détecté : %s sur la cible %s\n", eff.Type, eff.Target)
@@ -97,10 +103,9 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 	} else {
 		fmt.Printf("[ÉCHEC] Les tuiles ne correspondent pas. Raison : %v\n", err)
 
-		mm.grid.Hide(pos)
-		if ent, ok := mm.entities.Get(firstID); ok {
-			mm.grid.Hide(board.Position(ent.GetPosition()))
-		}
+		// On recache les entités
+		ent.SetState(entity.Hidden)
+		ent1.SetState(entity.Hidden)
 	}
 
 	mm.firstSelected = ""
@@ -113,9 +118,13 @@ func (mm *MatchManager) ResetSelection(currentPos board.Position) {
 	fmt.Println("[Action] Réinitialisation de la sélection forcée.")
 	if mm.firstSelected != "" {
 		if ent, ok := mm.entities.Get(mm.firstSelected); ok {
-			mm.grid.Hide(board.Position(ent.GetPosition()))
+			ent.SetState(entity.Hidden)
 		}
 	}
-	mm.grid.Hide(currentPos)
+	if tile, err := mm.grid.Get(currentPos); err == nil && tile.EntityID != "" {
+		if ent, ok := mm.entities.Get(entity.ID(tile.EntityID)); ok {
+			ent.SetState(entity.Hidden)
+		}
+	}
 	mm.firstSelected = ""
 }

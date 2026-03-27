@@ -37,12 +37,18 @@ func (c *RevealTileCommand) CanExecute() bool {
 		return false
 	}
 
-	// 2. Check tile exists and is hidden
+	// 2. Check tile exists and has an entity that is hidden
 	tile, err := grid.Get(c.Position)
 	if err != nil {
 		return false
 	}
-	if tile.State != board.Hidden {
+
+	if tile.EntityID == "" {
+		return false
+	}
+
+	ent, ok := c.World.Entities.Get(entity.ID(tile.EntityID))
+	if !ok || ent.GetState() != entity.Hidden {
 		return false
 	}
 
@@ -65,13 +71,8 @@ func (c *RevealTileCommand) Execute() error {
 		return errors.New("cannot reveal this tile")
 	}
 
-	// Récupère le grid et révèle la tuile directement
-	grid, ok := c.World.GetGrid(c.GridID)
-	if !ok {
-		return errors.New("grid not found")
-	}
-
-	tile, err := grid.Reveal(c.Position)
+	// Révèle l'entité via le world
+	ent, err := c.World.RevealTile(c.GridID, c.Position)
 	if err != nil {
 		return err
 	}
@@ -82,7 +83,7 @@ func (c *RevealTileCommand) Execute() error {
 	// Publie l'événement avec la direction de flip
 	c.World.EventBus.Publish(event.NewTileRevealedEvent(
 		entity.Position{X: c.Position.X, Y: c.Position.Y},
-		tile.EntityID,
+		string(ent.GetID()),
 		c.FlipDirection,
 	))
 
@@ -118,11 +119,19 @@ func (c *MatchTilesCommand) CanExecute() bool {
 		return false
 	}
 
-	if tile1.State != board.Revealed || tile2.State != board.Revealed {
+	if tile1.EntityID == "" || tile2.EntityID == "" {
 		return false
 	}
 
-	if tile1.EntityID == "" || tile2.EntityID == "" {
+	e1, ok1 := c.World.Entities.Get(entity.ID(tile1.EntityID))
+	e2, ok2 := c.World.Entities.Get(entity.ID(tile2.EntityID))
+
+	if !ok1 || !ok2 {
+		return false
+	}
+
+	// Vérifie que les entités sont bien révélées
+	if e1.GetState() != entity.Revealed || e2.GetState() != entity.Revealed {
 		return false
 	}
 
@@ -139,12 +148,8 @@ func (c *MatchTilesCommand) Execute() error {
 	tile1, _ := grid.Get(c.Pos1)
 	tile2, _ := grid.Get(c.Pos2)
 
-	entity1, ok1 := c.World.Entities.Get(entity.ID(tile1.EntityID))
-	entity2, ok2 := c.World.Entities.Get(entity.ID(tile2.EntityID))
-
-	if !ok1 || !ok2 {
-		return errors.New("entities not found")
-	}
+	entity1, _ := c.World.Entities.Get(entity.ID(tile1.EntityID))
+	entity2, _ := c.World.Entities.Get(entity.ID(tile2.EntityID))
 
 	// Détermine les types des entités
 	res1, isRes1 := entity1.(*domain.Resource)
@@ -152,48 +157,33 @@ func (c *MatchTilesCommand) Execute() error {
 	cre1, isCre1 := entity1.(*domain.Creature)
 	cre2, isCre2 := entity2.(*domain.Creature)
 
-	fmt.Printf("[MATCH DEBUG] Entité 1: Resource=%v, Creature=%v\n", isRes1, isCre1)
-	fmt.Printf("[MATCH DEBUG] Entité 2: Resource=%v, Creature=%v\n", isRes2, isCre2)
-
 	// Vérifie si c'est une association valide
 	isMatch := false
 	matchType := ""
 
 	// Cas 1 : Deux ressources - utilise le système d'association
 	if isRes1 && isRes2 {
-		fmt.Printf("[MATCH DEBUG] Comparaison de ressources: %s vs %s\n", res1.ResourceType, res2.ResourceType)
 		result, err := c.AssocEng.TryAssociate(res1, res2)
 		if err == nil && result.Success {
 			isMatch = true
 			matchType = result.Type.String()
-			fmt.Printf("[MATCH DEBUG] Association ressource réussie: %s\n", matchType)
-		} else {
-			fmt.Printf("[MATCH DEBUG] Association ressource échouée: %v\n", err)
 		}
 	}
 
 	// Cas 2 : Deux créatures - compare les espèces
 	if !isMatch && isCre1 && isCre2 {
-		fmt.Printf("[MATCH DEBUG] Comparaison de créatures: %s vs %s\n", cre1.Species, cre2.Species)
 		if cre1.Species == cre2.Species {
 			isMatch = true
 			matchType = "creature_capture"
-			fmt.Printf("[MATCH DEBUG] Créatures identiques !\n")
-		} else {
-			fmt.Printf("[MATCH DEBUG] Créatures différentes !\n")
 		}
 	}
 
-	// Cas 3 : Mix ressource/créature - pas de match
-	if !isMatch && ((isRes1 && isCre2) || (isCre1 && isRes2)) {
-		fmt.Printf("[MATCH DEBUG] Mix ressource/créature - pas de match possible\n")
-	}
-
 	if isMatch {
-		// Succès : les tuiles restent visibles et sont marquées comme appairées
+		// Succès : les entités sont marquées comme appairées
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
 
+		// Note: on les retire du monde (elles seront nettoyées de la grille par RemoveEntity)
 		c.World.RemoveEntity(entity1.GetID())
 		c.World.RemoveEntity(entity2.GetID())
 
@@ -212,33 +202,17 @@ func (c *MatchTilesCommand) Execute() error {
 			c.OnSuccess()
 		}
 
-		fmt.Println("[MATCH] Association réussie !")
 		return nil
 	} else {
-		// Échec : cacher les tuiles et passer le tour
-		fmt.Println("[MATCH] Échec de l'association - les cartes sont différentes")
+		// Échec : recacher les entités
+		entity1.SetState(entity.Hidden)
+		entity2.SetState(entity.Hidden)
 
-		// Publie un événement d'échec
-		c.World.EventBus.Publish(domain.Event{
-			Type:     domain.EventType("match_failed"),
-			SourceID: "player",
-			Payload: map[string]interface{}{
-				"position1": c.Pos1,
-				"position2": c.Pos2,
-				"grid_id":   c.GridID,
-			},
-		})
-
-		// Cache les tuiles
-		grid.Hide(c.Pos1)
-		grid.Hide(c.Pos2)
-
-		// Appelle le callback d'échec (pour passer le tour)
 		if c.OnFailure != nil {
 			c.OnFailure()
 		}
 
-		return errors.New("association échouée : les cartes ne correspondent pas")
+		return errors.New("association échouée")
 	}
 }
 
@@ -299,8 +273,7 @@ func (c *ClearBoardCommand) CanExecute() bool {
 }
 
 func (c *ClearBoardCommand) Execute() error {
-	grid, ok := c.World.GetGrid(c.GridID)
-	if !ok {
+	if _, ok := c.World.GetGrid(c.GridID); !ok {
 		return errors.New("grid not found")
 	}
 
@@ -309,12 +282,6 @@ func (c *ClearBoardCommand) Execute() error {
 		if e.GetGridID() == c.GridID {
 			c.World.RemoveEntity(e.GetID())
 		}
-	}
-
-	// Réinitialise les tuiles
-	for _, tile := range grid.Tiles {
-		tile.State = board.Hidden
-		tile.EntityID = ""
 	}
 
 	return nil
@@ -332,16 +299,6 @@ func (c *ClearAllBoardsCommand) Execute() error {
 	// Supprime toutes les entités
 	for _, e := range c.World.Entities.GetAllActive() {
 		c.World.RemoveEntity(e.GetID())
-	}
-
-	// Réinitialise les tuiles de tous les grids
-	for _, gridID := range c.World.GridOrder {
-		if grid, ok := c.World.GetGrid(gridID); ok {
-			for _, tile := range grid.Tiles {
-				tile.State = board.Hidden
-				tile.EntityID = ""
-			}
-		}
 	}
 
 	return nil

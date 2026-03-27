@@ -6,11 +6,11 @@ import (
 
 func TestNewGrid(t *testing.T) {
 	g := NewGrid("test", 4, 4)
-	
+
 	if g.Width != 4 || g.Height != 4 {
 		t.Errorf("Expected 4x4 grid, got %dx%d", g.Width, g.Height)
 	}
-	
+
 	expectedTiles := 16
 	if len(g.Tiles) != expectedTiles {
 		t.Errorf("Expected %d tiles, got %d", expectedTiles, len(g.Tiles))
@@ -19,7 +19,7 @@ func TestNewGrid(t *testing.T) {
 
 func TestGridGet(t *testing.T) {
 	g := NewGrid("test", 4, 4)
-	
+
 	tile, err := g.Get(Position{X: 0, Y: 0})
 	if err != nil {
 		t.Errorf("Failed to get valid tile: %v", err)
@@ -27,7 +27,7 @@ func TestGridGet(t *testing.T) {
 	if tile.Position.X != 0 || tile.Position.Y != 0 {
 		t.Error("Got wrong tile position")
 	}
-	
+
 	// Test out of bounds
 	_, err = g.Get(Position{X: 10, Y: 10})
 	if err == nil {
@@ -37,10 +37,10 @@ func TestGridGet(t *testing.T) {
 
 func TestGridIsValid(t *testing.T) {
 	g := NewGrid("test", 4, 4)
-	
+
 	tests := []struct {
-		pos    Position
-		valid  bool
+		pos   Position
+		valid bool
 	}{
 		{Position{0, 0}, true},
 		{Position{3, 3}, true},
@@ -49,7 +49,7 @@ func TestGridIsValid(t *testing.T) {
 		{Position{-1, 0}, false},
 		{Position{0, -1}, false},
 	}
-	
+
 	for _, tc := range tests {
 		result := g.IsValid(tc.pos)
 		if result != tc.valid {
@@ -58,84 +58,21 @@ func TestGridIsValid(t *testing.T) {
 	}
 }
 
-func TestGridReveal(t *testing.T) {
-	g := NewGrid("test", 4, 4)
-	
-	tile, err := g.Reveal(Position{X: 0, Y: 0})
-	if err != nil {
-		t.Errorf("Failed to reveal tile: %v", err)
-	}
-	
-	if tile.State != Revealed {
-		t.Errorf("Expected state Revealed, got %v", tile.State)
-	}
-	
-	// Can't reveal again
-	_, err = g.Reveal(Position{X: 0, Y: 0})
-	if err == nil {
-		t.Error("Should not be able to reveal already revealed tile")
-	}
-}
-
-func TestGridHide(t *testing.T) {
-	g := NewGrid("test", 4, 4)
-	
-	// Reveal then hide
-	g.Reveal(Position{X: 0, Y: 0})
-	err := g.Hide(Position{X: 0, Y: 0})
-	if err != nil {
-		t.Errorf("Failed to hide tile: %v", err)
-	}
-	
-	tile, _ := g.Get(Position{X: 0, Y: 0})
-	if tile.State != Hidden {
-		t.Error("Tile should be hidden")
-	}
-}
-
-func TestGridMatch(t *testing.T) {
-	g := NewGrid("test", 4, 4)
-	
-	// Can't match hidden tile
-	err := g.Match(Position{X: 0, Y: 0})
-	if err == nil {
-		t.Error("Should not be able to match hidden tile")
-	}
-	
-	// Reveal then match
-	g.Reveal(Position{X: 0, Y: 0})
-	err = g.Match(Position{X: 0, Y: 0})
-	if err != nil {
-		t.Errorf("Failed to match tile: %v", err)
-	}
-	
-	tile, _ := g.Get(Position{X: 0, Y: 0})
-	if tile.State != Matched {
-		t.Error("Tile should be matched")
-	}
-	
-	// Can't hide matched tile
-	err = g.Hide(Position{X: 0, Y: 0})
-	if err == nil {
-		t.Error("Should not be able to hide matched tile")
-	}
-}
-
 func TestGetNeighbors(t *testing.T) {
 	g := NewGrid("test", 4, 4)
-	
+
 	// Corner should have 2 neighbors
 	neighbors := g.GetNeighbors(Position{X: 0, Y: 0})
 	if len(neighbors) != 2 {
 		t.Errorf("Corner should have 2 neighbors, got %d", len(neighbors))
 	}
-	
+
 	// Edge should have 3 neighbors
 	neighbors = g.GetNeighbors(Position{X: 1, Y: 0})
 	if len(neighbors) != 3 {
 		t.Errorf("Edge should have 3 neighbors, got %d", len(neighbors))
 	}
-	
+
 	// Center should have 4 neighbors
 	neighbors = g.GetNeighbors(Position{X: 1, Y: 1})
 	if len(neighbors) != 4 {
@@ -153,7 +90,7 @@ func TestDirectionVector(t *testing.T) {
 		{East, Position{1, 0}},
 		{West, Position{-1, 0}},
 	}
-	
+
 	for _, tc := range tests {
 		result := tc.dir.Vector()
 		if result != tc.expected {
@@ -165,7 +102,7 @@ func TestDirectionVector(t *testing.T) {
 func TestPositionDistance(t *testing.T) {
 	p1 := Position{X: 0, Y: 0}
 	p2 := Position{X: 3, Y: 4}
-	
+
 	dist := p1.Distance(p2)
 	if dist != 7 { // 3 + 4 = 7 (Manhattan distance)
 		t.Errorf("Distance should be 7, got %d", dist)
@@ -174,37 +111,21 @@ func TestPositionDistance(t *testing.T) {
 
 func TestGridPlaceEntity(t *testing.T) {
 	g := NewGrid("test", 4, 4)
-	
+
 	err := g.PlaceEntity(Position{X: 0, Y: 0}, "entity1")
 	if err != nil {
 		t.Errorf("Failed to place entity: %v", err)
 	}
-	
+
 	tile, _ := g.Get(Position{X: 0, Y: 0})
 	if tile.EntityID != "entity1" {
 		t.Errorf("Expected entity1, got %s", tile.EntityID)
 	}
-	
+
 	// Can't place on occupied tile
 	err = g.PlaceEntity(Position{X: 0, Y: 0}, "entity2")
 	if err == nil {
 		t.Error("Should not be able to place on occupied tile")
-	}
-}
-
-func TestCountByState(t *testing.T) {
-	g := NewGrid("test", 2, 2)
-	
-	// All tiles hidden initially
-	if g.CountByState(Hidden) != 4 {
-		t.Error("Expected 4 hidden tiles")
-	}
-	
-	g.Reveal(Position{X: 0, Y: 0})
-	g.Reveal(Position{X: 1, Y: 1})
-	
-	if g.CountByState(Revealed) != 2 {
-		t.Error("Expected 2 revealed tiles")
 	}
 }
 
@@ -224,7 +145,7 @@ func TestFlipDirectionString(t *testing.T) {
 		{FlipCenter, "center"},
 		{FlipDirection(99), "unknown"},
 	}
-	
+
 	for _, tc := range tests {
 		result := tc.dir.String()
 		if result != tc.expected {
@@ -249,7 +170,7 @@ func TestFlipDirectionToRotationAngles(t *testing.T) {
 		{FlipTopLeft, -45, -45},
 		{FlipCenter, 0, 0},
 	}
-	
+
 	for _, tc := range tests {
 		rotX, rotY := tc.dir.ToRotationAngles()
 		if rotX != tc.expectedRotX || rotY != tc.expectedRotY {
@@ -261,7 +182,7 @@ func TestFlipDirectionToRotationAngles(t *testing.T) {
 
 func TestCalculateFlipDirection(t *testing.T) {
 	tileSize := 100
-	
+
 	tests := []struct {
 		localX   int
 		localY   int
@@ -271,24 +192,24 @@ func TestCalculateFlipDirection(t *testing.T) {
 		{50, 50, FlipCenter},
 		{40, 40, FlipCenter},
 		{60, 60, FlipCenter},
-		
+
 		// Top (Y < 35)
 		{50, 10, FlipTop},
 		{20, 10, FlipTopLeft},
 		{80, 10, FlipTopRight},
-		
+
 		// Bottom (Y > 65)
 		{50, 90, FlipBottom},
 		{20, 90, FlipBottomLeft},
 		{80, 90, FlipBottomRight},
-		
+
 		// Left (X < 35, Y in center)
 		{10, 50, FlipLeft},
-		
+
 		// Right (X > 65, Y in center)
 		{90, 50, FlipRight},
 	}
-	
+
 	for _, tc := range tests {
 		result := CalculateFlipDirection(tileSize, tc.localX, tc.localY)
 		if result != tc.expected {
