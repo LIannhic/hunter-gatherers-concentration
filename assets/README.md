@@ -8,13 +8,13 @@ finaux (sprites, pixel art, illustrations) avant la release.
 
 ## Statut des Assets
 
-| Type | Statut | Priorité de remplacement |
-|------|--------|-------------------------|
-| Tuiles | 🟡 Temporaire | Moyenne |
-| Ressources | 🟡 Temporaire | Haute |
-| Créatures | 🟡 Temporaire | Haute |
-| Effets de flip | 🟡 Temporaire | Basse |
-| Audio | 🟡 Temporaire | Moyenne |
+| Type | Statut | Priorité | Notes |
+|------|--------|----------|-------|
+| Tuiles avec thèmes | 🟡 Temporaire | Moyenne | Thèmes : Default, Forest, Cave |
+| Ressources | 🟡 Temporaire | Haute | Génération procédurale |
+| Créatures | 🟡 Temporaire | Haute | Génération procédurale |
+| Effets de flip | 🟡 Temporaire | Basse | États : Hidden, Revealed, Matched |
+| Audio | 🟡 Temporaire | Moyenne | Non implémenté |
 
 ## Avantages des Assets Temporaires
 
@@ -103,8 +103,9 @@ Chaque tuile comprend :
 // Obtenir le manager d'assets
 manager := assets.NewManager()
 
-// Tuile avec thème spécifique
-tileImg := manager.GetTileImage("hidden", "forest")
+// Tuile avec thème spécifique (état de l'entité sur la tuile)
+// Les états "hidden", "revealed", "matched" correspondent à TileState de l'entité
+tileImg := manager.GetTileImage(entity.Hidden, "forest")
 
 // Icône de ressource
 berryImg := manager.GetResourceIcon("dreamberry")
@@ -112,6 +113,8 @@ berryImg := manager.GetResourceIcon("dreamberry")
 // Icône de créature
 flyImg := manager.GetCreatureIcon("lumifly")
 ```
+
+Note : Les états visuels (Hidden, Revealed, Matched) à partir de la fusion #18 sont gérés par les entités, pas par les tuiles. Le manager d'assets utilise les états des entités pour afficher le bon visuel.
 
 ## 🎨 Personnalisation
 
