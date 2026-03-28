@@ -2,6 +2,9 @@ package domain
 
 import (
 	"testing"
+
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/association"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
 // Test that re-exported types work correctly
@@ -13,7 +16,7 @@ func TestReexportedTypes(t *testing.T) {
 	}
 
 	// Test grid creation
-	grid := NewGrid("test", 4, 4, "test")
+	grid := NewGrid("test", 4, 4, BiomeForest)
 	if grid.Width != 4 {
 		t.Error("Grid width should be 4")
 	}
@@ -32,21 +35,21 @@ func TestIntegrationGameFlow(t *testing.T) {
 	world := NewWorld()
 
 	// Create a grid
-	world.CreateGrid("main", 6, 6)
+	world.CreateGrid("main", 6, 6, BiomeForest)
 
 	// Spawn some resources
-	_, err := world.SpawnResource("main", "dreamberry", Position{X: 0, Y: 0})
+	_, err := world.SpawnResource("main", "dreamberry", entity.Position{X: 0, Y: 0})
 	if err != nil {
 		t.Errorf("Failed to spawn resource: %v", err)
 	}
 
-	_, err = world.SpawnResource("main", "moonstone", Position{X: 1, Y: 1})
+	_, err = world.SpawnResource("main", "moonstone", entity.Position{X: 1, Y: 1})
 	if err != nil {
 		t.Errorf("Failed to spawn resource: %v", err)
 	}
 
 	// Spawn a creature
-	_, err = world.SpawnCreature("main", "lumifly", Position{X: 2, Y: 2})
+	_, err = world.SpawnCreature("main", "lumifly", entity.Position{X: 2, Y: 2})
 	if err != nil {
 		t.Errorf("Failed to spawn creature: %v", err)
 	}
@@ -74,13 +77,13 @@ func TestAssociationIntegration(t *testing.T) {
 	engine := NewAssocEngine()
 
 	// Create two resources with same match ID
-	r1 := NewResource("dreamberry", Position{X: 0, Y: 0})
+	r1 := NewResource("dreamberry", entity.Position{X: 0, Y: 0})
 	r1.SetMatchable(Matchable{
 		MatchID:    "dreamberry_pair",
 		MatchTypes: []string{"identical"},
 	})
 
-	r2 := NewResource("dreamberry", Position{X: 1, Y: 1})
+	r2 := NewResource("dreamberry", entity.Position{X: 1, Y: 1})
 	r2.SetMatchable(Matchable{
 		MatchID:    "dreamberry_pair",
 		MatchTypes: []string{"identical"},
@@ -96,7 +99,7 @@ func TestAssociationIntegration(t *testing.T) {
 		t.Error("Association should succeed")
 	}
 
-	if result.Type != AssocType(0) { // Identical = 0
+	if result.Type != association.Identical {
 		t.Error("Should be identical association")
 	}
 }

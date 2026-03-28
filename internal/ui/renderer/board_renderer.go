@@ -217,7 +217,7 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 				r.renderEmptySquareAt(screen, sx, sy)
 				continue
 			}
-			r.renderTileAt(screen, sx, sy, plot, world)
+			r.renderTileAt(screen, sx, sy, gridID, plot, world)
 		}
 	}
 }
@@ -231,7 +231,7 @@ func (r *BoardRenderer) renderEmptySquareAt(screen *ebiten.Image, x, y int) {
 }
 
 // renderTileAt dessine une tuile à une position écran spécifique
-func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, plot *board.Plot, world *domain.World) {
+func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, gridID string, plot *board.Plot, world *domain.World) {
 	if len(plot.EntitiesID) == 0 {
 		r.renderEmptySquareAt(screen, x, y)
 		return
@@ -249,30 +249,51 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, plot *board
 	var animation *FlipAnimation
 
 	for _, anim := range r.flipAnimations {
-		if anim.Position == tile.Position {
+		if anim.Position == plot.Position && (gridID == "" || anim.GridID == gridID) {
 			animation = anim
 			break
 		}
 	}
 
-	// Fond de la tuile selon son état visuel
+	// Fond de la tuile selon l'état d'animation ou l'état réel
 	var tileImg *ebiten.Image
-	switch visualState {
-	case entity.Hidden:
-		tileImg = r.assets.GetImage("tile_hidden")
-	case entity.Revealed:
-		// Si c'est une tuile piège (trap), utilise l'asset spécifique
-		if ent.GetType() == entity.TypeTrap {
-			tileImg = r.assets.GetImage("tile_trap")
+	isFlipping := animation != nil && animation.IsActive()
+	showRevealedSide := false
+	if isFlipping {
+		if animation.TileState == entity.Hidden {
+			showRevealedSide = animation.Progress < 0.5
 		} else {
-			tileImg = r.assets.GetImage("tile_revealed")
+			showRevealedSide = animation.Progress > 0.5
 		}
-	case entity.Matched:
-		tileImg = r.assets.GetImage("tile_matched")
-	case entity.Blocked:
-		tileImg = r.assets.GetImage("tile_blocked")
-	default:
-		tileImg = r.assets.GetImage("square_empty")
+	}
+
+	if isFlipping {
+		if showRevealedSide {
+			if ent.GetType() == entity.TypeTrap {
+				tileImg = r.assets.GetImage("tile_trap")
+			} else {
+				tileImg = r.assets.GetImage("tile_revealed")
+			}
+		} else {
+			tileImg = r.assets.GetImage("tile_hidden")
+		}
+	} else {
+		switch visualState {
+		case entity.Hidden:
+			tileImg = r.assets.GetImage("tile_hidden")
+		case entity.Revealed:
+			if ent.GetType() == entity.TypeTrap {
+				tileImg = r.assets.GetImage("tile_trap")
+			} else {
+				tileImg = r.assets.GetImage("tile_revealed")
+			}
+		case entity.Matched:
+			tileImg = r.assets.GetImage("tile_matched")
+		case entity.Blocked:
+			tileImg = r.assets.GetImage("tile_blocked")
+		default:
+			tileImg = r.assets.GetImage("square_empty")
+		}
 	}
 
 	// Configure les options de dessin avec rotation et flip
@@ -310,8 +331,12 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, plot *board
 
 	// Si la tuile est révélée ou appairée, montre le contenu (si ce n'est pas un piège)
 	shouldShowContent := visualState == entity.Revealed || visualState == entity.Matched
-	if animation != nil && animation.IsActive() && animation.Progress > 0.5 {
-		shouldShowContent = true
+	if animation != nil && animation.IsActive() {
+		if animation.TileState == entity.Hidden {
+			shouldShowContent = animation.Progress < 0.5
+		} else {
+			shouldShowContent = animation.Progress > 0.5
+		}
 	}
 
 	if shouldShowContent && ent.GetType() != entity.TypeTrap {
@@ -323,7 +348,7 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, plot *board
 func (r *BoardRenderer) renderPlot(screen *ebiten.Image, pos board.Position, tile *board.Plot, world *domain.World) {
 	x := r.gridOffsetX + pos.X*r.tileSize
 	y := r.gridOffsetY + pos.Y*r.tileSize
-	r.renderTileAt(screen, x, y, tile, world)
+	r.renderTileAt(screen, x, y, "", tile, world)
 }
 
 // renderEntityAt dessine une entité à une position écran spécifique

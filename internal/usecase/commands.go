@@ -43,11 +43,12 @@ func (c *RevealTileCommand) CanExecute() bool {
 		return false
 	}
 
-	if tile.EntityID == "" {
+	if len(tile.EntitiesID) == 0 {
 		return false
 	}
 
-	ent, ok := c.World.Entities.Get(entity.ID(tile.EntityID))
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	ent, ok := c.World.Entities.Get(entity.ID(topID))
 	if !ok || ent.GetState() != entity.Hidden {
 		return false
 	}
@@ -84,6 +85,7 @@ func (c *RevealTileCommand) Execute() error {
 	c.World.EventBus.Publish(event.NewEntityRevealedEvent(
 		entity.Position{X: c.Position.X, Y: c.Position.Y},
 		string(ent.GetID()),
+		c.GridID,
 		c.FlipDirection,
 	))
 
@@ -119,12 +121,14 @@ func (c *MatchTilesCommand) CanExecute() bool {
 		return false
 	}
 
-	if tile1.EntityID == "" || tile2.EntityID == "" {
+	if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
 		return false
 	}
 
-	e1, ok1 := c.World.Entities.Get(entity.ID(tile1.EntityID))
-	e2, ok2 := c.World.Entities.Get(entity.ID(tile2.EntityID))
+	topID1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+	topID2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+	e1, ok1 := c.World.Entities.Get(entity.ID(topID1))
+	e2, ok2 := c.World.Entities.Get(entity.ID(topID2))
 
 	if !ok1 || !ok2 {
 		return false
@@ -148,8 +152,11 @@ func (c *MatchTilesCommand) Execute() error {
 	tile1, _ := grid.Get(c.Pos1)
 	tile2, _ := grid.Get(c.Pos2)
 
-	entity1, _ := c.World.Entities.Get(entity.ID(tile1.EntityID))
-	entity2, _ := c.World.Entities.Get(entity.ID(tile2.EntityID))
+	topID1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+	topID2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+
+	entity1, _ := c.World.Entities.Get(entity.ID(topID1))
+	entity2, _ := c.World.Entities.Get(entity.ID(topID2))
 
 	// Détermine les types des entités
 	res1, isRes1 := entity1.(*domain.Resource)

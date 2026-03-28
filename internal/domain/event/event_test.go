@@ -220,7 +220,7 @@ func TestNewAssociationMadeEvent(t *testing.T) {
 func TestNewTileRevealedEvent(t *testing.T) {
 	pos := entity.Position{X: 2, Y: 3}
 	flipDir := board.FlipCenter
-	e := NewEntityRevealedEvent(pos, "entity1", flipDir)
+	e := NewEntityRevealedEvent(pos, "entity1", "test_grid", flipDir)
 
 	if e.Type != TileRevealed {
 		t.Error("Wrong event type")

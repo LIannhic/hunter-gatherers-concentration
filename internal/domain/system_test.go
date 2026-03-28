@@ -33,7 +33,7 @@ func TestNewWorld(t *testing.T) {
 
 func TestWorldCreateGrid(t *testing.T) {
 	w := NewWorld()
-	grid := w.CreateGrid("test", 6, 6)
+	grid := w.CreateGrid("test", 6, 6, board.BiomeForest)
 
 	if grid == nil {
 		t.Fatal("Grid should not be nil")
@@ -59,7 +59,7 @@ func TestWorldCreateGrid(t *testing.T) {
 
 func TestWorldSpawnResource(t *testing.T) {
 	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
+	w.CreateGrid("test", 4, 4, board.BiomeForest)
 
 	r, err := w.SpawnResource("test", "dreamberry", entity.Position{X: 1, Y: 1})
 	if err != nil {
@@ -86,14 +86,14 @@ func TestWorldSpawnResource(t *testing.T) {
 	// Check tile has entity
 	grid, _ := w.GetGrid("test")
 	tile, _ := grid.Get(board.Position{X: 1, Y: 1})
-	if tile.EntityID != string(r.GetID()) {
-		t.Error("Tile should have entity ID")
+	if len(tile.EntitiesID) != 1 || tile.EntitiesID[0] != string(r.GetID()) {
+		t.Error("Tile should contain the spawned resource entity")
 	}
 }
 
 func TestWorldSpawnCreature(t *testing.T) {
 	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
+	w.CreateGrid("test", 4, 4, board.BiomeForest)
 
 	c, err := w.SpawnCreature("test", "lumifly", entity.Position{X: 2, Y: 2})
 	if err != nil {
@@ -115,14 +115,14 @@ func TestWorldSpawnCreature(t *testing.T) {
 	// Check tile has creature
 	grid, _ := w.GetGrid("test")
 	tile, _ := grid.Get(board.Position{X: 2, Y: 2})
-	if tile.EntityID != string(c.GetID()) {
-		t.Error("Tile should have creature ID")
+	if len(tile.EntitiesID) != 1 || tile.EntitiesID[0] != string(c.GetID()) {
+		t.Error("Tile should contain the spawned creature entity")
 	}
 }
 
 func TestWorldRemoveEntity(t *testing.T) {
 	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
+	w.CreateGrid("test", 4, 4, board.BiomeForest)
 
 	r, _ := w.SpawnResource("test", "dreamberry", entity.Position{X: 1, Y: 1})
 	id := r.GetID()
@@ -137,7 +137,7 @@ func TestWorldRemoveEntity(t *testing.T) {
 	// Tile should be empty
 	grid, _ := w.GetGrid("test")
 	tile, _ := grid.Get(board.Position{X: 1, Y: 1})
-	if tile.EntityID != "" {
+	if len(tile.EntitiesID) != 0 {
 		t.Error("Tile should be empty")
 	}
 }
@@ -191,7 +191,7 @@ func TestEngineStartStop(t *testing.T) {
 
 func TestEngineUpdate(t *testing.T) {
 	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
+	w.CreateGrid("test", 4, 4, board.BiomeForest)
 	engine := NewEngine(w)
 
 	// Add a resource with lifecycle
@@ -221,7 +221,7 @@ func TestEngineUpdateNotRunning(t *testing.T) {
 
 func TestWorldAdapter(t *testing.T) {
 	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
+	w.CreateGrid("test", 4, 4, board.BiomeForest)
 	grid, _ := w.GetGrid("test")
 	adapter := &worldAdapter{world: w, grid: grid}
 
@@ -242,14 +242,14 @@ func TestWorldAdapter(t *testing.T) {
 
 	// Test GetTileState
 	state := adapter.GetTileState(entity.Position{X: 0, Y: 0})
-	if state != "hidden" {
-		t.Errorf("Expected 'hidden', got '%s'", state)
+	if state != "empty" {
+		t.Errorf("Expected 'empty', got '%s'", state)
 	}
 }
 
 func TestLifecycleSystem(t *testing.T) {
 	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
+	w.CreateGrid("test", 4, 4, board.BiomeForest)
 	sys := &LifecycleSystem{}
 
 	// Spawn resource with lifecycle
@@ -270,7 +270,7 @@ func TestLifecycleSystem(t *testing.T) {
 
 func TestCreatureAISystem(t *testing.T) {
 	w := NewWorld()
-	w.CreateGrid("test", 6, 6)
+	w.CreateGrid("test", 6, 6, board.BiomeForest)
 	sys := &CreatureAISystem{}
 
 	// Spawn creature
@@ -291,7 +291,7 @@ func TestCreatureAISystem(t *testing.T) {
 
 func TestPropagationSystem(t *testing.T) {
 	w := NewWorld()
-	w.CreateGrid("test", 4, 4)
+	w.CreateGrid("test", 4, 4, board.BiomeForest)
 	sys := &PropagationSystem{}
 
 	// Spawn resource that can propagate
@@ -314,8 +314,8 @@ func TestMultipleGrids(t *testing.T) {
 	w := NewWorld()
 
 	// Create multiple grids
-	w.CreateGrid("grid1", 4, 4)
-	w.CreateGrid("grid2", 6, 6)
+	w.CreateGrid("grid1", 4, 4, board.BiomeForest)
+	w.CreateGrid("grid2", 6, 6, board.BiomeForest)
 
 	if len(w.Grids) != 2 {
 		t.Errorf("Expected 2 grids, got %d", len(w.Grids))

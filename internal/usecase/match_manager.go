@@ -42,12 +42,13 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 		return nil, err
 	}
 
-	if tile.EntityID == "" {
+	if len(tile.EntitiesID) == 0 {
 		fmt.Println("[Action] Clic sur une tuile vide, rien ne se passe.")
 		return nil, errors.New("tuile vide")
 	}
 
-	entityID := entity.ID(tile.EntityID)
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	entityID := entity.ID(topID)
 	ent, ok := mm.entities.Get(entityID)
 	if !ok {
 		return nil, errors.New("entité non trouvée")
@@ -59,7 +60,7 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 		ent.SetState(entity.Revealed)
 		fmt.Printf("[Sélection] Première tuile choisie : %s (ID: %s)\n", pos.String(), entityID)
 
-		mm.eventBus.PublishImmediate(event.NewTileRevealedEvent(entity.Position(pos), string(entityID), board.FlipCenter))
+		mm.eventBus.PublishImmediate(event.NewEntityRevealedEvent(entity.Position(pos), string(entityID), mm.grid.ID, board.FlipCenter))
 		return nil, nil
 	}
 
@@ -121,8 +122,9 @@ func (mm *MatchManager) ResetSelection(currentPos board.Position) {
 			ent.SetState(entity.Hidden)
 		}
 	}
-	if tile, err := mm.grid.Get(currentPos); err == nil && tile.EntityID != "" {
-		if ent, ok := mm.entities.Get(entity.ID(tile.EntityID)); ok {
+	if tile, err := mm.grid.Get(currentPos); err == nil && len(tile.EntitiesID) > 0 {
+		topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+		if ent, ok := mm.entities.Get(entity.ID(topID)); ok {
 			ent.SetState(entity.Hidden)
 		}
 	}

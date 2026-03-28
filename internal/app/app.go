@@ -100,15 +100,16 @@ func (app *Application) setupGrids() {
 		id     string
 		width  int
 		height int
+		biome  domain.BiomeType
 	}{
-		{"forest", 6, 6},
-		{"cave", 6, 6},
-		{"meadow", 6, 6},
-		{"swamp", 6, 6},
+		{"forest", 6, 6, domain.BiomeForest},
+		{"cave", 6, 6, domain.BiomeCave},
+		{"meadow", 6, 6, domain.BiomeForest},
+		{"swamp", 6, 6, domain.BiomeCave},
 	}
 
 	for _, cfg := range gridConfigs {
-		app.World.CreateGrid(cfg.id, cfg.width, cfg.height)
+		app.World.CreateGrid(cfg.id, cfg.width, cfg.height, cfg.biome)
 		fmt.Printf("Created grid: %s (%dx%d)\n", cfg.id, cfg.width, cfg.height)
 	}
 
@@ -125,24 +126,21 @@ func (app *Application) fillGridWithTraps(gridID string) {
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
 			pos := board.Position{X: x, Y: y}
-			plot, _ := grid.Get(pos)
-
-			// On remplit si la pile est VIDE
-			if len(plot.EntitiesID) == 0 {
-				// 1. Crée le pointeur directement avec &
-				trap := &entity.BaseEntity{}                  // Ou NewBaseEntity si elle retourne un pointeur
-				*trap = entity.NewBaseEntity(entity.TypeTrap) // Si NewBaseEntity retourne une valeur
-
-				// 2. Ou plus simplement, si NewBaseEntity retourne une valeur :
-				t := entity.NewBaseEntity(entity.TypeTrap)
-				trap := &t // On prend l'adresse
-
-				trap.SetGridID(gridID)
-				trap.SetPosition(entity.Position{X: x, Y: y})
-
-				// 3. Passe le pointeur à Register
-				app.World.Entities.Register(trap) // 'trap' est maintenant un *BaseEntity
+			plot, err := grid.Get(pos)
+			if err != nil {
+				continue
 			}
+
+			if len(plot.EntitiesID) > 0 || plot.Modifier.Obstructed {
+				continue
+			}
+
+			trap := entity.NewBaseEntity(entity.TypeTrap)
+			trap.SetGridID(gridID)
+			trap.SetPosition(entity.Position{X: x, Y: y})
+
+			app.World.Entities.Register(&trap)
+			plot.PushEntity(string(trap.GetID()))
 		}
 	}
 }
@@ -180,13 +178,13 @@ func (app *Application) setupCallbacks() {
 
 		for i, pos := range positions {
 			if i < len(resourceTypes) {
-				app.World.SpawnResource(gridID, resourceTypes[i], domain.Position{X: pos.x, Y: pos.y})
+				app.World.SpawnResource(gridID, resourceTypes[i], entity.Position{X: pos.x, Y: pos.y})
 			}
 		}
 
 		// Spawn une créature
-		app.World.SpawnCreature(gridID, "lumifly", domain.Position{X: 3, Y: 3})
-		app.World.SpawnCreature(gridID, "lumifly", domain.Position{X: 3, Y: 4})
+		app.World.SpawnCreature(gridID, "lumifly", entity.Position{X: 3, Y: 3})
+		app.World.SpawnCreature(gridID, "lumifly", entity.Position{X: 3, Y: 4})
 	}
 
 	// Callback spawn toutes les créatures de test (Shift+S)
@@ -319,8 +317,12 @@ func (app *Application) setupDebugCallbacks() {
 			return
 		}
 		fmt.Printf("[CHEAT] Révélation de toutes les tuiles sur %s\n", gridID)
-		for _, tile := range grid.Tiles {
-			if e, ok := app.World.Entities.Get(entity.ID(tile.EntityID)); ok {
+		for _, tile := range grid.Plots {
+			if len(tile.EntitiesID) == 0 {
+				continue
+			}
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
 				if e.GetState() == entity.Hidden {
 					e.SetState(entity.Revealed)
 				}
@@ -338,8 +340,12 @@ func (app *Application) setupDebugCallbacks() {
 			return
 		}
 		fmt.Printf("[CHEAT] Masquage de toutes les tuiles sur %s\n", gridID)
-		for _, tile := range grid.Tiles {
-			if e, ok := app.World.Entities.Get(entity.ID(tile.EntityID)); ok {
+		for _, tile := range grid.Plots {
+			if len(tile.EntitiesID) == 0 {
+				continue
+			}
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
 				e.SetState(entity.Hidden)
 			}
 		}
@@ -362,15 +368,16 @@ func (app *Application) setupEventSubscriptions() {
 	app.World.EventBus.SubscribeFunc(event.TileRevealed, func(e event.Event) {
 		position, ok1 := e.Payload["position"].(entity.Position)
 		entityID, ok3 := e.Payload["entity_id"].(string)
-		gridID := e.SourceID
+		gridID, ok4 := e.Payload["grid_id"].(string)
+		flipDir, ok5 := e.Payload["flip_direction"].(board.FlipDirection)
 
-		if ok1 && ok3 {
+		if ok1 && ok3 && ok4 && ok5 {
 			if ent, ok := app.World.Entities.Get(entity.ID(entityID)); ok {
 				// Démarre l'animation de flip
 				app.Renderer.StartFlipAnimation(
 					gridID,
 					board.Position{X: position.X, Y: position.Y},
-					board.FlipCenter,
+					flipDir,
 					entityID,
 					ent.GetState(),
 				)
@@ -407,17 +414,17 @@ func (app *Application) spawnInitialEntities() {
 
 	for gridID, spawns := range gridSpawns {
 		for _, spawn := range spawns {
-			app.World.SpawnResource(gridID, spawn.typ, spawn.pos)
+			app.World.SpawnResource(gridID, spawn.typ, entity.Position{X: spawn.pos.X, Y: spawn.pos.Y})
 		}
 	}
 
 	// Spawn les créatures
-	app.World.SpawnCreature("forest", "lumifly", domain.Position{X: 3, Y: 3})
-	app.World.SpawnCreature("cave", "shadowstalker", domain.Position{X: 4, Y: 2})
-	app.World.SpawnCreature("meadow", "burrower", domain.Position{X: 2, Y: 4})
-	app.World.SpawnCreature("swamp", "specter", domain.Position{X: 3, Y: 3})
-	app.World.SpawnCreature("forest", "echo_hound", domain.Position{X: 5, Y: 5})
-	app.World.SpawnCreature("meadow", "fleeing_sprite", domain.Position{X: 1, Y: 1})
+	app.World.SpawnCreature("forest", "lumifly", entity.Position{X: 3, Y: 3})
+	app.World.SpawnCreature("cave", "shadowstalker", entity.Position{X: 4, Y: 2})
+	app.World.SpawnCreature("meadow", "burrower", entity.Position{X: 2, Y: 4})
+	app.World.SpawnCreature("swamp", "specter", entity.Position{X: 3, Y: 3})
+	app.World.SpawnCreature("forest", "echo_hound", entity.Position{X: 5, Y: 5})
+	app.World.SpawnCreature("meadow", "fleeing_sprite", entity.Position{X: 1, Y: 1})
 
 	// 2. COMPLÉTION : Remplit les cases encore vides avec des pièges (Traps)
 	fmt.Println("[INIT] Filling remaining tiles with traps...")
@@ -555,20 +562,20 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 }
 
 // findEmptyPosition trouve une position vide aléatoire sur le grid
-func (app *Application) findEmptyPosition(gridID string) *domain.Position {
+func (app *Application) findEmptyPosition(gridID string) *entity.Position {
 	grid, ok := app.World.GetGrid(gridID)
 	if !ok {
 		return nil
 	}
 
 	// Collecte toutes les positions vides
-	var emptyPositions []domain.Position
+	var emptyPositions []entity.Position
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
-			pos := domain.Position{X: x, Y: y}
-			tile, _ := grid.Get(board.Position{X: x, Y: y})
-			if tile.EntityID == "" && !tile.Modifier.Obstructed {
-				emptyPositions = append(emptyPositions, pos)
+			pos := board.Position{X: x, Y: y}
+			tile, _ := grid.Get(pos)
+			if len(tile.EntitiesID) == 0 && !tile.Modifier.Obstructed {
+				emptyPositions = append(emptyPositions, entity.Position{X: x, Y: y})
 			}
 		}
 	}
@@ -577,7 +584,6 @@ func (app *Application) findEmptyPosition(gridID string) *domain.Position {
 		return nil
 	}
 
-	// Choisit une position aléatoire parmi les vides
 	pos := emptyPositions[rand.Intn(len(emptyPositions))]
 	return &pos
 }

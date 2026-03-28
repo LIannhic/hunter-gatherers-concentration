@@ -163,13 +163,14 @@ func NewAssociationMadeEvent(playerID string, assocType string, success bool) Ev
 	}
 }
 
-func NewEntityRevealedEvent(tilePos entity.Position, entityID string, flipDir board.FlipDirection) Event {
+func NewEntityRevealedEvent(tilePos entity.Position, entityID string, gridID string, flipDir board.FlipDirection) Event {
 	return Event{
 		Type:     TileRevealed,
 		SourceID: entityID,
 		Payload: map[string]interface{}{
 			"position":       tilePos,
 			"entity_id":      entityID,
+			"grid_id":        gridID,
 			"flip_direction": flipDir,
 		},
 		Timestamp: time.Now(),
