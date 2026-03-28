@@ -94,9 +94,10 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
 
 ```go
 // Exemple: Créer un monde et spawner des entités
-world := domain.NewWorld(6, 6)
-world.SpawnResource("dreamberry", domain.Position{X: 1, Y: 1})
-world.SpawnCreature("lumifly", domain.Position{X: 3, Y: 3})
+world := domain.NewWorld()
+world.CreateGrid("forest", 6, 6, domain.BiomeForest)
+world.SpawnResource("forest", "dreamberry", entity.Position{X: 1, Y: 1})
+world.SpawnCreature("forest", "lumifly", entity.Position{X: 3, Y: 3})
 ```
 
 ### 2. Usecase (Actions)
@@ -105,8 +106,10 @@ Encapsule les actions joueur en Commandes. Les commandes manipulent les entités
 
 ```go
 revealCmd := &usecase.RevealTileCommand{
-    World:    world,
-    Position: board.Position{X: x, Y: y},
+    World:         world,
+    GridID:        "forest",
+    Position:      board.Position{X: x, Y: y},
+    FlipDirection: domain.FlipTop,
 }
 if revealCmd.CanExecute() {
     entity, err := revealCmd.Execute() // Retourne l'entité révélée
@@ -165,6 +168,12 @@ Event Bus pour la communication :
 ```go
 eventBus.Subscribe(CreatureMoved, handler)
 eventBus.Publish(NewCreatureMovedEvent(...))
+```
+
+Pour les révélations de tuiles, le bus transporte aussi les informations nécessaires au rendu : `grid_id`, `position`, `entity_id` et `flip_direction`.
+
+```go
+eventBus.Publish(event.NewEntityRevealedEvent(position, entityID, gridID, flipDirection))
 ```
 
 ## Lancer le jeu

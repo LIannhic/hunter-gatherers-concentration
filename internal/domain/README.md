@@ -294,9 +294,9 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 ```
 1. Joueur révèle une tuile
    ↓
-2. World.RevealTile() → Événement TileRevealed
+2. World.RevealTile() → Événement TileRevealed (avec `grid_id` et `flip_direction`)
    ↓
-3. Systèmes écoutent et réagissent
+3. L'UI / le renderer démarre l'animation de flip et met à jour l'affichage
    ↓
 4. Engine.Update() progresse d'un tour
    ↓
