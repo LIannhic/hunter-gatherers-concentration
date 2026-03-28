@@ -13,7 +13,7 @@ func TestReexportedTypes(t *testing.T) {
 	}
 
 	// Test grid creation
-	grid := NewGrid("test", 4, 4)
+	grid := NewGrid("test", 4, 4, "test")
 	if grid.Width != 4 {
 		t.Error("Grid width should be 4")
 	}

@@ -101,15 +101,14 @@ func (h *Handler) handleMouse() error {
 	}
 
 	grid, _ := h.world.GetGrid(gridID)
-	tile, err := grid.Get(pos)
-	if err != nil {
+	plot, err := grid.Get(pos)
+	if err != nil || len(plot.EntitiesID) == 0 {
 		return nil
 	}
 
-	// Récupère l'entité présente sur la tuile
-	ent, hasEntity := h.world.Entities.Get(entity.ID(tile.EntityID))
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	ent, hasEntity := h.world.Entities.Get(entity.ID(topID))
 	if !hasEntity {
-		fmt.Printf("[INPUT] Case vide (sol nu) en %v\n", pos)
 		return nil
 	}
 
@@ -202,8 +201,17 @@ func (h *Handler) processMatchAttempt() {
 
 	tile1, _ := grid.Get(pos1)
 	tile2, _ := grid.Get(pos2)
-	e1, _ := h.world.Entities.Get(entity.ID(tile1.EntityID))
-	e2, _ := h.world.Entities.Get(entity.ID(tile2.EntityID))
+
+	if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
+		h.revealedTiles = nil
+		h.isProcessing = false
+		return
+	}
+
+	id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+	id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+	e1, _ := h.world.Entities.Get(entity.ID(id1))
+	e2, _ := h.world.Entities.Get(entity.ID(id2))
 
 	if e1 == nil || e2 == nil {
 		h.revealedTiles = nil
@@ -409,52 +417,47 @@ func (h *Handler) tryMatchSelected() {
 		return
 	}
 
-	for _, tile := range grid.Tiles {
-		if tile.Position.X == h.selectedTile.X && tile.Position.Y == h.selectedTile.Y {
+	for _, plot := range grid.Plots {
+		if plot.Position.X == h.selectedTile.X && plot.Position.Y == h.selectedTile.Y {
 			continue
 		}
 
-		if tile.EntityID == "" {
+		if len(plot.EntitiesID) == 0 {
 			continue
 		}
 
-		ent, ok := h.world.Entities.Get(entity.ID(tile.EntityID))
+		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+		ent, ok := h.world.Entities.Get(entity.ID(topID))
 		if !ok {
 			continue
 		}
 
 		if ent.GetState() == entity.Revealed {
-			fmt.Printf("[MATCH] Comparaison entre %v et %v...\n", *h.selectedTile, tile.Position)
+			fmt.Printf("[MATCH] Comparaison entre %v et %v...\n", *h.selectedTile, plot.Position)
 
 			cmd := &usecase.MatchTilesCommand{
 				World:    h.world,
 				AssocEng: h.assocEngine,
 				GridID:   h.selectedGridID,
 				Pos1:     *h.selectedTile,
-				Pos2:     tile.Position,
+				Pos2:     plot.Position,
 				OnSuccess: func() {
-					fmt.Println("[MATCH] Paire trouvée ! Le joueur peut continuer.")
+					fmt.Println("[MATCH] Paire trouvée !")
 					h.ClearSelection()
 				},
 				OnFailure: func() {
-					fmt.Println("[MATCH] Échec ! Les cartes sont retournées et le tour passe.")
+					fmt.Println("[MATCH] Échec ! Fin du tour.")
 					h.ClearSelection()
-					// Déclenche la fin de tour
 					if h.OnTurnEnd != nil {
-						fmt.Println("[TURN] Fin du tour après échec d'association")
 						h.OnTurnEnd()
 					}
 				},
 			}
 
-			if err := cmd.Execute(); err == nil {
-				// Succès géré par OnSuccess
-				return
-			} else {
-				// Échec géré par OnFailure
-				fmt.Printf("[MATCH] %v\n", err)
-				return
+			if err := cmd.Execute(); err != nil {
+				fmt.Printf("[MATCH] Erreur lors de l'exécution: %v\n", err)
 			}
+			return
 		}
 	}
 }
@@ -486,34 +489,49 @@ func (h *Handler) calculateFlipDirection(gridID string, pos board.Position) doma
 
 func (h *Handler) renderHighlights(screen *ebiten.Image) {
 	if hovered, gridID, ok := h.getHoveredTile(); ok {
-		if grid, ok := h.world.GetGrid(gridID); ok {
-			if tile, err := grid.Get(hovered); err == nil {
-				if tile.EntityID == "" {
-					return
-				}
-				ent, ok := h.world.Entities.Get(entity.ID(tile.EntityID))
-				if !ok {
-					return
-				}
-
-				var highlightColor color.Color
-				switch ent.GetState() {
-				case entity.Hidden:
-					highlightColor = color.RGBA{255, 255, 0, 100} // Jaune : Survolé
-				case entity.Revealed:
-					highlightColor = color.RGBA{0, 255, 255, 100} // Cyan : Déjà ouvert
-				case entity.Blocked:
-					return // Pas de highlight pour les tuiles retirées
-				default:
-					highlightColor = color.RGBA{255, 255, 255, 50}
-				}
-				h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
-			}
+		grid, ok := h.world.GetGrid(gridID)
+		if !ok {
+			return
 		}
+
+		tile, err := grid.Get(hovered)
+		if err != nil {
+			return
+		}
+
+		if len(tile.EntitiesID) == 0 {
+			return
+		}
+
+		topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+		ent, ok := h.world.Entities.Get(entity.ID(topID))
+		if !ok {
+			return
+		}
+
+		var highlightColor color.Color
+		switch ent.GetState() {
+		case entity.Hidden:
+			highlightColor = color.RGBA{255, 255, 0, 100}
+		case entity.Revealed:
+			highlightColor = color.RGBA{0, 255, 255, 100}
+		case entity.Blocked:
+			return
+		default:
+			highlightColor = color.RGBA{255, 255, 255, 50}
+		}
+
+		h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
 	}
 
 	if h.selectedTile != nil {
-		h.renderer.RenderSelectionHighlight(screen, *h.selectedTile, h.selectedGridID, color.RGBA{255, 0, 0, 150}, h.world)
+		h.renderer.RenderSelectionHighlight(
+			screen,
+			*h.selectedTile,
+			h.selectedGridID,
+			color.RGBA{255, 0, 0, 150},
+			h.world,
+		)
 	}
 }
 

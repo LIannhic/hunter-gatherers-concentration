@@ -51,7 +51,7 @@ type Application struct {
 func NewApplication() (*Application, error) {
 	// Initialise le générateur aléatoire
 	rand.Seed(time.Now().UnixNano())
-	
+
 	app := &Application{}
 
 	// 1. Charge la configuration
@@ -116,7 +116,6 @@ func (app *Application) setupGrids() {
 	app.World.SetCurrentGrid("forest")
 }
 
-// fillGridWithTraps remplit les cases encore vides d'un grid avec des entités TypeTrap
 func (app *Application) fillGridWithTraps(gridID string) {
 	grid, ok := app.World.GetGrid(gridID)
 	if !ok {
@@ -125,23 +124,24 @@ func (app *Application) fillGridWithTraps(gridID string) {
 
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
-			tile, _ := grid.Get(board.Position{X: x, Y: y})
+			pos := board.Position{X: x, Y: y}
+			plot, _ := grid.Get(pos)
 
-			// On ne remplit QUE si la case est vide (pas de ressource ni créature)
-			if tile.EntityID == "" {
-				pos := entity.Position{X: x, Y: y}
+			// On remplit si la pile est VIDE
+			if len(plot.EntitiesID) == 0 {
+				// 1. Crée le pointeur directement avec &
+				trap := &entity.BaseEntity{}                  // Ou NewBaseEntity si elle retourne un pointeur
+				*trap = entity.NewBaseEntity(entity.TypeTrap) // Si NewBaseEntity retourne une valeur
 
-				// Crée l'entité piège (trap)
-				trap := entity.NewBaseEntity(entity.TypeTrap)
+				// 2. Ou plus simplement, si NewBaseEntity retourne une valeur :
+				t := entity.NewBaseEntity(entity.TypeTrap)
+				trap := &t // On prend l'adresse
+
 				trap.SetGridID(gridID)
-				trap.SetPosition(pos)
+				trap.SetPosition(entity.Position{X: x, Y: y})
 
-				// On crée une copie persistante pour l'interface
-				trapCopy := trap
-				app.World.Entities.Register(&trapCopy)
-
-				// Met à jour la tuile de la grille pour qu'elle pointe vers ce piège
-				tile.EntityID = string(trap.GetID())
+				// 3. Passe le pointeur à Register
+				app.World.Entities.Register(trap) // 'trap' est maintenant un *BaseEntity
 			}
 		}
 	}

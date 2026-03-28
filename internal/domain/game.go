@@ -14,21 +14,24 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/resource"
 )
 
-// Ré-export des types principaux pour faciliter l'accès
+// Ré-export des types principaux
 type (
-	// Entity
-	ID       = entity.ID
-	Entity   = entity.Entity
-	Position = entity.Position
-	Type     = entity.Type
-	TileState = entity.TileState // Changé de board vers entity
+	// Entity & Position
+	ID        = entity.ID
+	Entity    = entity.Entity
+	Position  = board.Position // On privilégie board.Position comme référence
+	Type      = entity.Type
+	TileState = entity.TileState
 
-	// Board
-	Grid           = board.Grid
-	Tile           = board.Tile
-	Direction      = board.Direction
-	FlipDirection  = board.FlipDirection
-	TileModifier   = board.TileModifier
+	// Board & Environnement
+	Grid          = board.Grid
+	Plot          = board.Plot
+	Direction     = board.Direction
+	FlipDirection = board.FlipDirection
+	PlotModifier  = board.PlotModifier
+	BiomeType     = board.BiomeType // Ajouté
+	Climate       = board.Climate   // Ajouté
+	Season        = board.Season    // Ajouté
 
 	// Component
 	Component   = component.Component
@@ -43,54 +46,49 @@ type (
 	Trigger     = component.Trigger
 	Concealment = component.Concealment
 
-	// Creature
+	// Creature & Resource
 	Creature = creature.Creature
 	Action   = creature.Action
 	AI       = creature.AI
-
-	// Resource
 	Resource = resource.Resource
 
-	// Event
+	// Event & State
 	Bus       = event.Bus
 	Event     = event.Event
 	EventType = event.Type
 	GameState = event.GameState
 
-	// Player
-	Player       = player.Player
-	PlayerStats  = player.Stats
-	PlayerSkills = player.Skills
-
-	// Meta
-	Family          = meta.Family
-	MetaProgression = meta.MetaProgression
-	Hub             = meta.Hub
-
-	// Association
+	// Player, Meta & Assoc
+	Player      = player.Player
+	PlayerStats = player.Stats
+	Family      = meta.Family
 	AssocEngine = association.Engine
-	AssocResult = association.Result
-	AssocType   = association.Type
 )
 
-// Constants
+// Constantes
 const (
+	// Types d'entités
 	TypeResource  = entity.TypeResource
 	TypeCreature  = entity.TypeCreature
 	TypeStructure = entity.TypeStructure
-	TypeArtefact  = entity.TypeArtefact
-	TypeTrap      = entity.TypeTrap // Changé de TypeEmptyTile à TypeTrap
+	TypeTrap      = entity.TypeTrap
 
-	// Les constantes viennent maintenant de entity
+	// États des tuiles
 	Hidden   = entity.Hidden
 	Revealed = entity.Revealed
 	Matched  = entity.Matched
 	Blocked  = entity.Blocked
 
+	// Orientations
 	North = board.North
 	South = board.South
 	East  = board.East
 	West  = board.West
+
+	// Biomes (Ajoutés pour faciliter CreateGrid)
+	BiomeForest = board.BiomeForest
+	BiomeCave   = board.BiomeCave
+	BiomeDesert = board.BiomeDesert
 
 	// Flip directions
 	FlipTop         = board.FlipTop
@@ -119,19 +117,19 @@ var (
 
 	NewStore = component.NewStore
 
-	NewCreature = creature.New
+	NewCreature        = creature.New
 	NewCreatureFactory = creature.NewFactory
 
-	NewResource = resource.New
+	NewResource        = resource.New
 	NewResourceFactory = resource.NewFactory
 
 	NewBus = event.NewBus
 
 	NewPlayer = player.New
 
-	NewFamily = meta.NewFamily
+	NewFamily          = meta.NewFamily
 	NewMetaProgression = meta.NewMetaProgression
-	NewHub = meta.NewHub
+	NewHub             = meta.NewHub
 
 	NewAssocEngine = association.NewEngine
 

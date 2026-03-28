@@ -39,7 +39,7 @@ type FlipAnimation struct {
 	FlipDirection board.FlipDirection
 	Progress      float64 // 0.0 à 1.0
 	Speed         float64
-	EntityID      string  // L'entité à afficher à la fin
+	EntityID      string           // L'entité à afficher à la fin
 	TileState     entity.TileState // État final de la tuile (changé board vers entity)
 }
 
@@ -206,19 +206,18 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 	text.Draw(screen, gridTitle, basicfont.Face7x13, offsetX, offsetY-5, titleColor)
 
 	// Dessine les tuiles du grid (ordre déterministe pour éviter le clignotement)
+	// Dans renderGrid
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
 			pos := board.Position{X: x, Y: y}
 			sx := offsetX + x*r.tileSize
 			sy := offsetY + y*r.tileSize
-
-			tile, ok := grid.Tiles[pos]
+			plot, ok := grid.Plots[pos]
 			if !ok {
-				// Dessine le sol nu pour les positions sans tuile
 				r.renderEmptySquareAt(screen, sx, sy)
 				continue
 			}
-			r.renderTileAt(screen, sx, sy, tile, world)
+			r.renderTileAt(screen, sx, sy, plot, world)
 		}
 	}
 }
@@ -232,21 +231,23 @@ func (r *BoardRenderer) renderEmptySquareAt(screen *ebiten.Image, x, y int) {
 }
 
 // renderTileAt dessine une tuile à une position écran spécifique
-func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board.Tile, world *domain.World) {
-	// 1. Récupère l'entité présente sur cette case
-	ent, ok := world.Entities.Get(entity.ID(tile.EntityID))
+func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, plot *board.Plot, world *domain.World) {
+	if len(plot.EntitiesID) == 0 {
+		r.renderEmptySquareAt(screen, x, y)
+		return
+	}
 
-	// 2. Si pas d'entité, c'est le sol nu (square_empty)
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	ent, ok := world.Entities.Get(entity.ID(topID))
 	if !ok {
 		r.renderEmptySquareAt(screen, x, y)
 		return
 	}
 
-	// 3. Détermine l'état visuel de l'entité (l'état appartient à l'entité)
 	visualState := ent.GetState()
 
 	var animation *FlipAnimation
-	// Cherche une animation active pour cette tuile
+
 	for _, anim := range r.flipAnimations {
 		if anim.Position == tile.Position {
 			animation = anim
@@ -318,8 +319,8 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y int, tile *board
 	}
 }
 
-// renderTile dessine une tuile individuelle (utilise l'ancien offset - pour compatibilité)
-func (r *BoardRenderer) renderTile(screen *ebiten.Image, pos board.Position, tile *board.Tile, world *domain.World) {
+// renderPlot dessine une case individuelle (utilise l'ancien offset - pour compatibilité)
+func (r *BoardRenderer) renderPlot(screen *ebiten.Image, pos board.Position, tile *board.Plot, world *domain.World) {
 	x := r.gridOffsetX + pos.X*r.tileSize
 	y := r.gridOffsetY + pos.Y*r.tileSize
 	r.renderTileAt(screen, x, y, tile, world)
@@ -421,7 +422,7 @@ func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.Wor
 
 	maxToShow := 12
 	shown := 0
-	
+
 	for _, gridID := range world.GridOrder {
 		for _, c := range world.Entities.GetByType(entity.TypeCreature) {
 			if shown >= maxToShow {

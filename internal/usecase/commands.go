@@ -81,7 +81,7 @@ func (c *RevealTileCommand) Execute() error {
 	c.World.AddFlippedTile(c.Position)
 
 	// Publie l'événement avec la direction de flip
-	c.World.EventBus.Publish(event.NewTileRevealedEvent(
+	c.World.EventBus.Publish(event.NewEntityRevealedEvent(
 		entity.Position{X: c.Position.X, Y: c.Position.Y},
 		string(ent.GetID()),
 		c.FlipDirection,

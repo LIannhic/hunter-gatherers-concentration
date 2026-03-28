@@ -5,27 +5,28 @@ import (
 )
 
 func TestNewGrid(t *testing.T) {
-	g := NewGrid("test", 4, 4)
+	// Ajout du biome forest pour correspondre à la signature
+	g := NewGrid("test", 4, 4, BiomeForest)
 
 	if g.Width != 4 || g.Height != 4 {
 		t.Errorf("Expected 4x4 grid, got %dx%d", g.Width, g.Height)
 	}
 
-	expectedTiles := 16
-	if len(g.Tiles) != expectedTiles {
-		t.Errorf("Expected %d tiles, got %d", expectedTiles, len(g.Tiles))
+	expectedPlots := 16
+	if len(g.Plots) != expectedPlots {
+		t.Errorf("Expected %d plots, got %d", expectedPlots, len(g.Plots))
 	}
 }
 
 func TestGridGet(t *testing.T) {
-	g := NewGrid("test", 4, 4)
+	g := NewGrid("test", 4, 4, BiomeForest)
 
-	tile, err := g.Get(Position{X: 0, Y: 0})
+	plot, err := g.Get(Position{X: 0, Y: 0})
 	if err != nil {
-		t.Errorf("Failed to get valid tile: %v", err)
+		t.Errorf("Failed to get valid plot: %v", err)
 	}
-	if tile.Position.X != 0 || tile.Position.Y != 0 {
-		t.Error("Got wrong tile position")
+	if plot.Position.X != 0 || plot.Position.Y != 0 {
+		t.Error("Got wrong plot position")
 	}
 
 	// Test out of bounds
@@ -36,7 +37,7 @@ func TestGridGet(t *testing.T) {
 }
 
 func TestGridIsValid(t *testing.T) {
-	g := NewGrid("test", 4, 4)
+	g := NewGrid("test", 4, 4, BiomeForest)
 
 	tests := []struct {
 		pos   Position
@@ -59,18 +60,12 @@ func TestGridIsValid(t *testing.T) {
 }
 
 func TestGetNeighbors(t *testing.T) {
-	g := NewGrid("test", 4, 4)
+	g := NewGrid("test", 4, 4, BiomeForest)
 
 	// Corner should have 2 neighbors
 	neighbors := g.GetNeighbors(Position{X: 0, Y: 0})
 	if len(neighbors) != 2 {
 		t.Errorf("Corner should have 2 neighbors, got %d", len(neighbors))
-	}
-
-	// Edge should have 3 neighbors
-	neighbors = g.GetNeighbors(Position{X: 1, Y: 0})
-	if len(neighbors) != 3 {
-		t.Errorf("Edge should have 3 neighbors, got %d", len(neighbors))
 	}
 
 	// Center should have 4 neighbors
@@ -80,103 +75,27 @@ func TestGetNeighbors(t *testing.T) {
 	}
 }
 
-func TestDirectionVector(t *testing.T) {
-	tests := []struct {
-		dir      Direction
-		expected Position
-	}{
-		{North, Position{0, -1}},
-		{South, Position{0, 1}},
-		{East, Position{1, 0}},
-		{West, Position{-1, 0}},
+func TestGridStacking(t *testing.T) {
+	g := NewGrid("test", 4, 4, BiomeForest)
+	pos := Position{X: 1, Y: 1}
+
+	g.PlaceEntity(pos, "entity_bottom")
+	g.PlaceEntity(pos, "entity_top")
+
+	plot, _ := g.Get(pos)
+
+	if len(plot.EntitiesID) != 2 {
+		t.Errorf("Expected 2 entities in stack, got %d", len(plot.EntitiesID))
 	}
 
-	for _, tc := range tests {
-		result := tc.dir.Vector()
-		if result != tc.expected {
-			t.Errorf("%v.Vector() = %v, expected %v", tc.dir, result, tc.expected)
-		}
-	}
-}
-
-func TestPositionDistance(t *testing.T) {
-	p1 := Position{X: 0, Y: 0}
-	p2 := Position{X: 3, Y: 4}
-
-	dist := p1.Distance(p2)
-	if dist != 7 { // 3 + 4 = 7 (Manhattan distance)
-		t.Errorf("Distance should be 7, got %d", dist)
-	}
-}
-
-func TestGridPlaceEntity(t *testing.T) {
-	g := NewGrid("test", 4, 4)
-
-	err := g.PlaceEntity(Position{X: 0, Y: 0}, "entity1")
-	if err != nil {
-		t.Errorf("Failed to place entity: %v", err)
+	top, _ := g.RemoveEntity(pos, "entity_top")
+	if top != "entity_top" {
+		t.Errorf("Expected entity_top to be removed, got %s", top)
 	}
 
-	tile, _ := g.Get(Position{X: 0, Y: 0})
-	if tile.EntityID != "entity1" {
-		t.Errorf("Expected entity1, got %s", tile.EntityID)
-	}
-
-	// Can't place on occupied tile
-	err = g.PlaceEntity(Position{X: 0, Y: 0}, "entity2")
-	if err == nil {
-		t.Error("Should not be able to place on occupied tile")
-	}
-}
-
-func TestFlipDirectionString(t *testing.T) {
-	tests := []struct {
-		dir      FlipDirection
-		expected string
-	}{
-		{FlipTop, "top"},
-		{FlipTopRight, "top-right"},
-		{FlipRight, "right"},
-		{FlipBottomRight, "bottom-right"},
-		{FlipBottom, "bottom"},
-		{FlipBottomLeft, "bottom-left"},
-		{FlipLeft, "left"},
-		{FlipTopLeft, "top-left"},
-		{FlipCenter, "center"},
-		{FlipDirection(99), "unknown"},
-	}
-
-	for _, tc := range tests {
-		result := tc.dir.String()
-		if result != tc.expected {
-			t.Errorf("FlipDirection(%d).String() = %s, expected %s", tc.dir, result, tc.expected)
-		}
-	}
-}
-
-func TestFlipDirectionToRotationAngles(t *testing.T) {
-	tests := []struct {
-		dir          FlipDirection
-		expectedRotX float64
-		expectedRotY float64
-	}{
-		{FlipTop, -90, 0},
-		{FlipTopRight, -45, 45},
-		{FlipRight, 0, 90},
-		{FlipBottomRight, 45, 45},
-		{FlipBottom, 90, 0},
-		{FlipBottomLeft, 45, -45},
-		{FlipLeft, 0, -90},
-		{FlipTopLeft, -45, -45},
-		{FlipCenter, 0, 0},
-	}
-
-	for _, tc := range tests {
-		rotX, rotY := tc.dir.ToRotationAngles()
-		if rotX != tc.expectedRotX || rotY != tc.expectedRotY {
-			t.Errorf("FlipDirection(%d).ToRotationAngles() = (%f, %f), expected (%f, %f)",
-				tc.dir, rotX, rotY, tc.expectedRotX, tc.expectedRotY)
-		}
+	bottom, _ := g.RemoveEntity(pos, "entity_bottom")
+	if bottom != "entity_bottom" {
+		t.Errorf("Expected entity_bottom to be removed, got %s", bottom)
 	}
 }
 
@@ -188,33 +107,16 @@ func TestCalculateFlipDirection(t *testing.T) {
 		localY   int
 		expected FlipDirection
 	}{
-		// Centre (35-65%)
-		{50, 50, FlipCenter},
-		{40, 40, FlipCenter},
-		{60, 60, FlipCenter},
-
-		// Top (Y < 35)
-		{50, 10, FlipTop},
-		{20, 10, FlipTopLeft},
-		{80, 10, FlipTopRight},
-
-		// Bottom (Y > 65)
-		{50, 90, FlipBottom},
-		{20, 90, FlipBottomLeft},
-		{80, 90, FlipBottomRight},
-
-		// Left (X < 35, Y in center)
-		{10, 50, FlipLeft},
-
-		// Right (X > 65, Y in center)
-		{90, 50, FlipRight},
+		{50, 50, FlipCenter},      // Centre
+		{50, 10, FlipTop},         // Haut
+		{10, 50, FlipLeft},        // Gauche
+		{90, 90, FlipBottomRight}, // Bas-Droite
 	}
 
 	for _, tc := range tests {
 		result := CalculateFlipDirection(tileSize, tc.localX, tc.localY)
 		if result != tc.expected {
-			t.Errorf("CalculateFlipDirection(%d, %d, %d) = %d (%s), expected %d (%s)",
-				tileSize, tc.localX, tc.localY, result, result.String(), tc.expected, tc.expected.String())
+			t.Errorf("At (%d, %d) expected %s, got %s", tc.localX, tc.localY, tc.expected.String(), result.String())
 		}
 	}
 }

@@ -64,10 +64,10 @@ func NewWorld() *World {
 }
 
 // CreateGrid crée un nouveau grid et l'ajoute au monde
-func (w *World) CreateGrid(id string, width, height int) *board.Grid {
-	grid := board.NewGrid(id, width, height)
+func (w *World) CreateGrid(id string, width, height int, biome board.BiomeType) *board.Grid {
+	grid := board.NewGrid(id, width, height, biome)
 	w.Grids[id] = grid
-	w.GridOrder = append(w.GridOrder, id) // Garde l'ordre de création
+	w.GridOrder = append(w.GridOrder, id)
 	if w.CurrentGridID == "" {
 		w.CurrentGridID = id
 	}
@@ -139,22 +139,36 @@ func (w *World) CanFlipTile() bool {
 func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) (*resource.Resource, error) {
 	grid, ok := w.Grids[gridID]
 	if !ok {
-		return nil, ErrGridNotFound
+		return nil, fmt.Errorf("grid %s introuvable", gridID)
 	}
 
-	r := w.ResourceFactory.Create(rtype, pos)
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
+
+	plot, err := grid.Get(boardPos)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(plot.EntitiesID) > 0 {
+		return nil, fmt.Errorf("position %v déjà occupée", pos)
+	}
+	if plot.Modifier.Obstructed {
+		return nil, fmt.Errorf("position %v est obstruée", pos)
+	}
+
+	r := w.ResourceFactory.Create(rtype, entity.Position{X: pos.X, Y: pos.Y})
 	r.SetGridID(gridID)
+
+	idStr := string(r.GetID())
 	w.Entities.Register(r)
-	w.Components.Add(string(r.GetID()), &r.Lifecycle)
-	w.Components.Add(string(r.GetID()), &r.Value)
-	w.Components.Add(string(r.GetID()), &r.Matchable)
-	w.Components.Add(string(r.GetID()), &r.Visual)
+	w.Components.Add(idStr, &r.Lifecycle)
+	w.Components.Add(idStr, &r.Value)
+	w.Components.Add(idStr, &r.Matchable)
+	w.Components.Add(idStr, &r.Visual)
 
-	// Place sur la grille
-	tile, _ := grid.Get(board.Position{X: pos.X, Y: pos.Y})
-	tile.EntityID = string(r.GetID())
+	plot.PushEntity(idStr)
 
-	w.EventBus.Publish(event.NewEntityCreatedEvent(string(r.GetID()), "resource"))
+	w.EventBus.Publish(event.NewEntityCreatedEvent(idStr, "resource"))
 	return r, nil
 }
 
@@ -165,110 +179,132 @@ func (w *World) SpawnCreature(gridID string, species string, pos entity.Position
 		return nil, ErrGridNotFound
 	}
 
-	// Vérifie si la case est valide et libre
-	tile, err := grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
+
+	plot, err := grid.Get(boardPos)
 	if err != nil {
 		return nil, err
 	}
-	if tile.EntityID != "" {
-		return nil, fmt.Errorf("position (%d,%d) is already occupied by entity %s", pos.X, pos.Y, tile.EntityID)
+
+	if len(plot.EntitiesID) > 0 {
+		return nil, fmt.Errorf("position %v is already occupied by %d entities", pos, len(plot.EntitiesID))
 	}
-	if tile.Modifier.Obstructed {
-		return nil, fmt.Errorf("position (%d,%d) is obstructed", pos.X, pos.Y)
+	if plot.Modifier.Obstructed {
+		return nil, fmt.Errorf("position %v is obstructed", pos)
 	}
 
 	c, err := w.CreatureFactory.Create(species, pos)
 	if err != nil {
 		return nil, err
 	}
+
 	c.SetGridID(gridID)
+	idStr := string(c.GetID())
+
 	w.Entities.Register(c)
-	w.Components.Add(string(c.GetID()), &c.Behavior)
-	w.Components.Add(string(c.GetID()), &c.Mobility)
-	w.Components.Add(string(c.GetID()), &c.Visual)
+	w.Components.Add(idStr, &c.Behavior)
+	w.Components.Add(idStr, &c.Mobility)
+	w.Components.Add(idStr, &c.Visual)
 
-	// Place sur la grille
-	tile.EntityID = string(c.GetID())
+	plot.PushEntity(idStr)
 
-	w.EventBus.Publish(event.NewEntityCreatedEvent(string(c.GetID()), "creature"))
+	w.EventBus.Publish(event.NewEntityCreatedEvent(idStr, "creature"))
 	return c, nil
 }
 
 // RevealTile révèle une entité sur une position
+// RevealTile révèle l'entité au sommet d'une pile sur une position donnée
 func (w *World) RevealTile(gridID string, pos board.Position) (entity.Entity, error) {
 	grid, ok := w.Grids[gridID]
 	if !ok {
 		return nil, ErrGridNotFound
 	}
 
-	tile, err := grid.Get(pos)
+	// 1. Récupération du Plot (Parcelle)
+	plot, err := grid.Get(pos)
 	if err != nil {
 		return nil, err
 	}
 
-	if tile.EntityID == "" {
-		return nil, errors.New("pas d'entité sur cette case")
+	// 2. Vérification de la présence d'entités (Système de pile)
+	n := len(plot.EntitiesID)
+	if n == 0 {
+		return nil, fmt.Errorf("aucune entité à la position %v", pos)
 	}
 
-	ent, ok := w.Entities.Get(entity.ID(tile.EntityID))
+	// 3. On récupère l'ID au SOMMET de la pile (le dernier ajouté)
+	topEntityID := plot.EntitiesID[n-1]
+
+	// 4. Récupération de l'entité via le Manager
+	ent, ok := w.Entities.Get(entity.ID(topEntityID))
 	if !ok {
-		return nil, errors.New("entité non trouvée")
+		return nil, fmt.Errorf("l'entité %s est enregistrée sur le board mais absente du manager", topEntityID)
 	}
 
-	ent.SetState(entity.Revealed)
+	// 5. Mise à jour de l'état
+	if ent.GetState() == entity.Hidden {
+		ent.SetState(entity.Revealed)
+	}
+
 	return ent, nil
 }
 
-// MatchTile marque une entité comme appairée
+// MatchTile marque l'entité du SOMMET comme appairée
 func (w *World) MatchTile(gridID string, pos board.Position) error {
 	grid, ok := w.Grids[gridID]
 	if !ok {
 		return ErrGridNotFound
 	}
 
-	tile, _ := grid.Get(pos)
-	if tile.EntityID == "" {
-		return errors.New("aucune entité à appairer")
+	plot, err := grid.Get(pos)
+	if err != nil {
+		return err
 	}
 
-	ent, ok := w.Entities.Get(entity.ID(tile.EntityID))
+	n := len(plot.EntitiesID)
+	if n == 0 {
+		return errors.New("aucune entité à appairer à cette position")
+	}
+
+	topID := plot.EntitiesID[n-1]
+
+	ent, ok := w.Entities.Get(entity.ID(topID))
 	if !ok {
-		return errors.New("entité non trouvée")
+		return errors.New("entité au sommet non trouvée dans le manager")
 	}
 
 	ent.SetState(entity.Matched)
 
 	w.EventBus.Publish(event.NewTileMatchedEvent(
 		entity.Position{X: pos.X, Y: pos.Y},
-		tile.EntityID,
+		string(topID),
 	))
+
 	return nil
 }
 
-// RemoveEntity supprime une entité du monde et libère la case
+// RemoveEntity supprime une entité du monde, de sa pile sur la grille et de l'ECS
 func (w *World) RemoveEntity(id entity.ID) {
+	idStr := string(id)
+
 	e, ok := w.Entities.Get(id)
 	if !ok {
 		return
 	}
 
-	// Retire de sa grille
-	grid, ok := w.GetGrid(e.GetGridID())
+	grid, ok := w.Grids[e.GetGridID()]
 	if ok {
 		pos := e.GetPosition()
-		tile, _ := grid.Get(board.Position{X: pos.X, Y: pos.Y})
-		if tile.EntityID == string(id) {
-			tile.EntityID = ""
+		_, err := grid.RemoveEntity(board.Position{X: pos.X, Y: pos.Y}, idStr)
+		if err != nil {
+			fmt.Printf("Erreur lors du retrait du board: %v\n", err)
 		}
 	}
 
-	// Retire des composants
-	w.Components.RemoveEntity(string(id))
-
-	// Retire du manager
+	w.Components.RemoveEntity(idStr)
 	w.Entities.Remove(id)
 
-	w.EventBus.Publish(event.NewEntityRemovedEvent(string(id), "harvested"))
+	w.EventBus.Publish(event.NewEntityRemovedEvent(idStr, "harvested"))
 }
 
 // ErrGridNotFound est retourné quand un grid n'existe pas
@@ -305,7 +341,7 @@ func (s *LifecycleSystem) Update(world *World) {
 	}
 }
 
-// PropagationSystem gère la propagation des ressources
+// PropagationSystem gère l'expansion organique des ressources sur la grille
 type PropagationSystem struct{}
 
 func (s *PropagationSystem) Priority() int { return 2 }
@@ -315,6 +351,7 @@ func (s *PropagationSystem) Update(world *World) {
 
 	for _, e := range resources {
 		entityID := string(e.GetID())
+
 		comp, ok := world.Components.Get(entityID, "lifecycle")
 		if !ok {
 			continue
@@ -325,34 +362,38 @@ func (s *PropagationSystem) Update(world *World) {
 			continue
 		}
 
-		// Récupère le grid de l'entité
-		grid, ok := world.GetGrid(e.GetGridID())
+		grid, ok := world.Grids[e.GetGridID()]
 		if !ok {
 			continue
 		}
 
-		// Vérifie les cases adjacentes vides
 		pos := e.GetPosition()
 		neighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
 
 		for _, neighbor := range neighbors {
-			if neighbor.EntityID != "" {
-				continue // Case occupée
+			if len(neighbor.EntitiesID) > 0 {
+				continue
 			}
 
-			// Probabilité de propagation
-			if shouldPropagate(lifecycle) {
-				// Crée une nouvelle ressource sur le même grid
-				newRes := world.ResourceFactory.Create(
-					getResourceType(e),
-					entity.Position{X: neighbor.Position.X, Y: neighbor.Position.Y},
-				)
-				newRes.SetGridID(e.GetGridID())
-				world.Entities.Register(newRes)
-				world.Components.Add(string(newRes.GetID()), &newRes.Lifecycle)
-				world.Components.Add(string(newRes.GetID()), &newRes.Value)
+			if neighbor.Modifier.Obstructed {
+				continue
+			}
 
-				neighbor.EntityID = string(newRes.GetID())
+			if shouldPropagate(lifecycle) {
+				spawnPos := entity.Position{
+					X: neighbor.Position.X,
+					Y: neighbor.Position.Y,
+				}
+
+				newRes, err := world.SpawnResource(
+					e.GetGridID(),
+					getResourceType(e),
+					spawnPos,
+				)
+
+				if err != nil {
+					continue
+				}
 
 				world.EventBus.Publish(event.Event{
 					Type:     event.ResourcePropagated,
@@ -368,8 +409,7 @@ func (s *PropagationSystem) Update(world *World) {
 }
 
 func shouldPropagate(l *component.Lifecycle) bool {
-	// Logique de probabilité basée sur le stade
-	return l.CurrentStage >= 2 // Fruit mûr
+	return l.CurrentStage >= 2
 }
 
 func getResourceType(e entity.Entity) string {
@@ -390,54 +430,53 @@ func (s *CreatureAISystem) Update(world *World) {
 
 	for _, e := range creatures {
 		c, ok := e.(*creature.Creature)
+		if !ok || c.MovementProfile != nil {
+			continue
+		}
+
+		grid, ok := world.Grids[c.GetGridID()]
 		if !ok {
 			continue
 		}
 
-		// Si la créature a un MovementProfile avancé, on utilise plutôt CreatureMovementSystem
-		if c.MovementProfile != nil {
-			continue
-		}
-
-		// Récupère le grid de la créature
-		grid, ok := world.GetGrid(c.GetGridID())
-		if !ok {
-			continue
-		}
-
-		// Prend une décision
 		action := ai.Decide(c, &worldAdapter{world: world, grid: grid})
 
-		// Exécute l'action
 		switch action.Type {
 		case "move":
+			oldPos := c.GetPosition()
 			newPos := entity.Position{
-				X: c.GetPosition().X + action.Direction.X,
-				Y: c.GetPosition().Y + action.Direction.Y,
+				X: oldPos.X + action.Direction.X,
+				Y: oldPos.Y + action.Direction.Y,
 			}
 
-			// Met à jour la grille
-			oldTile, _ := grid.Get(board.Position{X: c.GetPosition().X, Y: c.GetPosition().Y})
-			newTile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+			if !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
+				continue
+			}
 
-			// L'ancienne case devient réellement vide (sol nu)
-			oldTile.EntityID = ""
+			newPlot, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
 
-			// Si la nouvelle case contenait un piège, on le supprime (écrasement)
-			if newTile.EntityID != "" {
-				if oldEnt, ok := world.Entities.Get(entity.ID(newTile.EntityID)); ok {
+			idStr := string(c.GetID())
+			_, err := grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
+			if err != nil {
+				continue
+			}
+
+			if len(newPlot.EntitiesID) > 0 {
+				topID := newPlot.EntitiesID[len(newPlot.EntitiesID)-1]
+				if oldEnt, ok := world.Entities.Get(entity.ID(topID)); ok {
 					if oldEnt.GetType() == entity.TypeTrap {
 						world.RemoveEntity(oldEnt.GetID())
 					}
 				}
 			}
 
-			newTile.EntityID = string(c.GetID())
+			newPlot.PushEntity(idStr)
+
 			world.Entities.UpdatePosition(c.GetID(), newPos)
 
 			world.EventBus.Publish(event.NewCreatureMovedEvent(
-				string(c.GetID()),
-				c.GetPosition(),
+				idStr,
+				oldPos,
 				newPos,
 			))
 
@@ -580,7 +619,7 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 				X: c.GetPosition().X + nav.WanderBias.X,
 				Y: c.GetPosition().Y + nav.WanderBias.Y,
 			}
-			if tile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y}); err == nil && tile.EntityID == "" && !tile.Modifier.Obstructed {
+			if tile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y}); err == nil && len(tile.EntitiesID) == 0 && !tile.Modifier.Obstructed {
 				return nav.WanderBias
 			}
 		}
@@ -629,19 +668,24 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 }
 
 func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler, c *creature.Creature, newPos, currentPos entity.Position, world *World, grid *board.Grid) (entity.Position, bool) {
-	tile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-	if err != nil {
-		return currentPos, false
+	// Helper pour vérifier si une case est "traversable" (vide ou piège)
+	isWalkable := func(pos entity.Position) bool {
+		tile, err := grid.Get(board.Position{X: pos.X, Y: pos.Y})
+		if err != nil || tile.Modifier.Obstructed {
+			return false
+		}
+		if len(tile.EntitiesID) == 0 {
+			return true
+		}
+		// On peut marcher si le sommet est un piège
+		topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+		if ent, ok := world.Entities.Get(entity.ID(topID)); ok {
+			return ent.GetType() == entity.TypeTrap
+		}
+		return false
 	}
 
-	// Une case est libre si elle n'a pas d'entité OU si elle a un piège (qu'on va écraser ou échanger)
-	isTrap := false
-	if tile.EntityID != "" {
-		if ent, ok := world.Entities.Get(entity.ID(tile.EntityID)); ok {
-			isTrap = ent.GetType() == entity.TypeTrap
-		}
-	}
-	canMove := (tile.EntityID == "" || isTrap) && !tile.Modifier.Obstructed
+	canMove := isWalkable(newPos)
 
 	switch coll.Type {
 	case creature.CollideStop:
@@ -661,17 +705,20 @@ func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler,
 		if canMove {
 			return newPos, true
 		}
+
 		dx := newPos.X - currentPos.X
 		dy := newPos.Y - currentPos.Y
+
+		// Tentative de glissade latérale
 		if dy != 0 {
 			slidePos := entity.Position{X: currentPos.X, Y: newPos.Y}
-			if t, err := grid.Get(board.Position{X: slidePos.X, Y: slidePos.Y}); err == nil && (t.EntityID == "" || isTrap) && !t.Modifier.Obstructed {
+			if isWalkable(slidePos) {
 				return slidePos, true
 			}
 		}
 		if dx != 0 {
 			slidePos := entity.Position{X: newPos.X, Y: currentPos.Y}
-			if t, err := grid.Get(board.Position{X: slidePos.X, Y: slidePos.Y}); err == nil && (t.EntityID == "" || isTrap) && !t.Modifier.Obstructed {
+			if isWalkable(slidePos) {
 				return slidePos, true
 			}
 		}
@@ -685,28 +732,21 @@ func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler,
 }
 
 func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid) bool {
-	// SPECIAL : Le ModeSwap permet d'échanger avec n'importe quelle TUILE (entité), pièges inclus.
-	// Mais on n'échange pas avec une case réellement vide (sol nu).
 	if mode.Type == creature.ModeSwap {
 		tile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-		if tile.EntityID != "" {
-			swappedEntity, ok := world.Entities.Get(entity.ID(tile.EntityID))
+		if len(tile.EntitiesID) > 0 {
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			swappedEntity, ok := world.Entities.Get(entity.ID(topID))
 			if ok {
-				// ÉCHANGE : on permute les deux entités
+				idStr := string(c.GetID())
+				grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
+				grid.RemoveEntity(board.Position{X: newPos.X, Y: newPos.Y}, topID)
+				grid.PlaceEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, topID)
+				grid.PlaceEntity(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
 				swappedEntity.SetPosition(oldPos)
 				c.SetPosition(newPos)
-
-				oldTile, _ := grid.Get(board.Position{X: oldPos.X, Y: oldPos.Y})
-				newTile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-
-				oldTile.EntityID = tile.EntityID
-				newTile.EntityID = string(c.GetID())
-
 				world.Entities.UpdatePosition(swappedEntity.GetID(), oldPos)
 				world.Entities.UpdatePosition(c.GetID(), newPos)
-
-				fmt.Printf("[MOVE] %s (%s) SWAPPED from %v to %v with %s\n",
-					c.Species, c.GetID(), oldPos, newPos, swappedEntity.GetType().String())
 
 				return true
 			}
@@ -719,31 +759,21 @@ func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *cr
 }
 
 func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid, silent bool) bool {
-	oldTile, _ := grid.Get(board.Position{X: oldPos.X, Y: oldPos.Y})
+	idStr := string(c.GetID())
+
+	grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
+
 	newTile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-
-	// L'ancienne case devient réellement vide (sol nu)
-	oldTile.EntityID = ""
-
-	content := "empty space"
-	// Si la nouvelle case contenait un piège, on le supprime proprement du monde (écrasement)
-	if newTile.EntityID != "" {
-		if oldEnt, ok := world.Entities.Get(entity.ID(newTile.EntityID)); ok {
-			if oldEnt.GetType() == entity.TypeTrap {
-				content = "trap (crushed)"
-				world.RemoveEntity(oldEnt.GetID())
-			} else {
-				content = oldEnt.GetType().String()
-			}
+	if len(newTile.EntitiesID) > 0 {
+		topID := newTile.EntitiesID[len(newTile.EntitiesID)-1]
+		if ent, ok := world.Entities.Get(entity.ID(topID)); ok && ent.GetType() == entity.TypeTrap {
+			world.RemoveEntity(ent.GetID())
 		}
 	}
 
-	newTile.EntityID = string(c.GetID())
-	c.SetPosition(newPos)
-	world.Entities.UpdatePosition(c.GetID(), newPos)
+	grid.PlaceEntity(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
 
-	fmt.Printf("[MOVE] %s (%s) MOVED from %v to %v. Arrival was %s. Start is now empty.\n",
-		c.Species, c.GetID(), oldPos, newPos, content)
+	world.Entities.UpdatePosition(c.GetID(), newPos)
 
 	if silent {
 		world.EventBus.Publish(event.Event{
@@ -839,7 +869,8 @@ func (wa *worldAdapter) IsValidMove(pos entity.Position) bool {
 	if err != nil {
 		return false
 	}
-	return tile.EntityID == "" && !tile.Modifier.Obstructed
+
+	return len(tile.EntitiesID) == 0 && !tile.Modifier.Obstructed
 }
 
 func (wa *worldAdapter) GetTileState(pos entity.Position) string {
@@ -847,10 +878,13 @@ func (wa *worldAdapter) GetTileState(pos entity.Position) string {
 	if err != nil {
 		return "invalid"
 	}
-	if tile.EntityID == "" {
+
+	if len(tile.EntitiesID) == 0 {
 		return "empty"
 	}
-	if ent, ok := wa.world.Entities.Get(entity.ID(tile.EntityID)); ok {
+
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
 		return ent.GetState().String()
 	}
 	return "unknown"
@@ -874,14 +908,18 @@ func (s *TriggerSystem) Update(world *World) {
 		if !ok {
 			continue
 		}
-		for _, tile := range grid.Tiles {
+
+		// CORRECTION : Utilisation de .Plots au lieu de .Tiles
+		for _, tile := range grid.Plots {
 			if tile.StructureID == "" {
 				continue
 			}
+
 			comp, ok := world.Components.Get(tile.StructureID, "trigger")
 			if !ok {
 				continue
 			}
+
 			trigger := comp.(*component.Trigger)
 			if s.checkCondition(trigger.Condition, tile, world, grid) {
 				s.executeAction(trigger.Action, tile, world, grid)
@@ -893,27 +931,27 @@ func (s *TriggerSystem) Update(world *World) {
 	}
 }
 
-func (s *TriggerSystem) checkCondition(condition string, tile *board.Tile, world *World, grid *board.Grid) bool {
+func (s *TriggerSystem) checkCondition(condition string, tile *board.Plot, world *World, grid *board.Grid) bool {
+	if len(tile.EntitiesID) == 0 {
+		return false
+	}
+
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	topEnt, ok := world.Entities.Get(entity.ID(topID))
+
 	switch condition {
 	case "reveal_with_creature":
-		if tile.EntityID == "" {
-			return false
-		}
-		e, ok := world.Entities.Get(entity.ID(tile.EntityID))
-		return ok && e.GetType() == entity.TypeCreature && e.GetState() == entity.Revealed
+		return ok && topEnt.GetType() == entity.TypeCreature && topEnt.GetState() == entity.Revealed
 
 	case "creature_on_resource":
-		if tile.EntityID == "" {
+		if !ok || topEnt.GetType() != entity.TypeCreature {
 			return false
 		}
-		e, ok := world.Entities.Get(entity.ID(tile.EntityID))
-		if !ok || e.GetType() != entity.TypeCreature {
-			return false
-		}
+
 		neighbors := grid.GetNeighbors(tile.Position)
 		for _, n := range neighbors {
-			if n.EntityID != "" {
-				if res, ok := world.Entities.Get(entity.ID(n.EntityID)); ok {
+			for _, id := range n.EntitiesID {
+				if res, ok := world.Entities.Get(entity.ID(id)); ok {
 					if res.GetType() == entity.TypeResource {
 						return true
 					}
@@ -924,11 +962,13 @@ func (s *TriggerSystem) checkCondition(condition string, tile *board.Tile, world
 	return false
 }
 
-func (s *TriggerSystem) executeAction(action string, tile *board.Tile, world *World, grid *board.Grid) {
+func (s *TriggerSystem) executeAction(action string, tile *board.Plot, world *World, grid *board.Grid) {
 	switch action {
 	case "creature_flee":
-		if tile.EntityID != "" {
-			if e, ok := world.Entities.Get(entity.ID(tile.EntityID)); ok {
+		// On fait fuir la créature qui est au SOMMET de la pile (celle qui a marché sur le trigger)
+		if len(tile.EntitiesID) > 0 {
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
 				if c, ok := e.(*creature.Creature); ok {
 					c.Behavior.State = "fleeing"
 				}
@@ -938,8 +978,10 @@ func (s *TriggerSystem) executeAction(action string, tile *board.Tile, world *Wo
 	case "reveal_adjacent":
 		neighbors := grid.GetNeighbors(tile.Position)
 		for _, n := range neighbors {
-			if n.EntityID != "" {
-				if e, ok := world.Entities.Get(entity.ID(n.EntityID)); ok {
+			// REVELATION : On révèle TOUTES les entités présentes sur les cases voisines
+			// (Parce qu'un flash lumineux ou un bruit révèle tout ce qui est caché dans la pile)
+			for _, id := range n.EntitiesID {
+				if e, ok := world.Entities.Get(entity.ID(id)); ok {
 					if e.GetState() == entity.Hidden {
 						e.SetState(entity.Revealed)
 					}

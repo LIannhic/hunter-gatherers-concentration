@@ -163,7 +163,7 @@ func NewAssociationMadeEvent(playerID string, assocType string, success bool) Ev
 	}
 }
 
-func NewTileRevealedEvent(tilePos entity.Position, entityID string, flipDir board.FlipDirection) Event {
+func NewEntityRevealedEvent(tilePos entity.Position, entityID string, flipDir board.FlipDirection) Event {
 	return Event{
 		Type:     TileRevealed,
 		SourceID: entityID,
