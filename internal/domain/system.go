@@ -10,6 +10,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/creature"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/resource"
 )
 
@@ -33,6 +34,9 @@ type World struct {
 	// Grids actifs pour le joueur (pour navigation entre grids)
 	CurrentGridID string
 
+	// Difficulty
+	Difficulty meta.DifficultySettings
+
 	// Factories
 	CreatureFactory *creature.Factory
 	ResourceFactory *resource.Factory
@@ -55,6 +59,7 @@ func NewWorld() *World {
 		Turn:                 0,
 		MaxTurns:             100,
 		CurrentGridID:        "",
+		Difficulty:           meta.GetSettings(meta.LevelNormal),
 		CreatureFactory:      creature.NewFactory(),
 		ResourceFactory:      resource.NewFactory(),
 		playerPosition:       entity.Position{X: 0, Y: 0},
@@ -92,6 +97,8 @@ func (w *World) GetCurrentGrid() (*board.Grid, bool) {
 func (w *World) SetCurrentGrid(gridID string) bool {
 	if _, ok := w.Grids[gridID]; ok {
 		w.CurrentGridID = gridID
+		// Déclenche l'événement d'entrée pour les systèmes (comme Preview)
+		w.EventBus.PublishImmediate(event.NewGridEnteredEvent(gridID))
 		return true
 	}
 	return false
@@ -210,6 +217,35 @@ func (w *World) SpawnCreature(gridID string, species string, pos entity.Position
 
 	w.EventBus.Publish(event.NewEntityCreatedEvent(idStr, "creature"))
 	return c, nil
+}
+
+// SpawnTrap crée un piège sur un grid spécifique
+func (w *World) SpawnTrap(gridID string, pos entity.Position) (entity.Entity, error) {
+	grid, ok := w.Grids[gridID]
+	if !ok {
+		return nil, ErrGridNotFound
+	}
+
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
+	plot, err := grid.Get(boardPos)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(plot.EntitiesID) > 0 {
+		return nil, fmt.Errorf("position %v déjà occupée", pos)
+	}
+
+	trap := entity.NewBaseEntity(entity.TypeTrap)
+	trap.SetGridID(gridID)
+	trap.SetPosition(pos)
+
+	trapPtr := &trap
+	w.Entities.Register(trapPtr)
+	plot.PushEntity(string(trapPtr.GetID()))
+
+	w.EventBus.Publish(event.NewEntityCreatedEvent(string(trapPtr.GetID()), "trap"))
+	return trapPtr, nil
 }
 
 // RevealTile révèle une entité sur une position
@@ -619,7 +655,7 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 				X: c.GetPosition().X + nav.WanderBias.X,
 				Y: c.GetPosition().Y + nav.WanderBias.Y,
 			}
-			if tile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y}); err == nil && len(tile.EntitiesID) == 0 && !tile.Modifier.Obstructed {
+			if s.isWalkable(c, newPos, grid, world) {
 				return nav.WanderBias
 			}
 		}
@@ -667,25 +703,43 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 	return entity.Position{X: 0, Y: 0}
 }
 
-func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler, c *creature.Creature, newPos, currentPos entity.Position, world *World, grid *board.Grid) (entity.Position, bool) {
-	// Helper pour vérifier si une case est "traversable" (vide ou piège)
-	isWalkable := func(pos entity.Position) bool {
-		tile, err := grid.Get(board.Position{X: pos.X, Y: pos.Y})
-		if err != nil || tile.Modifier.Obstructed {
-			return false
-		}
-		if len(tile.EntitiesID) == 0 {
-			return true
-		}
-		// On peut marcher si le sommet est un piège
-		topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-		if ent, ok := world.Entities.Get(entity.ID(topID)); ok {
-			return ent.GetType() == entity.TypeTrap
-		}
+func (s *CreatureMovementSystem) isWalkable(c *creature.Creature, pos entity.Position, grid *board.Grid, world *World) bool {
+	tile, err := grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil || tile.Modifier.Obstructed {
 		return false
 	}
 
-	canMove := isWalkable(newPos)
+	// Case vide : toujours ok
+	if len(tile.EntitiesID) == 0 {
+		return true
+	}
+
+	// Mode Phase (spectres) : traverse tout dans les limites
+	if c.MovementProfile != nil && c.MovementProfile.Collision.Type == creature.CollidePhase {
+		return true
+	}
+
+	// Vérifie le sommet pour les pièges
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	if ent, ok := world.Entities.Get(entity.ID(topID)); ok {
+		if ent.GetType() == entity.TypeTrap {
+			return true
+		}
+	}
+
+	// Cohabitation pour Over/Under
+	if c.MovementProfile != nil {
+		mode := c.MovementProfile.Mode.Type
+		if mode == creature.ModeOver || mode == creature.ModeUnder {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler, c *creature.Creature, newPos, currentPos entity.Position, world *World, grid *board.Grid) (entity.Position, bool) {
+	canMove := s.isWalkable(c, newPos, grid, world)
 
 	switch coll.Type {
 	case creature.CollideStop:
@@ -712,29 +766,35 @@ func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler,
 		// Tentative de glissade latérale
 		if dy != 0 {
 			slidePos := entity.Position{X: currentPos.X, Y: newPos.Y}
-			if isWalkable(slidePos) {
+			if s.isWalkable(c, slidePos, grid, world) {
 				return slidePos, true
 			}
 		}
 		if dx != 0 {
 			slidePos := entity.Position{X: newPos.X, Y: currentPos.Y}
-			if isWalkable(slidePos) {
+			if s.isWalkable(c, slidePos, grid, world) {
 				return slidePos, true
 			}
 		}
 		return currentPos, false
 
 	case creature.CollidePhase:
+		if !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
+			return currentPos, false
+		}
 		return newPos, true
 	}
 
+	if !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
+		return currentPos, false
+	}
 	return newPos, true
 }
 
 func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid) bool {
 	if mode.Type == creature.ModeSwap {
-		tile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-		if len(tile.EntitiesID) > 0 {
+		tile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+		if err == nil && len(tile.EntitiesID) > 0 {
 			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 			swappedEntity, ok := world.Entities.Get(entity.ID(topID))
 			if ok {
@@ -754,27 +814,44 @@ func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *cr
 	}
 
 	// Dans tous les autres cas (ou si c'était du sol nu), on fait un déplacement normal (doMove)
-	silent := mode.Type == creature.ModeShadow || mode.Type == creature.ModeUnder
-	return s.doMove(c, oldPos, newPos, world, grid, silent)
+	return s.doMove(c, oldPos, newPos, world, grid)
 }
 
-func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid, silent bool) bool {
-	idStr := string(c.GetID())
+func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid) bool {
+	if grid == nil || !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
+		return false
+	}
 
+	idStr := string(c.GetID())
 	grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
 
-	newTile, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-	if len(newTile.EntitiesID) > 0 {
+	newTile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+	if err == nil && newTile != nil && len(newTile.EntitiesID) > 0 {
 		topID := newTile.EntitiesID[len(newTile.EntitiesID)-1]
 		if ent, ok := world.Entities.Get(entity.ID(topID)); ok && ent.GetType() == entity.TypeTrap {
 			world.RemoveEntity(ent.GetID())
 		}
 	}
 
-	grid.PlaceEntity(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
+	// Détermine la position dans la pile selon le mode de mouvement
+	mode := creature.ModeBento
+	if c.MovementProfile != nil {
+		mode = c.MovementProfile.Mode.Type
+	}
+
+	switch mode {
+	case creature.ModeUnder:
+		// Se place à la base de la pile (caché par les autres entités)
+		grid.PlaceEntityAtBottom(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
+	default:
+		// Se place au sommet de la pile (priorité visuelle)
+		grid.PlaceEntity(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
+	}
 
 	world.Entities.UpdatePosition(c.GetID(), newPos)
 
+	// Émission de l'événement
+	silent := mode == creature.ModeShadow || mode == creature.ModeUnder
 	if silent {
 		world.EventBus.Publish(event.Event{
 			Type:     event.CreatureMoved,
@@ -870,7 +947,17 @@ func (wa *worldAdapter) IsValidMove(pos entity.Position) bool {
 		return false
 	}
 
-	return len(tile.EntitiesID) == 0 && !tile.Modifier.Obstructed
+	// Retourne vrai si la case est vide ou contient un piège (accessible par défaut à l'IA simple)
+	if len(tile.EntitiesID) == 0 {
+		return true
+	}
+
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
+		return ent.GetType() == entity.TypeTrap
+	}
+
+	return false
 }
 
 func (wa *worldAdapter) GetTileState(pos entity.Position) string {
@@ -991,17 +1078,129 @@ func (s *TriggerSystem) executeAction(action string, tile *board.Plot, world *Wo
 	}
 }
 
+// PreviewSystem gère la révélation des tuiles à l'entrée d'une grille
+type PreviewSystem struct {
+	previewTimers map[string]int // Timer par gridID
+}
+
+func NewPreviewSystem() *PreviewSystem {
+	return &PreviewSystem{
+		previewTimers: make(map[string]int),
+	}
+}
+
+func (s *PreviewSystem) Priority() int { return 0 }
+
+func (s *PreviewSystem) Update(world *World) {
+	// Gère le masquage des tuiles après le délai de preview
+	for gridID, timer := range s.previewTimers {
+		if timer > 0 {
+			s.previewTimers[gridID]--
+			if s.previewTimers[gridID] == 0 {
+				s.hideGrid(world, gridID)
+			}
+		}
+	}
+}
+
+func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	settings := world.Difficulty
+	if settings.PreviewRatio <= 0 {
+		return
+	}
+
+	fmt.Printf("[PREVIEW] Entrée sur %s (Difficulté: %s)\n", gridID, settings.Level)
+
+	// Détermine quelles entités révéler
+	var allEntities []entity.Entity
+	for _, tile := range grid.Plots {
+		if len(tile.EntitiesID) > 0 {
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if ent, ok := world.Entities.Get(entity.ID(topID)); ok {
+				allEntities = append(allEntities, ent)
+			}
+		}
+	}
+
+	if settings.Level == meta.LevelNormal {
+		s.revealHalfPairs(world, allEntities, gridID)
+	} else {
+		// Easy ou Insane
+		for _, e := range allEntities {
+			if e.GetState() == entity.Hidden {
+				e.SetState(entity.Revealed)
+				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+			}
+		}
+	}
+
+	// Lance le timer si une durée est définie
+	if settings.PreviewDuration > 0 {
+		s.previewTimers[gridID] = int(settings.PreviewDuration * 60) // 60 fps
+	}
+}
+
+func (s *PreviewSystem) revealHalfPairs(world *World, entities []entity.Entity, gridID string) {
+	seenTypes := make(map[string]bool)
+	for _, e := range entities {
+		resType := ""
+		if res, ok := e.(*resource.Resource); ok {
+			resType = "res_" + res.ResourceType
+		} else if cre, ok := e.(*creature.Creature); ok {
+			resType = "cre_" + cre.Species
+		}
+
+		if resType != "" && !seenTypes[resType] {
+			if e.GetState() == entity.Hidden {
+				e.SetState(entity.Revealed)
+				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+				seenTypes[resType] = true
+			}
+		}
+	}
+}
+
+func (s *PreviewSystem) hideGrid(world *World, gridID string) {
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+	fmt.Printf("[PREVIEW] Fin du délai sur %s, masquage des tuiles.\n", gridID)
+	for _, tile := range grid.Plots {
+		if len(tile.EntitiesID) > 0 {
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
+				if e.GetState() == entity.Revealed {
+					e.SetState(entity.Hidden)
+					world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+						e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+				}
+			}
+		}
+	}
+}
+
 // Engine orchestre tous les systèmes
 type Engine struct {
 	systems        []System
 	world          *World
 	Running        bool
 	movementSystem *CreatureMovementSystem // Référence directe pour les mises à jour
+	previewSystem  *PreviewSystem          // Référence pour les événements
 }
 
 func NewEngine(world *World) *Engine {
 	moveSys := NewCreatureMovementSystem()
-	return &Engine{
+	prevSys := NewPreviewSystem()
+
+	e := &Engine{
 		world: world,
 		systems: []System{
 			&LifecycleSystem{},
@@ -1012,7 +1211,16 @@ func NewEngine(world *World) *Engine {
 		},
 		Running:        false,
 		movementSystem: moveSys,
+		previewSystem:  prevSys,
 	}
+
+	// S'abonne aux entrées de grille
+	world.EventBus.SubscribeFunc(event.GridEntered, func(ev event.Event) {
+		gridID := ev.Payload["grid_id"].(string)
+		prevSys.OnEnterGrid(world, gridID)
+	})
+
+	return e
 }
 
 func (e *Engine) Start() {
@@ -1048,6 +1256,12 @@ func (e *Engine) Update() {
 	e.world.EventBus.ProcessQueue()
 	e.world.Turn++
 	e.world.EventBus.Publish(event.NewTurnEndedEvent(e.world.Turn))
+}
+
+func (e *Engine) UpdateFrame() {
+	if e.previewSystem != nil {
+		e.previewSystem.Update(e.world)
+	}
 }
 
 func (e *Engine) TrackTileReveal(pos board.Position) {

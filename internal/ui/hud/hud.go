@@ -36,12 +36,14 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	resources := h.world.Entities.GetByType(domain.TypeResource)
 	creatures := h.world.Entities.GetByType(domain.TypeCreature)
 	
-	counters := fmt.Sprintf("R:%d C:%d", len(resources), len(creatures))
+	counters := fmt.Sprintf("R:%d C:%d | Diff: %s", len(resources), len(creatures), h.world.Difficulty.Level)
 	text.Draw(screen, counters, basicfont.Face7x13, x, y, color.White)
 	y += 18
 	
-	// Ligne 3-5: Contrôles essentiels uniquement (compact)
+	// Ligne 3-6: Contrôles essentiels (compact)
 	text.Draw(screen, "Click:Reveler M:Matcher", basicfont.Face7x13, x, y, color.Gray{150})
+	y += 13
+	text.Draw(screen, "F1-F4:Diff F5:Révéler Tout", basicfont.Face7x13, x, y, color.RGBA{100, 200, 255, 255})
 	y += 13
 	text.Draw(screen, "S:Spawn Shift+S:Toutes", basicfont.Face7x13, x, y, color.Gray{150})
 	y += 13

@@ -261,6 +261,10 @@ func (p *Plot) PushEntity(id string) {
 	p.EntitiesID = append(p.EntitiesID, id)
 }
 
+func (p *Plot) PushEntityToBottom(id string) {
+	p.EntitiesID = append([]string{id}, p.EntitiesID...)
+}
+
 func (p *Plot) PopEntity() (string, bool) {
 	if len(p.EntitiesID) == 0 {
 		return "", false
@@ -342,6 +346,16 @@ func (g *Grid) PlaceEntity(pos Position, entityID string) error {
 		return err
 	}
 	plot.PushEntity(entityID)
+	return nil
+}
+
+// PlaceEntityAtBottom ajoute l'entité à la base de la pile
+func (g *Grid) PlaceEntityAtBottom(pos Position, entityID string) error {
+	plot, err := g.Get(pos)
+	if err != nil {
+		return err
+	}
+	plot.PushEntityToBottom(entityID)
 	return nil
 }
 

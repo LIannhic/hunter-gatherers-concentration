@@ -162,6 +162,7 @@ go build -o game ./cmd/game
 | Fin de tour | Espace |
 | Désélectionner | Échap |
 | Changer de grille | 1-9 |
+| Difficulté | F1 à F4 |
 | Rotation plateau | + / - |
 | Reset rotation | R |
 | Spawn entités (debug) | S |

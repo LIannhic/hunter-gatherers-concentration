@@ -113,8 +113,75 @@ func (app *Application) setupGrids() {
 		fmt.Printf("Created grid: %s (%dx%d)\n", cfg.id, cfg.width, cfg.height)
 	}
 
-	// Définit le premier grid comme actif
-	app.World.SetCurrentGrid("forest")
+	// Définit le premier grid comme ID actif par défaut,
+	// mais on ne déclenche pas SetCurrentGrid ici pour éviter de lancer le Preview pendant le menu.
+	if len(app.World.GridOrder) > 0 {
+		app.World.CurrentGridID = app.World.GridOrder[0]
+	}
+}
+
+// FillGridRandomly remplit un grid avec des paires d'entités et des pièges
+func (app *Application) FillGridRandomly(gridID string) {
+	grid, ok := app.World.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	fmt.Printf("[INIT] Filling grid %s randomly...\n", gridID)
+
+	// 1. Liste toutes les positions possibles
+	var positions []entity.Position
+	for y := 0; y < grid.Height; y++ {
+		for x := 0; x < grid.Width; x++ {
+			positions = append(positions, entity.Position{X: x, Y: y})
+		}
+	}
+
+	// 2. Mélange les positions
+	rand.Shuffle(len(positions), func(i, j int) {
+		positions[i], positions[j] = positions[j], positions[i]
+	})
+
+	// 3. Types disponibles
+	resourceTypes := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
+	creatureTypes := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite"}
+
+	posIdx := 0
+	totalTiles := len(positions)
+
+	// On remplit par paires tant qu'on a de la place
+	for posIdx < totalTiles-1 {
+		// Choisit aléatoirement entre Ressource, Créature ou Piège
+		choice := rand.Float32()
+
+		if choice < 0.4 {
+			// Paire de Ressources (40% de chance)
+			resType := resourceTypes[rand.Intn(len(resourceTypes))]
+			fmt.Printf("  - [%s] Spawning resource pair: %s at %v and %v\n", gridID, resType, positions[posIdx], positions[posIdx+1])
+			app.World.SpawnResource(gridID, resType, positions[posIdx])
+			app.World.SpawnResource(gridID, resType, positions[posIdx+1])
+			posIdx += 2
+		} else if choice < 0.8 {
+			// Paire de Créatures (40% de chance)
+			creType := creatureTypes[rand.Intn(len(creatureTypes))]
+			fmt.Printf("  - [%s] Spawning creature pair: %s at %v and %v\n", gridID, creType, positions[posIdx], positions[posIdx+1])
+			app.World.SpawnCreature(gridID, creType, positions[posIdx])
+			app.World.SpawnCreature(gridID, creType, positions[posIdx+1])
+			posIdx += 2
+		} else {
+			// Paire de Pièges (20% de chance)
+			fmt.Printf("  - [%s] Spawning trap pair at %v and %v\n", gridID, positions[posIdx], positions[posIdx+1])
+			app.World.SpawnTrap(gridID, positions[posIdx])
+			app.World.SpawnTrap(gridID, positions[posIdx+1])
+			posIdx += 2
+		}
+	}
+
+	// Si le nombre de cases était impair, on met un dernier piège
+	if posIdx < totalTiles {
+		fmt.Printf("  - [%s] Spawning lone trap at %v\n", gridID, positions[posIdx])
+		app.World.SpawnTrap(gridID, positions[posIdx])
+	}
 }
 
 func (app *Application) fillGridWithTraps(gridID string) {
@@ -135,12 +202,7 @@ func (app *Application) fillGridWithTraps(gridID string) {
 				continue
 			}
 
-			trap := entity.NewBaseEntity(entity.TypeTrap)
-			trap.SetGridID(gridID)
-			trap.SetPosition(entity.Position{X: x, Y: y})
-
-			app.World.Entities.Register(&trap)
-			plot.PushEntity(string(trap.GetID()))
+			app.World.SpawnTrap(gridID, entity.Position{X: x, Y: y})
 		}
 	}
 }
@@ -154,37 +216,16 @@ func (app *Application) setupCallbacks() {
 		app.Engine.Update()
 	}
 
-	// Callback spawn entités de test
+	// Callback spawn entités de test (remplacé par remplissage aléatoire)
 	app.Input.OnSpawnEntities = func(gridID string) {
-		fmt.Printf("[ACTION] Spawn button pressed on grid %s\n", gridID)
+		fmt.Printf("[ACTION] Random fill button pressed on grid %s\n", gridID)
 		app.debug.Action()
 
 		if gridID == "" {
 			gridID = app.World.CurrentGridID
 		}
 
-		// Spawn quelques ressources
-		positions := []struct{ x, y int }{
-			{1, 1}, {2, 1}, // Paire dreamberry
-			{3, 2}, {4, 2}, // Paire moonstone
-			{1, 3}, {2, 3}, // Paire whispering_herb
-		}
-
-		resourceTypes := []string{
-			"dreamberry", "dreamberry",
-			"moonstone", "moonstone",
-			"whispering_herb", "whispering_herb",
-		}
-
-		for i, pos := range positions {
-			if i < len(resourceTypes) {
-				app.World.SpawnResource(gridID, resourceTypes[i], entity.Position{X: pos.x, Y: pos.y})
-			}
-		}
-
-		// Spawn une créature
-		app.World.SpawnCreature(gridID, "lumifly", entity.Position{X: 3, Y: 3})
-		app.World.SpawnCreature(gridID, "lumifly", entity.Position{X: 3, Y: 4})
+		app.FillGridRandomly(gridID)
 	}
 
 	// Callback spawn toutes les créatures de test (Shift+S)
@@ -309,22 +350,26 @@ func (app *Application) setupDebugCallbacks() {
 
 	// F5: Révéler toutes les tuiles (cheat)
 	app.Input.OnRevealAll = func(gridID string) {
-		if gridID == "" {
-			gridID = app.World.CurrentGridID
-		}
-		grid, ok := app.World.GetGrid(gridID)
-		if !ok {
-			return
-		}
-		fmt.Printf("[CHEAT] Révélation de toutes les tuiles sur %s\n", gridID)
-		for _, tile := range grid.Plots {
-			if len(tile.EntitiesID) == 0 {
-				continue
-			}
-			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-			if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
-				if e.GetState() == entity.Hidden {
-					e.SetState(entity.Revealed)
+		fmt.Println("[CHEAT] Révélation de TOUTES les tuiles du plateau")
+		for _, gID := range app.World.GridOrder {
+			if grid, ok := app.World.GetGrid(gID); ok {
+				for _, tile := range grid.Plots {
+					if len(tile.EntitiesID) == 0 {
+						continue
+					}
+					topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
+						if e.GetState() == entity.Hidden {
+							e.SetState(entity.Revealed)
+							// Publie un événement pour forcer le renderer à mettre à jour les animations/états
+							app.World.EventBus.Publish(event.NewEntityRevealedEvent(
+								entity.Position{X: tile.Position.X, Y: tile.Position.Y},
+								string(e.GetID()),
+								gID,
+								board.FlipCenter,
+							))
+						}
+					}
 				}
 			}
 		}
@@ -332,21 +377,25 @@ func (app *Application) setupDebugCallbacks() {
 
 	// F6: Cacher toutes les tuiles (cheat)
 	app.Input.OnHideAll = func(gridID string) {
-		if gridID == "" {
-			gridID = app.World.CurrentGridID
-		}
-		grid, ok := app.World.GetGrid(gridID)
-		if !ok {
-			return
-		}
-		fmt.Printf("[CHEAT] Masquage de toutes les tuiles sur %s\n", gridID)
-		for _, tile := range grid.Plots {
-			if len(tile.EntitiesID) == 0 {
-				continue
-			}
-			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-			if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
-				e.SetState(entity.Hidden)
+		fmt.Println("[CHEAT] Masquage de TOUTES les tuiles du plateau")
+		for _, gID := range app.World.GridOrder {
+			if grid, ok := app.World.GetGrid(gID); ok {
+				for _, tile := range grid.Plots {
+					if len(tile.EntitiesID) == 0 {
+						continue
+					}
+					topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
+						e.SetState(entity.Hidden)
+						// Publie un événement pour forcer le renderer
+						app.World.EventBus.Publish(event.NewEntityRevealedEvent(
+							entity.Position{X: tile.Position.X, Y: tile.Position.Y},
+							string(e.GetID()),
+							gID,
+							board.FlipCenter,
+						))
+					}
+				}
 			}
 		}
 	}
@@ -388,48 +437,9 @@ func (app *Application) setupEventSubscriptions() {
 
 // spawnInitialEntities crée quelques entités au démarrage sur différents grids
 func (app *Application) spawnInitialEntities() {
-	// 1. Spawn des entités réelles (Ressources et Créatures)
-	gridSpawns := map[string][]struct {
-		typ string
-		pos domain.Position
-	}{
-		"forest": {
-			{"dreamberry", domain.Position{X: 1, Y: 1}},
-			{"dreamberry", domain.Position{X: 2, Y: 1}},
-			{"whispering_herb", domain.Position{X: 4, Y: 3}},
-		},
-		"cave": {
-			{"moonstone", domain.Position{X: 1, Y: 2}},
-			{"moonstone", domain.Position{X: 2, Y: 3}},
-		},
-		"meadow": {
-			{"dreamberry", domain.Position{X: 3, Y: 3}},
-			{"whispering_herb", domain.Position{X: 4, Y: 4}},
-		},
-		"swamp": {
-			{"whispering_herb", domain.Position{X: 2, Y: 2}},
-			{"moonstone", domain.Position{X: 5, Y: 5}},
-		},
-	}
-
-	for gridID, spawns := range gridSpawns {
-		for _, spawn := range spawns {
-			app.World.SpawnResource(gridID, spawn.typ, entity.Position{X: spawn.pos.X, Y: spawn.pos.Y})
-		}
-	}
-
-	// Spawn les créatures
-	app.World.SpawnCreature("forest", "lumifly", entity.Position{X: 3, Y: 3})
-	app.World.SpawnCreature("cave", "shadowstalker", entity.Position{X: 4, Y: 2})
-	app.World.SpawnCreature("meadow", "burrower", entity.Position{X: 2, Y: 4})
-	app.World.SpawnCreature("swamp", "specter", entity.Position{X: 3, Y: 3})
-	app.World.SpawnCreature("forest", "echo_hound", entity.Position{X: 5, Y: 5})
-	app.World.SpawnCreature("meadow", "fleeing_sprite", entity.Position{X: 1, Y: 1})
-
-	// 2. COMPLÉTION : Remplit les cases encore vides avec des pièges (Traps)
-	fmt.Println("[INIT] Filling remaining tiles with traps...")
+	fmt.Println("[INIT] Filling all grids randomly...")
 	for _, gridID := range app.World.GridOrder {
-		app.fillGridWithTraps(gridID)
+		app.FillGridRandomly(gridID)
 	}
 }
 
@@ -465,6 +475,12 @@ func (app *Application) updateMenu() error {
 
 // updatePlaying gère le jeu en cours
 func (app *Application) updatePlaying() error {
+	// Met à jour les processus temps réel (comme les timers de preview)
+	app.Engine.UpdateFrame()
+
+	// Traite les événements en attente
+	app.World.EventBus.ProcessQueue()
+
 	// Gère les entrées
 	return app.Input.Update()
 }
@@ -493,6 +509,12 @@ func (app *Application) StartGame() {
 		fmt.Println("=== Spawning initial entities ===")
 		app.spawnInitialEntities()
 		fmt.Printf("=== Total entities: %d ===\n", app.World.Entities.Count())
+	}
+
+	// DÉCLENCHEMENT DU PREVIEW : On active la grille actuelle au démarrage réel du jeu.
+	// Cela force le PreviewSystem à s'activer sur une grille maintenant peuplée.
+	if app.World.CurrentGridID != "" {
+		app.World.SetCurrentGrid(app.World.CurrentGridID)
 	}
 }
 

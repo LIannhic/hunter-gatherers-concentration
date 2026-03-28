@@ -24,6 +24,8 @@ const (
 	TileMatched        Type = "tile_matched"
 	EntityCreated      Type = "entity_created"
 	EntityRemoved      Type = "entity_removed"
+	DifficultyChanged  Type = "difficulty_changed"
+	GridEntered        Type = "grid_entered"
 )
 
 // Event structure de base
@@ -217,6 +219,28 @@ func NewEntityRemovedEvent(entityID string, reason string) Event {
 		SourceID: entityID,
 		Payload: map[string]interface{}{
 			"reason": reason,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewDifficultyChangedEvent(level string) Event {
+	return Event{
+		Type:     DifficultyChanged,
+		SourceID: "system",
+		Payload: map[string]interface{}{
+			"level": level,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewGridEnteredEvent(gridID string) Event {
+	return Event{
+		Type:     GridEntered,
+		SourceID: "player",
+		Payload: map[string]interface{}{
+			"grid_id": gridID,
 		},
 		Timestamp: time.Now(),
 	}

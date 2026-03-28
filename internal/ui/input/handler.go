@@ -7,6 +7,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/usecase"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -85,6 +86,21 @@ func (h *Handler) Draw(screen *ebiten.Image) {
 	h.renderHighlights(screen)
 }
 
+// getEntityInfo retourne une description texte de l'entité pour la console
+func (h *Handler) getEntityInfo(ent entity.Entity) string {
+	if ent == nil {
+		return "Vide"
+	}
+	switch e := ent.(type) {
+	case *domain.Creature:
+		return fmt.Sprintf("Créature:%s", e.Species)
+	case *domain.Resource:
+		return fmt.Sprintf("Ressource:%s", e.ResourceType)
+	default:
+		return ent.GetType().String()
+	}
+}
+
 func (h *Handler) handleMouse() error {
 	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		return nil
@@ -130,7 +146,9 @@ func (h *Handler) handleMouse() error {
 			FlipDirection: flipDir,
 		}
 		if err := cmd.Execute(); err == nil {
-			fmt.Printf("[INPUT] Tuile révélée en %v sur %s (flip: %s)\n", pos, gridID, flipDir.String())
+			info := h.getEntityInfo(ent)
+			num := len(h.revealedTiles) + 1
+			fmt.Printf("[SÉLECTION] Choix #%d : Tuile révélée en %v sur %s -> %s\n", num, pos, gridID, info)
 			h.revealedTiles = append(h.revealedTiles, pos)
 		}
 
@@ -148,12 +166,9 @@ func (h *Handler) handleMouse() error {
 		}
 
 	case entity.Revealed:
-		// LOGIQUE : Si on clique sur une tuile piège déjà révélée, on la supprime (Mode Normal)
 		if ent.GetType() == entity.TypeTrap {
-			fmt.Printf("[INPUT] Suppression manuelle de la tuile piège en %v\n", pos)
+			fmt.Printf("[ACTION] Suppression du piège en %v\n", pos)
 			h.world.RemoveEntity(ent.GetID())
-
-			// On nettoie la liste des tuiles révélées pour ce tour si nécessaire
 			for i, p := range h.revealedTiles {
 				if p == pos {
 					h.revealedTiles = append(h.revealedTiles[:i], h.revealedTiles[i+1:]...)
@@ -164,10 +179,11 @@ func (h *Handler) handleMouse() error {
 		}
 
 		if h.selectedTile != nil && h.selectedGridID == gridID && *h.selectedTile == pos {
-			fmt.Println("[INPUT] Sélection annulée")
+			fmt.Printf("[SÉLECTION] Tuile en %v désélectionnée\n", pos)
 			h.ClearSelection()
 		} else {
-			fmt.Printf("[INPUT] Tuile sélectionnée : %v\n", pos)
+			info := h.getEntityInfo(ent)
+			fmt.Printf("[SÉLECTION] Tuile en %v sur %s sélectionnée : %s\n", pos, gridID, info)
 			h.selectedTile = &pos
 			h.selectedGridID = gridID
 		}
@@ -175,7 +191,7 @@ func (h *Handler) handleMouse() error {
 	return nil
 }
 
-// processMatchAttempt tente d'associer les 2 tuiles révélées (appelé après le délai)
+// processMatchAttempt tente d'associer les 2 tuiles révélées
 func (h *Handler) processMatchAttempt() {
 	if len(h.revealedTiles) != 2 {
 		h.isProcessing = false
@@ -219,7 +235,6 @@ func (h *Handler) processMatchAttempt() {
 		return
 	}
 
-	// CAS SPÉCIAL : Match de deux pièges
 	if e1.GetType() == entity.TypeTrap && e2.GetType() == entity.TypeTrap {
 		fmt.Println("[MATCH] ✅ Deux pièges appairés ! Ils sont supprimés.")
 		h.world.RemoveEntity(e1.GetID())
@@ -232,7 +247,7 @@ func (h *Handler) processMatchAttempt() {
 
 	// CAS ÉCHEC : Un piège et autre chose (Ressource ou Créature)
 	if e1.GetType() == entity.TypeTrap || e2.GetType() == entity.TypeTrap {
-		fmt.Println("[MATCH] ❌ Échec : Une tuile piège ne peut pas être appairée avec autre chose.")
+		fmt.Printf("[MATCH] ❌ Échec : %s ne peut pas être appairé avec un Piège.\n", h.getEntityInfo(e1))
 		h.revealedTiles = nil
 		h.isProcessing = false
 		h.ClearSelection()
@@ -240,14 +255,13 @@ func (h *Handler) processMatchAttempt() {
 		// On recache les entités
 		e1.SetState(entity.Hidden)
 		e2.SetState(entity.Hidden)
-
 		if h.OnTurnEnd != nil {
 			h.OnTurnEnd()
 		}
 		return
 	}
 
-	fmt.Printf("[MATCH] Tentative d'association entre %v et %v...\n", pos1, pos2)
+	fmt.Printf("[MATCH] Comparaison de la paire : %s vs %s\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
 
 	cmd := &usecase.MatchTilesCommand{
 		World:    h.world,
@@ -256,19 +270,17 @@ func (h *Handler) processMatchAttempt() {
 		Pos1:     pos1,
 		Pos2:     pos2,
 		OnSuccess: func() {
-			fmt.Println("[MATCH] ✅ Association réussie ! Les tuiles sont supprimées.")
+			fmt.Printf("[MATCH] ✅ Succès ! Paire de %s trouvée.\n", h.getEntityInfo(e1))
 			h.revealedTiles = nil
 			h.isProcessing = false
 			h.ClearSelection()
 		},
 		OnFailure: func() {
-			fmt.Println("[MATCH] ❌ Association échouée ! Les tuiles sont retournées.")
+			fmt.Printf("[MATCH] ❌ Échec ! %s et %s ne correspondent pas.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
 			h.revealedTiles = nil
 			h.isProcessing = false
 			h.ClearSelection()
-			// Passe le tour
 			if h.OnTurnEnd != nil {
-				fmt.Println("[TURN] Fin du tour après échec")
 				h.OnTurnEnd()
 			}
 		},
@@ -283,51 +295,51 @@ func (h *Handler) processMatchAttempt() {
 
 func (h *Handler) handleKeyboard() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
-		fmt.Println("[KEY] Touche M pressée : tentative de Match...")
 		h.tryMatchSelected()
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		if h.OnTurnEnd != nil {
-			fmt.Println("[KEY] Espace : Fin du tour")
+			fmt.Println("[TOUR] Passage au tour suivant")
 			h.OnTurnEnd()
 		}
+	}
+
+	// Changement de difficulté (Touches F1, F2, F3, F4)
+	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
+		h.setDifficulty(meta.LevelEasy)
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF2) {
+		h.setDifficulty(meta.LevelNormal)
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF3) {
+		h.setDifficulty(meta.LevelHard)
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF4) {
+		h.setDifficulty(meta.LevelInsane)
 	}
 
 	// S: Spawn entités de base, Shift+S: Spawn toutes les créatures
 	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
 		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			fmt.Println("[KEY] Shift+S : Spawn toutes les créatures")
 			if h.OnSpawnAllCreatures != nil {
 				h.OnSpawnAllCreatures(h.GetCurrentGridID())
 			}
 		} else {
-			fmt.Println("[KEY] S : Spawn entités")
 			if h.OnSpawnEntities != nil {
 				h.OnSpawnEntities(h.GetCurrentGridID())
 			}
 		}
 	}
 
-	// F9: Spawn créature aléatoire
 	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
-		fmt.Println("[KEY] F9 : Spawn créature aléatoire")
 		if h.OnSpawnRandomCreature != nil {
 			h.OnSpawnRandomCreature(h.GetCurrentGridID())
 		}
 	}
 
-	// F3: Forcer le prochain tour
-	if inpututil.IsKeyJustPressed(ebiten.KeyF3) {
-		fmt.Println("[KEY] F3 : Forcer le prochain tour")
-		if h.OnForceTurn != nil {
-			h.OnForceTurn()
-		}
-	}
-
 	// F5: Cheat - révéler toutes les tuiles
 	if inpututil.IsKeyJustPressed(ebiten.KeyF5) {
-		fmt.Println("[KEY] F5 : CHEAT - Révéler toutes les tuiles")
 		if h.OnRevealAll != nil {
 			h.OnRevealAll(h.GetCurrentGridID())
 		}
@@ -335,17 +347,8 @@ func (h *Handler) handleKeyboard() {
 
 	// F6: Cheat - cacher toutes les tuiles
 	if inpututil.IsKeyJustPressed(ebiten.KeyF6) {
-		fmt.Println("[KEY] F6 : CHEAT - Cacher toutes les tuiles")
 		if h.OnHideAll != nil {
 			h.OnHideAll(h.GetCurrentGridID())
-		}
-	}
-
-	// F10: Toggle mouvement automatique
-	if inpututil.IsKeyJustPressed(ebiten.KeyF10) {
-		fmt.Println("[KEY] F10 : Toggle mouvement automatique")
-		if h.OnToggleAutoMove != nil {
-			h.OnToggleAutoMove()
 		}
 	}
 
@@ -361,7 +364,7 @@ func (h *Handler) handleKeyboard() {
 		if inpututil.IsKeyJustPressed(key) {
 			if i < len(h.world.GridOrder) {
 				gridID := h.world.GridOrder[i]
-				fmt.Printf("[KEY] Touche %d : Switch vers %s\n", i+1, gridID)
+				fmt.Printf("[INPUT] Changement de grille : -> %s\n", gridID)
 				if h.OnSwitchGrid != nil {
 					h.OnSwitchGrid(gridID)
 					h.ClearSelection()
@@ -371,39 +374,48 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-		fmt.Println("[KEY] Echap : Sélection nettoyée")
+		fmt.Println("[INPUT] Sélection annulée")
 		h.ClearSelection()
 	}
 
-	// Rotation du plateau
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
-		fmt.Println("[KEY] R : Réinitialisation de la rotation")
+		fmt.Println("[ACTION] Réinitialisation de la rotation")
 		if h.OnResetRotation != nil {
 			h.OnResetRotation()
 		}
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyEqual) || inpututil.IsKeyJustPressed(ebiten.KeyKPEqual) {
-		fmt.Println("[KEY] + : Rotation horaire")
 		if h.OnRotateBoard != nil {
 			h.OnRotateBoard(15)
 		}
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyMinus) || inpututil.IsKeyJustPressed(ebiten.KeyKPSubtract) {
-		fmt.Println("[KEY] - : Rotation anti-horaire")
 		if h.OnRotateBoard != nil {
 			h.OnRotateBoard(-15)
 		}
 	}
 
-	// Touche $ pour retourner au menu
 	if inpututil.IsKeyJustPressed(ebiten.KeyBackslash) {
 		fmt.Println("[KEY] \\ : Retour au menu")
 		if h.OnExitToMenu != nil {
 			h.OnExitToMenu()
 		}
 	}
+}
+
+func (h *Handler) setDifficulty(level meta.DifficultyLevel) {
+	settings := meta.GetSettings(level)
+	h.world.Difficulty = settings
+	fmt.Printf("[DIFFICULTÉ] Niveau changé pour : %s\n", level)
+	h.world.EventBus.PublishImmediate(domain.Event{
+		Type:     domain.EventType("difficulty_changed"),
+		SourceID: "player",
+		Payload: map[string]interface{}{
+			"level": string(level),
+		},
+	})
 }
 
 func (h *Handler) tryMatchSelected() {
@@ -433,7 +445,13 @@ func (h *Handler) tryMatchSelected() {
 		}
 
 		if ent.GetState() == entity.Revealed {
-			fmt.Printf("[MATCH] Comparaison entre %v et %v...\n", *h.selectedTile, plot.Position)
+			id1 := ""
+			if tile1, err := grid.Get(*h.selectedTile); err == nil && len(tile1.EntitiesID) > 0 {
+				id1 = tile1.EntitiesID[len(tile1.EntitiesID)-1]
+			}
+			e1, _ := h.world.Entities.Get(entity.ID(id1))
+
+			fmt.Printf("[MATCH] Comparaison manuelle : %s vs %s\n", h.getEntityInfo(e1), h.getEntityInfo(ent))
 
 			cmd := &usecase.MatchTilesCommand{
 				World:    h.world,
@@ -442,11 +460,11 @@ func (h *Handler) tryMatchSelected() {
 				Pos1:     *h.selectedTile,
 				Pos2:     plot.Position,
 				OnSuccess: func() {
-					fmt.Println("[MATCH] Paire trouvée !")
+					fmt.Println("[MATCH] ✅ Succès !")
 					h.ClearSelection()
 				},
 				OnFailure: func() {
-					fmt.Println("[MATCH] Échec ! Fin du tour.")
+					fmt.Println("[MATCH] ❌ Échec !")
 					h.ClearSelection()
 					if h.OnTurnEnd != nil {
 						h.OnTurnEnd()
@@ -455,7 +473,7 @@ func (h *Handler) tryMatchSelected() {
 			}
 
 			if err := cmd.Execute(); err != nil {
-				fmt.Printf("[MATCH] Erreur lors de l'exécution: %v\n", err)
+				fmt.Printf("[MATCH] Erreur : %v\n", err)
 			}
 			return
 		}
@@ -515,8 +533,6 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 			highlightColor = color.RGBA{255, 255, 0, 100}
 		case entity.Revealed:
 			highlightColor = color.RGBA{0, 255, 255, 100}
-		case entity.Blocked:
-			return
 		default:
 			highlightColor = color.RGBA{255, 255, 255, 50}
 		}
@@ -545,7 +561,6 @@ func (h *Handler) GetCurrentGridID() string {
 func (h *Handler) ClearSelection() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
-	// Note: on ne réinitialise pas revealedTiles ici car c'est géré par processMatchAttempt
 }
 
 // ResetGameState réinitialise l'état du jeu (pour retour au menu)
