@@ -242,6 +242,9 @@ func (h *Handler) processMatchAttempt() {
 		h.revealedTiles = nil
 		h.isProcessing = false
 		h.ClearSelection()
+		if h.OnTurnEnd != nil {
+			h.OnTurnEnd()
+		}
 		return
 	}
 
@@ -274,6 +277,9 @@ func (h *Handler) processMatchAttempt() {
 			h.revealedTiles = nil
 			h.isProcessing = false
 			h.ClearSelection()
+			if h.OnTurnEnd != nil {
+				h.OnTurnEnd()
+			}
 		},
 		OnFailure: func() {
 			fmt.Printf("[MATCH] ❌ Échec ! %s et %s ne correspondent pas.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
@@ -374,8 +380,12 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-		fmt.Println("[INPUT] Sélection annulée")
-		h.ClearSelection()
+		fmt.Println("[INPUT] Abandon de la partie")
+		if h.OnExitToMenu != nil {
+			h.OnExitToMenu()
+		} else {
+			h.ClearSelection()
+		}
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
@@ -451,7 +461,7 @@ func (h *Handler) tryMatchSelected() {
 			}
 			e1, _ := h.world.Entities.Get(entity.ID(id1))
 
-			fmt.Printf("[MATCH] Comparaison manuelle : %s vs %s\n", h.getEntityInfo(e1), h.getEntityInfo(ent))
+			fmt.Printf("[MATCH] Comparaison manuelle : %s vs %s\\n", h.getEntityInfo(e1), h.getEntityInfo(ent))
 
 			cmd := &usecase.MatchTilesCommand{
 				World:    h.world,
@@ -462,6 +472,9 @@ func (h *Handler) tryMatchSelected() {
 				OnSuccess: func() {
 					fmt.Println("[MATCH] ✅ Succès !")
 					h.ClearSelection()
+					if h.OnTurnEnd != nil {
+						h.OnTurnEnd()
+					}
 				},
 				OnFailure: func() {
 					fmt.Println("[MATCH] ❌ Échec !")

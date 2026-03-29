@@ -11,6 +11,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/resource"
 )
 
@@ -31,6 +32,9 @@ type World struct {
 	MaxTurns   int
 	PlayerID   string
 
+	// Player logic
+	Player *player.Player
+
 	// Grids actifs pour le joueur (pour navigation entre grids)
 	CurrentGridID string
 
@@ -50,6 +54,7 @@ type World struct {
 }
 
 func NewWorld() *World {
+	p := player.New("player_1")
 	return &World{
 		Grids:                make(map[string]*board.Grid),
 		GridOrder:            make([]string, 0),
@@ -57,11 +62,12 @@ func NewWorld() *World {
 		Components:           component.NewStore(),
 		EventBus:             event.NewBus(),
 		Turn:                 0,
-		MaxTurns:             100,
+		MaxTurns:             p.Stats.MaxSanity,
 		CurrentGridID:        "",
 		Difficulty:           meta.GetSettings(meta.LevelNormal),
 		CreatureFactory:      creature.NewFactory(),
 		ResourceFactory:      resource.NewFactory(),
+		Player:               p,
 		playerPosition:       entity.Position{X: 0, Y: 0},
 		tilesFlippedThisTurn: make([]board.Position, 0),
 		lastTurnNumber:       0,
@@ -113,6 +119,26 @@ func (w *World) GetGridForEntity(entityID string) (*board.Grid, bool) {
 	return w.GetGrid(e.GetGridID())
 }
 
+// HasResourceAt vérifie s'il y a déjà une ressource à une position donnée
+func (w *World) HasResourceAt(gridID string, pos board.Position) bool {
+	grid, ok := w.Grids[gridID]
+	if !ok {
+		return false
+	}
+	plot, err := grid.Get(pos)
+	if err != nil {
+		return false
+	}
+	for _, id := range plot.EntitiesID {
+		if e, ok := w.Entities.Get(entity.ID(id)); ok {
+			if e.GetType() == entity.TypeResource {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (w *World) SetPlayerPosition(pos entity.Position) {
 	w.playerPosition = pos
 }
@@ -156,8 +182,9 @@ func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) 
 		return nil, err
 	}
 
-	if len(plot.EntitiesID) > 0 {
-		return nil, fmt.Errorf("position %v déjà occupée", pos)
+	// Uniquement une ressource par parcelle
+	if w.HasResourceAt(gridID, boardPos) {
+		return nil, fmt.Errorf("position %v contient déjà une ressource", pos)
 	}
 	if plot.Modifier.Obstructed {
 		return nil, fmt.Errorf("position %v est obstruée", pos)
@@ -407,7 +434,8 @@ func (s *PropagationSystem) Update(world *World) {
 		neighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
 
 		for _, neighbor := range neighbors {
-			if len(neighbor.EntitiesID) > 0 {
+			// Ne propage pas s'il y a déjà une ressource sur la case cible
+			if world.HasResourceAt(e.GetGridID(), neighbor.Position) {
 				continue
 			}
 
@@ -954,7 +982,9 @@ func (wa *worldAdapter) IsValidMove(pos entity.Position) bool {
 
 	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
-		return ent.GetType() == entity.TypeTrap
+		if ent.GetType() == entity.TypeTrap {
+			return true
+		}
 	}
 
 	return false
@@ -1147,7 +1177,7 @@ func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
 }
 
 func (s *PreviewSystem) revealHalfPairs(world *World, entities []entity.Entity, gridID string) {
-	seenTypes := make(map[string]bool)
+	typeGroups := make(map[string][]entity.Entity)
 	for _, e := range entities {
 		resType := ""
 		if res, ok := e.(*resource.Resource); ok {
@@ -1156,12 +1186,26 @@ func (s *PreviewSystem) revealHalfPairs(world *World, entities []entity.Entity, 
 			resType = "cre_" + cre.Species
 		}
 
-		if resType != "" && !seenTypes[resType] {
+		if resType != "" {
+			typeGroups[resType] = append(typeGroups[resType], e)
+		}
+	}
+
+	ratio := world.Difficulty.PreviewRatio
+	for _, group := range typeGroups {
+		// Mélange pour ne pas toujours révéler les mêmes positions
+		rand.Shuffle(len(group), func(i, j int) {
+			group[i], group[j] = group[j], group[i]
+		})
+
+		// On révèle un nombre de tuiles proportionnel au ratio (0.5 pour Normal)
+		countToReveal := int(float64(len(group)) * ratio)
+		for i := 0; i < countToReveal; i++ {
+			e := group[i]
 			if e.GetState() == entity.Hidden {
 				e.SetState(entity.Revealed)
 				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
-				seenTypes[resType] = true
 			}
 		}
 	}
@@ -1255,6 +1299,12 @@ func (e *Engine) Update() {
 
 	e.world.EventBus.ProcessQueue()
 	e.world.Turn++
+
+	// Diminue la santé mentale à chaque tour
+	if e.world.Player != nil {
+		e.world.Player.ConsumeSanity(1)
+	}
+
 	e.world.EventBus.Publish(event.NewTurnEndedEvent(e.world.Turn))
 }
 

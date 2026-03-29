@@ -109,6 +109,10 @@ type MatchTilesCommand struct {
 }
 
 func (c *MatchTilesCommand) CanExecute() bool {
+	if c.World.Player.Stats.Mana <= 0 {
+		return false
+	}
+
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
 		return false
@@ -146,6 +150,9 @@ func (c *MatchTilesCommand) Execute() error {
 	if !c.CanExecute() {
 		return errors.New("cannot match these tiles")
 	}
+
+	// Consomme 1 point de mana par tentative
+	c.World.Player.ConsumeMana(1)
 
 	grid, _ := c.World.GetGrid(c.GridID)
 
@@ -211,7 +218,15 @@ func (c *MatchTilesCommand) Execute() error {
 
 		return nil
 	} else {
-		// Échec : recacher les entités
+		// Échec : Appliquer les pénalités de santé si des créatures sont impliquées
+		if isCre1 {
+			c.World.Player.TakeDamage(1, "creature_fail")
+		}
+		if isCre2 {
+			c.World.Player.TakeDamage(1, "creature_fail")
+		}
+
+		// Recacher les entités
 		entity1.SetState(entity.Hidden)
 		entity2.SetState(entity.Hidden)
 
@@ -232,6 +247,11 @@ func (c *EndTurnCommand) CanExecute() bool {
 }
 
 func (c *EndTurnCommand) Execute() error {
+	// Consomme 1 point de sanité par tour passé
+	if c.World.Player.Stats.Sanity > 0 {
+		c.World.Player.Stats.Sanity--
+	}
+
 	c.World.EventBus.Publish(event.NewTurnEndedEvent(c.World.Turn))
 	c.World.EventBus.ProcessQueue()
 

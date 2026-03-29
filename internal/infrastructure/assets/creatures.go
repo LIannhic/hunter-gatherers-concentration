@@ -61,6 +61,24 @@ var (
 		Eye:       color.RGBA{80, 60, 120, 255},   // Violet foncé
 		Bg:        color.RGBA{50, 65, 80, 255},
 	}
+
+	// Specter - Spectre
+	SpecterPalette = CreaturePalette{
+		Body:      color.RGBA{200, 200, 255, 180}, // Bleu spectral translucide
+		Highlight: color.RGBA{255, 255, 255, 220}, // Blanc brillant
+		Shadow:    color.RGBA{100, 100, 150, 150}, // Bleu profond
+		Eye:       color.RGBA{0, 255, 255, 255},   // Cyan électrique
+		Bg:        color.RGBA{40, 40, 60, 255},
+	}
+
+	// Echo Hound - Chien d'écho
+	EchoHoundPalette = CreaturePalette{
+		Body:      color.RGBA{70, 70, 70, 255},    // Gris foncé (béton/ombre)
+		Highlight: color.RGBA{180, 180, 180, 255}, // Argenté
+		Shadow:    color.RGBA{30, 30, 30, 255},    // Noir
+		Eye:       color.RGBA{0, 255, 0, 255},     // Vert radioactif
+		Bg:        color.RGBA{50, 50, 50, 255},
+	}
 )
 
 // generateLumifly crée l'icône d'une luciole
@@ -218,6 +236,65 @@ func generateFlutterwing(size int, p CreaturePalette) *ebiten.Image {
 	return img
 }
 
+// generateSpecter crée l'icône d'un spectre
+func generateSpecter(size int, p CreaturePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+
+	centerX := float32(size / 2)
+	centerY := float32(size / 2)
+
+	// Corps vaporeux (translucide)
+	bodyColor := p.Body
+	vector.DrawFilledCircle(img, centerX, centerY-5, 18, bodyColor, true)
+
+	// Traîne vaporeuse
+	vector.DrawFilledRect(img, centerX-14, centerY-5, 28, 20, bodyColor, true)
+	vector.DrawFilledCircle(img, centerX-7, centerY+15, 8, bodyColor, true)
+	vector.DrawFilledCircle(img, centerX+7, centerY+15, 8, bodyColor, true)
+
+	// Yeux cyan électriques
+	vector.DrawFilledCircle(img, centerX-6, centerY-8, 3, p.Eye, true)
+	vector.DrawFilledCircle(img, centerX+6, centerY-8, 3, p.Eye, true)
+
+	// Halo de lumière
+	haloColor := color.RGBA{150, 255, 255, 50}
+	vector.DrawFilledCircle(img, centerX, centerY-5, 25, haloColor, true)
+
+	return img
+}
+
+// generateEchoHound crée l'icône d'un chien d'écho
+func generateEchoHound(size int, p CreaturePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+
+	centerX := float32(size / 2)
+	centerY := float32(size / 2)
+
+	// Corps rectangulaire (plus "canin")
+	vector.DrawFilledRect(img, centerX-20, centerY-5, 40, 15, p.Body, true)
+
+	// Tête
+	vector.DrawFilledRect(img, centerX-5, centerY-20, 25, 18, p.Body, true)
+
+	// Oreilles triangulaires (hautes)
+	vector.DrawFilledRect(img, centerX-2, centerY-28, 6, 10, p.Shadow, true)
+	vector.DrawFilledRect(img, centerX+12, centerY-28, 6, 10, p.Shadow, true)
+
+	// Yeux verts radioactifs
+	vector.DrawFilledCircle(img, centerX+8, centerY-14, 4, p.Eye, true)
+	vector.DrawFilledCircle(img, centerX+18, centerY-14, 4, p.Eye, true)
+
+	// Pattes fines (indiquant la vitesse)
+	vector.DrawFilledRect(img, centerX-15, centerY+10, 4, 15, p.Shadow, true)
+	vector.DrawFilledRect(img, centerX-5, centerY+10, 4, 15, p.Shadow, true)
+	vector.DrawFilledRect(img, centerX+5, centerY+10, 4, 15, p.Shadow, true)
+	vector.DrawFilledRect(img, centerX+15, centerY+10, 4, 15, p.Shadow, true)
+
+	return img
+}
+
 // generateGenericCreature crée une icône de créature générique
 func generateGenericCreature(size int, p CreaturePalette) *ebiten.Image {
 	img := ebiten.NewImage(size, size)
@@ -239,5 +316,3 @@ func generateGenericCreature(size int, p CreaturePalette) *ebiten.Image {
 
 	return img
 }
-
-

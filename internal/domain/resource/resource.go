@@ -155,8 +155,9 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 			DegradeRate:  2,
 		})
 		r.SetMatchable(component.Matchable{
+			MatchID:      "whispering_herb",
 			NarrativeTag: "healing",
-			MatchTypes:   []string{"narrative", "elemental"},
+			MatchTypes:   []string{"identical", "narrative", "elemental"},
 			Element:      "life",
 		})
 

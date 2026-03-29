@@ -117,6 +117,14 @@ func (p *Player) ConsumeMana(amount int) bool {
 	return false
 }
 
+// ConsumeSanity diminue la santé mentale
+func (p *Player) ConsumeSanity(amount int) {
+	p.Stats.Sanity -= amount
+	if p.Stats.Sanity < 0 {
+		p.Stats.Sanity = 0
+	}
+}
+
 // TakeDamage applique des dégâts
 func (p *Player) TakeDamage(amount int, damageType string) {
 	resistance := p.Skills.Resistances[damageType]

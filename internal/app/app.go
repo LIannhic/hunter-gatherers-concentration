@@ -12,6 +12,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/hud"
@@ -19,6 +20,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/renderer"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/usecase"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"golang.org/x/image/font/basicfont"
 )
@@ -481,12 +483,22 @@ func (app *Application) updatePlaying() error {
 	// Traite les événements en attente
 	app.World.EventBus.ProcessQueue()
 
+	// Vérification de la mort
+	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
+		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
+		app.State = domain.StateGameOver
+	}
+
 	// Gère les entrées
 	return app.Input.Update()
 }
 
 // updateGameOver gère l'écran de fin
 func (app *Application) updateGameOver() error {
+	// Retour au menu si on appuie sur une touche
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+		app.ReturnToMenu()
+	}
 	return nil
 }
 
@@ -499,6 +511,13 @@ func (app *Application) StartGame() {
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
 
 	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
+
+	// Réinitialise le joueur
+	app.World.Player = player.New("player_1")
+
+	// Réinitialise le monde (tour, etc.)
+	app.World.Turn = 0
+	app.World.MaxTurns = app.World.Player.Stats.MaxSanity
 
 	// Démarre l'engine (nécessaire pour les mouvements des créatures)
 	app.Engine.Start()
@@ -534,6 +553,12 @@ func (app *Application) ReturnToMenu() {
 	// Réinitialise la rotation du plateau
 	app.Renderer.SetBoardRotation(0)
 
+	// Vide les boards pour la prochaine partie
+	for _, gridID := range app.World.GridOrder {
+		cmd := &usecase.ClearBoardCommand{World: app.World, GridID: gridID}
+		cmd.Execute()
+	}
+
 	fmt.Println("[MENU] Retour au menu principal")
 }
 
@@ -560,14 +585,18 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 	// Fond noir
 	screen.Fill(color.Black)
 
+	// Calcule la position de la barre latérale
+	width, _ := app.Layout(0, 0)
+	hudX := width - 280 // Largeur fixe pour la barre latérale
+
 	// Dessine le plateau
 	app.Renderer.Render(screen, app.World)
 
 	// Dessine les surbrillances de sélection
 	app.Input.Draw(screen)
 
-	// Dessine le HUD
-	app.HUD.Render(screen)
+	// Dessine le HUD dans la barre latérale
+	app.HUD.Render(screen, hudX)
 
 	// Message si aucune entité
 	if app.World.Entities.Count() == 0 {
@@ -581,6 +610,7 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 func (app *Application) drawGameOver(screen *ebiten.Image) {
 	screen.Fill(color.Black)
 	text.Draw(screen, "GAME OVER", basicfont.Face7x13, 350, 300, color.White)
+	text.Draw(screen, "Statistiques epuisees. Appuyez sur Echap pour recommencer.", basicfont.Face7x13, 200, 350, color.Gray{180})
 }
 
 // findEmptyPosition trouve une position vide aléatoire sur le grid
@@ -620,7 +650,7 @@ func (app *Application) Layout(outsideWidth, outsideHeight int) (int, int) {
 	// Calcule la taille nécessaire pour afficher tous les grids
 	numGrids := len(app.World.Grids)
 	if numGrids == 0 {
-		return 800, 600
+		return 1100, 600
 	}
 
 	// Prend le premier grid comme référence de taille
@@ -635,12 +665,12 @@ func (app *Application) Layout(outsideWidth, outsideHeight int) (int, int) {
 	gridsPerRow := 2
 	numRows := (numGrids + gridsPerRow - 1) / gridsPerRow
 
-	// Largeur suffisante pour la grille + le HUD
-	width := gridWidth*gridsPerRow + 30*(gridsPerRow+1) + 300
-	height := gridHeight*numRows + 50*(numRows+1) + 100
+	// Largeur suffisante pour la grille (avec espacement) + la barre latérale du HUD (300px)
+	width := gridWidth*gridsPerRow + 50*(gridsPerRow+1) + 300
+	height := gridHeight*numRows + 100*(numRows+1)
 
-	if width < 800 {
-		width = 800
+	if width < 1100 {
+		width = 1100
 	}
 	if height < 600 {
 		height = 600

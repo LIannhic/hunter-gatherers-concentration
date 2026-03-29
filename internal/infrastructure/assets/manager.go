@@ -13,6 +13,7 @@
 package assets
 
 import (
+	"fmt"
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -123,12 +124,25 @@ func (m *Manager) generateAllAssets() {
 	m.images["tile_empty"] = m.images["tile_trap"]
 
 	// === RESSOURCES ===
-	// Dreamberry
-	m.images["resource_dreamberry"] = generateDreamberry(size, DreamberryPalette)
+	// Dreamberry (avec stades)
+	dreamberryStages := []string{"bourgeon", "fleur", "fruit", "gâté"}
+	for _, stage := range dreamberryStages {
+		m.images[fmt.Sprintf("resource_dreamberry_%s", stage)] = generateDreamberry(size, DreamberryPalette, stage)
+	}
+	// Par défaut pour compatibilité
+	m.images["resource_dreamberry"] = m.images["resource_dreamberry_fruit"]
+
 	// Moonstone
 	m.images["resource_moonstone"] = generateMoonstone(size, MoonstonePalette)
-	// Whispering Herb
-	m.images["resource_whispering_herb"] = generateWhisperingHerb(size, WhisperingHerbPalette)
+
+	// Whispering Herb (avec stades)
+	herbStages := []string{"graine", "pousse", "mature"}
+	for _, stage := range herbStages {
+		m.images[fmt.Sprintf("resource_whispering_herb_%s", stage)] = generateWhisperingHerb(size, WhisperingHerbPalette, stage)
+	}
+	// Par défaut pour compatibilité
+	m.images["resource_whispering_herb"] = m.images["resource_whispering_herb_mature"]
+
 	// Shadow Essence
 	m.images["resource_shadow_essence"] = generateShadowEssence(size, ShadowEssencePalette)
 	// Crystal Shard
@@ -143,6 +157,12 @@ func (m *Manager) generateAllAssets() {
 	m.images["creature_burrower"] = generateBurrower(size, BurrowerPalette)
 	// Flutterwing
 	m.images["creature_flutterwing"] = generateFlutterwing(size, FlutterwingPalette)
+	// Specter
+	m.images["creature_specter"] = generateSpecter(size, SpecterPalette)
+	// Echo Hound
+	m.images["creature_echo_hound"] = generateEchoHound(size, EchoHoundPalette)
+	// Fleeing Sprite (utilise le skin de Flutterwing par défaut)
+	m.images["creature_fleeing_sprite"] = m.images["creature_flutterwing"]
 
 	// === EFFETS DE FLIP ===
 	m.images["flip_overlay_top"] = generateFlipEffectOverlay(size, "top")
@@ -208,12 +228,20 @@ func (m *Manager) generateUIIcons(size int) {
 	m.images["ui_flip"] = flipImg
 }
 
-// GetResourceIcon retourne l'icône pour une ressource
-func (m *Manager) GetResourceIcon(resourceType string) *ebiten.Image {
+// GetResourceIcon retourne l'icône pour une ressource selon son type et éventuellement son stade
+func (m *Manager) GetResourceIcon(resourceType string, stage string) *ebiten.Image {
 	key := "resource_" + resourceType
+	if stage != "" {
+		stageKey := key + "_" + stage
+		if img, ok := m.images[stageKey]; ok {
+			return img
+		}
+	}
+
 	if img, ok := m.images[key]; ok {
 		return img
 	}
+
 	// Génère une icône générique si non trouvée
 	return generateGenericResource(64, ResourcePalette{
 		Primary:   color.RGBA{150, 150, 150, 255},

@@ -63,7 +63,7 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		assets:         am,
 		tileSize:       64,
 		gridOffsetX:    50,
-		gridOffsetY:    100,
+		gridOffsetY:    50, // Remonté un peu pour gagner de la place
 		gridSpacing:    30,
 		gridsPerRow:    2,
 		flipAnimations: make(map[string]*FlipAnimation),
@@ -164,27 +164,10 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 	// Met à jour les animations
 	r.UpdateAnimations()
 
-	// Affiche le grid actuel et la rotation (en haut, pas de titre qui double le HUD)
-	currentGridInfo := fmt.Sprintf("Grid: %s", world.CurrentGridID)
-	if r.boardRotation != 0 {
-		currentGridInfo += fmt.Sprintf(" (Rot: %.0f°)", r.boardRotation)
-	}
-	text.Draw(screen, currentGridInfo, basicfont.Face7x13, 250, 20, color.RGBA{255, 255, 0, 255})
-
-	// Message d'aide rapide (une seule ligne)
-	helpText := "S:Spawn | C:Clear | SPACE:Tour | 1-9:Grid | F9:Random"
-	if r.boardRotation != 0 {
-		helpText += " | R:Reset Rot"
-	}
-	text.Draw(screen, helpText, basicfont.Face7x13, 250, 35, color.Gray{180})
-
 	// Dessine tous les grids dans l'ordre de création (évite le clignotement)
 	for _, gridID := range world.GridOrder {
 		r.renderGrid(screen, gridID, world)
 	}
-
-	// Dessine les infos sur les entités à droite
-	r.renderEntityInfo(screen, world)
 }
 
 // renderGrid dessine un grid spécifique
@@ -379,7 +362,8 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e entity.
 
 	case *domain.Resource:
 		// Icône de ressource - centrée dans la tuile
-		icon := r.assets.GetResourceIcon(ent.ResourceType)
+		stageName := ent.Lifecycle.GetCurrentStageName()
+		icon := r.assets.GetResourceIcon(ent.ResourceType, stageName)
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(-float64(r.tileSize)/2, -float64(r.tileSize)/2)
 		op.GeoM.Scale(0.75, 0.75)
@@ -387,7 +371,6 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e entity.
 		screen.DrawImage(icon, op)
 
 		// Indicateur de stade
-		stageName := ent.Lifecycle.GetCurrentStageName()
 		if len(stageName) > 0 {
 			label := string(stageName[0])
 			text.Draw(screen, label, basicfont.Face7x13, x+r.tileSize-12, y+r.tileSize-5, color.White)
@@ -398,73 +381,6 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y int, e entity.
 // renderEntity dessine une entité sur une tuile (ancienne méthode pour compatibilité)
 func (r *BoardRenderer) renderEntity(screen *ebiten.Image, x, y int, e entity.Entity) {
 	r.renderEntityAt(screen, x, y, e)
-}
-
-// renderEntityInfo affiche les informations sur les entités visibles (panneau de droite)
-func (r *BoardRenderer) renderEntityInfo(screen *ebiten.Image, world *domain.World) {
-	// Calcule la position d'info à droite de tous les grids
-	maxWidth := 0
-	for _, gridID := range world.GridOrder {
-		if grid, ok := world.GetGrid(gridID); ok {
-			if grid.Width > maxWidth {
-				maxWidth = grid.Width
-			}
-		}
-	}
-
-	infoX := r.gridOffsetX + maxWidth*r.tileSize*r.gridsPerRow + r.gridSpacing*(r.gridsPerRow+1)
-	if infoX < 500 {
-		infoX = 500
-	}
-	infoY := r.gridOffsetY + 30
-
-	text.Draw(screen, "-- ENTITIES --", basicfont.Face7x13, infoX, infoY, color.RGBA{100, 255, 100, 255})
-	infoY += 18
-
-	for _, gridID := range world.GridOrder {
-		resources := 0
-		creatures := 0
-
-		for _, e := range world.Entities.GetByType(entity.TypeResource) {
-			if e.GetGridID() == gridID {
-				resources++
-			}
-		}
-		for _, e := range world.Entities.GetByType(entity.TypeCreature) {
-			if e.GetGridID() == gridID {
-				creatures++
-			}
-		}
-
-		info := fmt.Sprintf("[%s] R:%d C:%d", gridID, resources, creatures)
-		text.Draw(screen, info, basicfont.Face7x13, infoX, infoY, color.White)
-		infoY += 14
-	}
-
-	infoY += 8
-	text.Draw(screen, "-- CREATURES --", basicfont.Face7x13, infoX, infoY, color.RGBA{100, 255, 100, 255})
-	infoY += 16
-
-	maxToShow := 12
-	shown := 0
-
-	for _, gridID := range world.GridOrder {
-		for _, c := range world.Entities.GetByType(entity.TypeCreature) {
-			if shown >= maxToShow {
-				text.Draw(screen, "...", basicfont.Face7x13, infoX, infoY, color.Gray{128})
-				return
-			}
-			if c.GetGridID() != gridID {
-				continue
-			}
-			if creature, ok := c.(*domain.Creature); ok {
-				info := fmt.Sprintf("[%s] %s", gridID, creature.Species)
-				text.Draw(screen, info, basicfont.Face7x13, infoX, infoY, color.Gray{200})
-				infoY += 13
-				shown++
-			}
-		}
-	}
 }
 
 // ScreenToGrid convertit les coordonnées écran en coordonnées grille et gridID

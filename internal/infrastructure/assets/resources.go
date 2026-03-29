@@ -67,12 +67,23 @@ var (
 )
 
 // generateDreamberry crée l'icône d'une baie onirique
-func generateDreamberry(size int, p ResourcePalette) *ebiten.Image {
+func generateDreamberry(size int, p ResourcePalette, stage string) *ebiten.Image {
 	img := ebiten.NewImage(size, size)
 	img.Fill(p.Bg)
 
 	centerX := float32(size / 2)
 	centerY := float32(size / 2)
+
+	// Ajuste la couleur selon le stade
+	bodyColor := p.Primary
+	switch stage {
+	case "bourgeon":
+		bodyColor = color.RGBA{100, 200, 100, 255} // Vert (pas encore mûr)
+	case "fleur":
+		bodyColor = color.RGBA{255, 180, 220, 255} // Rose
+	case "gâté":
+		bodyColor = color.RGBA{80, 60, 70, 255}    // Grisâtre/Sombre
+	}
 
 	// Feuilles
 	leafColor := p.Secondary
@@ -82,7 +93,7 @@ func generateDreamberry(size int, p ResourcePalette) *ebiten.Image {
 
 	// Baie principale
 	berryRadius := float32(size / 3)
-	vector.DrawFilledCircle(img, centerX, centerY+5, berryRadius, p.Primary, true)
+	vector.DrawFilledCircle(img, centerX, centerY+5, berryRadius, bodyColor, true)
 
 	// Reflet brillant
 	vector.DrawFilledCircle(img, centerX-8, centerY-2, berryRadius/3, p.Accent, true)
@@ -126,19 +137,27 @@ func generateMoonstone(size int, p ResourcePalette) *ebiten.Image {
 }
 
 // generateWhisperingHerb crée l'icône d'une herbe murmurante
-func generateWhisperingHerb(size int, p ResourcePalette) *ebiten.Image {
+func generateWhisperingHerb(size int, p ResourcePalette, stage string) *ebiten.Image {
 	img := ebiten.NewImage(size, size)
 	img.Fill(p.Bg)
 
 	centerX := float32(size / 2)
 	baseY := float32(size - 10)
 
+	// Ajuste la couleur selon le stade
+	leafColor := p.Primary
+	switch stage {
+	case "graine":
+		leafColor = color.RGBA{140, 100, 60, 255} // Marron graine
+	case "pousse":
+		leafColor = color.RGBA{150, 255, 150, 255} // Vert très clair
+	}
+
 	// Tige principale
 	stemColor := p.Secondary
 	vector.DrawFilledRect(img, centerX-2, baseY-30, 4, 30, stemColor, true)
 
 	// Feuilles ondulantes
-	leafColor := p.Primary
 	// Feuille gauche
 	vector.DrawFilledCircle(img, centerX-12, baseY-20, 10, leafColor, true)
 	vector.DrawFilledCircle(img, centerX-8, baseY-20, 6, p.Bg, true) // Masque
