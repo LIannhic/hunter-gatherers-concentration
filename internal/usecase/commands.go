@@ -354,3 +354,43 @@ func (c *SwitchGridCommand) Execute() error {
 
 	return nil
 }
+
+type SwitchZoneCommand struct {
+	World     *domain.World
+	Direction board.Direction
+}
+
+func (c *SwitchZoneCommand) CanExecute() bool {
+	if c.World.DreamPlane == nil {
+		return false
+	}
+	_, ok := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)
+	return ok
+}
+
+func (c *SwitchZoneCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("aucune zone connectée dans cette direction")
+	}
+
+	targetID, _ := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)
+	c.World.SetCurrentGrid(targetID)
+
+	// Positionne le joueur de l'autre côté de la grille (entrée logique)
+	grid, _ := c.World.GetGrid(targetID)
+	newPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
+
+	switch c.Direction {
+	case board.North:
+		newPos = entity.Position{X: grid.Width / 2, Y: grid.Height - 1}
+	case board.South:
+		newPos = entity.Position{X: grid.Width / 2, Y: 0}
+	case board.East:
+		newPos = entity.Position{X: 0, Y: grid.Height / 2}
+	case board.West:
+		newPos = entity.Position{X: grid.Width - 1, Y: grid.Height / 2}
+	}
+	c.World.SetPlayerPosition(newPos)
+
+	return nil
+}

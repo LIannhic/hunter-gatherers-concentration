@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"image/color"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
 	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
@@ -119,27 +121,12 @@ func (app *Application) checkSaves() {
 	}
 }
 
-// setupGrids crée les grids initiaux
+// setupGrids crée les grids initiaux via le générateur procédural
 func (app *Application) setupGrids() {
-	gridConfigs := []struct {
-		id     string
-		width  int
-		height int
-		biome  domain.BiomeType
-	}{
-		{"forest", 6, 6, domain.BiomeForest},
-		{"cave", 6, 6, domain.BiomeCave},
-		{"meadow", 6, 6, domain.BiomeForest},
-		{"swamp", 6, 6, domain.BiomeCave},
-	}
+	app.World.GenerateLayout("dream_plane_1")
+	fmt.Printf("Generated Dream Plane with %d zones\n", len(app.World.Grids))
 
-	for _, cfg := range gridConfigs {
-		app.World.CreateGrid(cfg.id, cfg.width, cfg.height, cfg.biome)
-		fmt.Printf("Created grid: %s (%dx%d)\n", cfg.id, cfg.width, cfg.height)
-	}
-
-	// Définit le premier grid comme ID actif par défaut,
-	// mais on ne déclenche pas SetCurrentGrid ici pour éviter de lancer le Preview pendant le menu.
+	// Définit le premier grid comme ID actif par défaut
 	if len(app.World.GridOrder) > 0 {
 		app.World.CurrentGridID = app.World.GridOrder[0]
 	}
@@ -154,11 +141,15 @@ func (app *Application) FillGridRandomly(gridID string) {
 
 	fmt.Printf("[INIT] Filling grid %s randomly...\n", gridID)
 
-	// 1. Liste toutes les positions possibles
+	// 1. Liste toutes les positions libres
 	var positions []entity.Position
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
-			positions = append(positions, entity.Position{X: x, Y: y})
+			pos := board.Position{X: x, Y: y}
+			plot, _ := grid.Get(pos)
+			if len(plot.EntitiesID) == 0 && !plot.Modifier.Obstructed {
+				positions = append(positions, entity.Position{X: x, Y: y})
+			}
 		}
 	}
 
@@ -462,9 +453,49 @@ func (app *Application) setupEventSubscriptions() {
 
 // spawnInitialEntities crée quelques entités au démarrage sur différents grids
 func (app *Application) spawnInitialEntities() {
-	fmt.Println("[INIT] Filling all grids randomly...")
+	fmt.Println("[INIT] Populating dream plane...")
 	for _, gridID := range app.World.GridOrder {
-		app.FillGridRandomly(gridID)
+		grid, ok := app.World.GetGrid(gridID)
+		if !ok {
+			continue
+		}
+
+		isPortalZone := gridID == app.World.DreamPlane.StartZoneID || gridID == app.World.DreamPlane.EndZoneID
+
+		// 1. Spawner les structures marquées par le générateur
+		for pos, plot := range grid.Plots {
+			if plot.StructureID != "" {
+				stype := "unknown"
+				if plot.StructureID == "inactive_portal" || plot.StructureID == "active_portal" {
+					stype = plot.StructureID
+				} else if strings.HasPrefix(plot.StructureID, "struct_") {
+					parts := strings.Split(plot.StructureID, "_")
+					if len(parts) >= 2 {
+						stype = parts[1]
+					}
+				}
+
+				if stype != "unknown" {
+					app.World.SpawnStructure(gridID, stype, entity.Position{X: pos.X, Y: pos.Y})
+				}
+			}
+		}
+
+		// 2. Remplissage aléatoire du reste (seulement si ce n'est pas une zone de portail)
+		if !isPortalZone {
+			app.FillGridRandomly(gridID)
+
+			// Si c'est une petite grille 2x2, on révèle tout (comme demandé)
+			if grid.Width == 2 && grid.Height == 2 {
+				for _, plot := range grid.Plots {
+					for _, id := range plot.EntitiesID {
+						if e, ok := app.World.Entities.Get(entity.ID(id)); ok {
+							e.SetState(entity.Revealed)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -550,7 +581,8 @@ func (app *Application) updatePlaying() error {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
 
 		// Logique de mort persistante
-		if err := app.Persistence.HandleDeath(app.World.Hub, app.World.Player); err != nil {
+		diff := string(app.World.Difficulty.Level)
+		if err := app.Persistence.HandleDeath(app.World.Hub, app.World.Player, diff); err != nil {
 			fmt.Printf("[SAVE] Erreur lors de la mise à jour du compteur de décès : %v\n", err)
 		}
 
@@ -597,6 +629,14 @@ func (app *Application) StartGameWithSlot(slotID int) {
 		app.World.Hub = save.Hub
 		app.World.Player = save.Player
 
+		// Applique la difficulté sauvegardée
+		if save.Meta.Difficulty != "" {
+			app.World.Difficulty = meta.GetSettings(meta.DifficultyLevel(save.Meta.Difficulty))
+		}
+
+		// Régénère le monde à chaque nouveau départ (même après Game Over)
+		app.World.GenerateLayout("dream_plane_1")
+
 		app.StartGame()
 	}
 }
@@ -639,7 +679,8 @@ func (app *Application) ReturnToMenu() {
 	// Sauvegarde de la progression avant de quitter
 	if app.State == domain.StatePlaying {
 		duration := time.Since(app.sessionStartTime).Seconds()
-		if err := app.Persistence.SaveCurrentGame(app.World.Hub, app.World.Player, duration); err != nil {
+		diff := string(app.World.Difficulty.Level)
+		if err := app.Persistence.SaveCurrentGame(app.World.Hub, app.World.Player, diff, duration); err != nil {
 			fmt.Printf("[SAVE] Erreur lors de la sauvegarde auto : %v\n", err)
 		}
 	}

@@ -58,7 +58,7 @@ func (m *PersistenceManager) LoadLatestGame() (*persistence.SaveData, error) {
 }
 
 // SaveCurrentGame enregistre l'état actuel et met à jour le temps de jeu
-func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, sessionDuration float64) error {
+func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, difficulty string, sessionDuration float64) error {
 	if m.currentSlot == 0 {
 		return fmt.Errorf("aucun slot actif")
 	}
@@ -71,6 +71,7 @@ func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, se
 	// Mise à jour des données
 	save.Hub = hub
 	save.Player = p
+	save.Meta.Difficulty = difficulty
 	save.Meta.TotalPlaytime += sessionDuration
 
 	// Mise à jour du score (basé sur l'XP)
@@ -83,7 +84,7 @@ func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, se
 }
 
 // HandleDeath implémente la logique de "Fail State" persistante
-func (m *PersistenceManager) HandleDeath(hub *meta.Hub, p *player.Player) error {
+func (m *PersistenceManager) HandleDeath(hub *meta.Hub, p *player.Player, difficulty string) error {
 	if m.currentSlot == 0 {
 		return fmt.Errorf("aucun slot de sauvegarde actif")
 	}
@@ -95,6 +96,7 @@ func (m *PersistenceManager) HandleDeath(hub *meta.Hub, p *player.Player) error 
 
 	// Met à jour uniquement les statistiques de mort et les méta-données
 	save.Meta.DeathCount++
+	save.Meta.Difficulty = difficulty
 
 	// On ne sauvegarde PAS l'état actuel du monde/joueur (qui est mort)
 	// mais on peut sauvegarder la progression méta acquise si souhaité.

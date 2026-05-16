@@ -17,6 +17,7 @@ type Metadata struct {
 	TotalPlaytime  float64   `json:"total_playtime"` // Temps total en secondes
 	MaxScore       int       `json:"max_score"`
 	LastScore      int       `json:"last_score"`
+	Difficulty     string    `json:"difficulty"`    // Niveau de difficulté choisi
 }
 
 // SaveData regroupe l'état complet du joueur et de sa progression méta
@@ -30,9 +31,10 @@ type SaveData struct {
 func NewSaveData(slotID int) *SaveData {
 	return &SaveData{
 		Meta: Metadata{
-			SlotID:    slotID,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			SlotID:     slotID,
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+			Difficulty: "Normal",
 		},
 		Hub:    meta.NewHub(),
 		Player: player.New("player_default"),
