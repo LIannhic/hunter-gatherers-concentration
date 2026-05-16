@@ -9,6 +9,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font/basicfont"
 )
 
@@ -53,7 +54,11 @@ func (h *HUD) Render(screen *ebiten.Image, x int) {
 	text.Draw(screen, fmt.Sprintf("Diff: %s", h.world.Difficulty.Level), basicfont.Face7x13, x, y, color.White)
 	y += 14
 	text.Draw(screen, fmt.Sprintf("Active: %s", h.world.CurrentGridID), basicfont.Face7x13, x, y, color.RGBA{255, 255, 0, 255})
-	y += 30
+	y += 20
+
+	// --- SECTION: MINI-MAP ---
+	h.drawMiniMap(screen, x, y)
+	y += 130 // Espace pour la minimap (9x12px + padding)
 
 	// --- SECTION: ENTITÉS ---
 	h.RenderEntityList(screen, x, y)
@@ -83,6 +88,53 @@ func (h *HUD) drawStat(screen *ebiten.Image, x, y int, label string, val, max in
 		c = color.RGBA{255, 100, 100, 255}
 	}
 	text.Draw(screen, fmt.Sprintf("%s: %d/%d", label, val, max), basicfont.Face7x13, x, y, c)
+}
+
+func (h *HUD) drawMiniMap(screen *ebiten.Image, x, y int) {
+	if h.world.DreamPlane == nil {
+		return
+	}
+
+	const cellSize = 12
+	const padding = 2
+
+	plane := h.world.DreamPlane
+
+	// Dessine le fond de la minimap
+	text.Draw(screen, "-- MAP --", basicfont.Face7x13, x, y, color.RGBA{100, 200, 255, 255})
+	y += 15
+
+	for row := 0; row < 9; row++ {
+		for col := 0; col < 9; col++ {
+			sx := x + col*(cellSize+padding)
+			sy := y + row*(cellSize+padding)
+
+			// Cherche si une zone occupe ces coordonnées
+			var zoneID string
+			for id, coords := range plane.Coords {
+				if coords.X == col && coords.Y == row {
+					zoneID = id
+					break
+				}
+			}
+
+			rectColor := color.RGBA{40, 40, 40, 255}
+			if zoneID != "" {
+				if zoneID == h.world.CurrentGridID {
+					rectColor = color.RGBA{255, 255, 0, 255} // Active
+				} else if zoneID == plane.StartZoneID {
+					rectColor = color.RGBA{100, 255, 100, 255} // Start
+				} else if zoneID == plane.EndZoneID {
+					rectColor = color.RGBA{255, 100, 100, 255} // End
+				} else {
+					rectColor = color.RGBA{150, 150, 150, 255} // Visited/Normal
+				}
+			}
+
+			// Dessine le carré de la zone
+			vector.DrawFilledRect(screen, float32(sx), float32(sy), float32(cellSize), float32(cellSize), rectColor, true)
+		}
+	}
 }
 
 // RenderEntityList affiche le décompte des entités par grille

@@ -311,6 +311,9 @@ func (h *Handler) handleKeyboard() {
 		}
 	}
 
+	// Navigation entre zones (Dream Plane)
+	h.handleNavigationKeys()
+
 	// Changement de difficulté (Touches F1, F2, F3, F4)
 	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
 		h.setDifficulty(meta.LevelEasy)
@@ -411,6 +414,33 @@ func (h *Handler) handleKeyboard() {
 		fmt.Println("[KEY] \\ : Retour au menu")
 		if h.OnExitToMenu != nil {
 			h.OnExitToMenu()
+		}
+	}
+}
+
+func (h *Handler) handleNavigationKeys() {
+	var dir board.Direction
+	var pressed bool
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
+		dir = board.North
+		pressed = true
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) && !ebiten.IsKeyPressed(ebiten.KeyShift) {
+		dir = board.South
+		pressed = true
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) || inpututil.IsKeyJustPressed(ebiten.KeyA) {
+		dir = board.West
+		pressed = true
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowRight) || inpututil.IsKeyJustPressed(ebiten.KeyD) {
+		dir = board.East
+		pressed = true
+	}
+
+	if pressed {
+		cmd := &usecase.SwitchZoneCommand{World: h.world, Direction: dir}
+		if err := cmd.Execute(); err == nil {
+			fmt.Printf("[NAVIGATION] Passage à la zone: %s\n", h.world.CurrentGridID)
+			h.ClearSelection()
 		}
 	}
 }

@@ -150,11 +150,13 @@ func (r *BoardRenderer) getGridLayout(gridID string, world *domain.World) (offse
 	row := idx / r.gridsPerRow
 	col := idx % r.gridsPerRow
 
-	// Calcule la taille d'un grid
-	gridWidth := grid.Width * r.tileSize
+	// Calcule la taille d'une zone de grid (toujours basée sur 6x6)
+	maxAreaSize := 6
+	gridAreaWidth := maxAreaSize * r.tileSize
+	gridAreaHeight := maxAreaSize * r.tileSize
 
-	offsetX = r.gridOffsetX + col*(gridWidth+r.gridSpacing)
-	offsetY = r.gridOffsetY + row*(grid.Height*r.tileSize+r.gridSpacing+30) // +30 pour le titre
+	offsetX = r.gridOffsetX + col*(gridAreaWidth+r.gridSpacing)
+	offsetY = r.gridOffsetY + row*(gridAreaHeight+r.gridSpacing+30) // +30 pour le titre
 
 	return offsetX, offsetY, grid
 }
@@ -178,7 +180,7 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 	}
 
 	// Dessine le titre du grid
-	gridTitle := fmt.Sprintf("Grid: %s", gridID)
+	gridTitle := fmt.Sprintf("Grid: %s (%dx%d)", gridID, grid.Width, grid.Height)
 	if gridID == world.CurrentGridID {
 		gridTitle += " [ACTIVE]"
 	}
@@ -188,13 +190,51 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 	}
 	text.Draw(screen, gridTitle, basicfont.Face7x13, offsetX, offsetY-5, titleColor)
 
-	// Dessine les tuiles du grid (ordre déterministe pour éviter le clignotement)
-	// Dans renderGrid
+	// Calcul du spacing pour distribuer l'espace (basé sur une aire de 6x6)
+	maxAreaSize := 6
+	gridAreaPx := maxAreaSize * r.tileSize
+
+	var spacingX, spacingY float64
+	if grid.Width > 1 {
+		spacingX = float64(gridAreaPx-grid.Width*r.tileSize) / float64(grid.Width-1)
+	}
+	if grid.Height > 1 {
+		spacingY = float64(gridAreaPx-grid.Height*r.tileSize) / float64(grid.Height-1)
+	}
+
+	// Cas spécial 2x2: configuration portail 6x6 (B2, B5, E2, E5)
+	if grid.Width == 2 && grid.Height == 2 {
+		// B2=(1,1), B5=(1,4), E2=(4,1), E5=(4,4)
+		coords := []board.Position{
+			{X: 1, Y: 1}, {X: 1, Y: 4},
+			{X: 4, Y: 1}, {X: 4, Y: 4},
+		}
+
+		i := 0
+		for y := 0; y < 2; y++ {
+			for x := 0; x < 2; x++ {
+				pos := board.Position{X: x, Y: y}
+				target := coords[i]
+				sx := offsetX + target.X*r.tileSize
+				sy := offsetY + target.Y*r.tileSize
+				plot, ok := grid.Plots[pos]
+				if ok {
+					r.renderTileAt(screen, sx, sy, gridID, plot, world)
+				}
+				i++
+			}
+		}
+		return
+	}
+
+	// Rendu normal avec spacing distribué
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
 			pos := board.Position{X: x, Y: y}
-			sx := offsetX + x*r.tileSize
-			sy := offsetY + y*r.tileSize
+
+			sx := offsetX + int(float64(x)*(float64(r.tileSize)+spacingX))
+			sy := offsetY + int(float64(y)*(float64(r.tileSize)+spacingY))
+
 			plot, ok := grid.Plots[pos]
 			if !ok {
 				r.renderEmptySquareAt(screen, sx, sy)
@@ -398,10 +438,55 @@ func (r *BoardRenderer) ScreenToGrid(screenX, screenY int, world *domain.World) 
 			continue
 		}
 
-		gridX := x / r.tileSize
-		gridY := y / r.tileSize
+		// Calcul inverse du spacing
+		maxAreaSize := 6
+		gridAreaPx := maxAreaSize * r.tileSize
 
-		if gridX < grid.Width && gridY < grid.Height {
+		// Cas spécial 2x2
+		if grid.Width == 2 && grid.Height == 2 {
+			coords := []board.Position{
+				{X: 1, Y: 1}, {X: 1, Y: 4},
+				{X: 4, Y: 1}, {X: 4, Y: 4},
+			}
+			for i, target := range coords {
+				tx := target.X * r.tileSize
+				ty := target.Y * r.tileSize
+				if x >= tx && x < tx+r.tileSize && y >= ty && y < ty+r.tileSize {
+					return board.Position{X: i % 2, Y: i / 2}, gridID, true
+				}
+			}
+			continue
+		}
+
+		var spacingX, spacingY float64
+		if grid.Width > 1 {
+			spacingX = float64(gridAreaPx-grid.Width*r.tileSize) / float64(grid.Width-1)
+		}
+		if grid.Height > 1 {
+			spacingY = float64(gridAreaPx-grid.Height*r.tileSize) / float64(grid.Height-1)
+		}
+
+		// Trouve l'index x
+		gridX := -1
+		for i := 0; i < grid.Width; i++ {
+			tx := float64(i) * (float64(r.tileSize) + spacingX)
+			if float64(x) >= tx && float64(x) < tx+float64(r.tileSize) {
+				gridX = i
+				break
+			}
+		}
+
+		// Trouve l'index y
+		gridY := -1
+		for i := 0; i < grid.Height; i++ {
+			ty := float64(i) * (float64(r.tileSize) + spacingY)
+			if float64(y) >= ty && float64(y) < ty+float64(r.tileSize) {
+				gridY = i
+				break
+			}
+		}
+
+		if gridX != -1 && gridY != -1 {
 			return board.Position{X: gridX, Y: gridY}, gridID, true
 		}
 	}

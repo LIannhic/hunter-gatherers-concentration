@@ -44,6 +44,9 @@ type World struct {
 	// Difficulty
 	Difficulty meta.DifficultySettings
 
+	// Dream Plane (Mega-board structure)
+	DreamPlane *board.DreamPlane
+
 	// Factories
 	CreatureFactory *creature.Factory
 	ResourceFactory *resource.Factory
@@ -54,6 +57,9 @@ type World struct {
 	// Turn state tracking
 	tilesFlippedThisTurn []board.Position // Tracks tiles flipped in current turn (max 2)
 	lastTurnNumber       int              // Used to detect turn changes
+
+	// Progression
+	WorldsCleared int
 }
 
 func NewWorld() *World {
@@ -112,6 +118,41 @@ func (w *World) SetCurrentGrid(gridID string) bool {
 		return true
 	}
 	return false
+}
+
+// GenerateLayout génère la structure du monde (Dream Plane)
+func (w *World) GenerateLayout(id string) {
+	gen := board.NewLayoutGenerator()
+	w.DreamPlane = gen.GenerateDreamPlane(id, w.Difficulty.Level, w.WorldsCleared)
+
+	// Nettoie les anciens grids si nécessaire
+	w.Grids = make(map[string]*board.Grid)
+	w.GridOrder = make([]string, 0)
+
+	// Enregistre les zones dans World
+	for _, gridID := range []string{w.DreamPlane.StartZoneID, w.DreamPlane.EndZoneID} {
+		if grid, ok := w.DreamPlane.Zones[gridID]; ok {
+			w.Grids[grid.ID] = grid
+			w.GridOrder = append(w.GridOrder, grid.ID)
+		}
+	}
+
+	// Ajoute les autres zones (intermédiaires et impasses)
+	for id, grid := range w.DreamPlane.Zones {
+		found := false
+		for _, addedID := range w.GridOrder {
+			if addedID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			w.Grids[id] = grid
+			w.GridOrder = append(w.GridOrder, id)
+		}
+	}
+
+	w.CurrentGridID = w.DreamPlane.StartZoneID
 }
 
 // GetGridForEntity retourne le grid sur lequel se trouve une entité
@@ -277,6 +318,33 @@ func (w *World) SpawnTrap(gridID string, pos entity.Position) (entity.Entity, er
 
 	w.EventBus.Publish(event.NewEntityCreatedEvent(string(trapPtr.GetID()), "trap"))
 	return trapPtr, nil
+}
+
+// SpawnStructure crée une structure sur un grid spécifique
+func (w *World) SpawnStructure(gridID string, stype string, pos entity.Position) (entity.Entity, error) {
+	grid, ok := w.Grids[gridID]
+	if !ok {
+		return nil, ErrGridNotFound
+	}
+
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
+	plot, err := grid.Get(boardPos)
+	if err != nil {
+		return nil, err
+	}
+
+	structEnt := entity.NewBaseEntity(entity.TypeStructure)
+	structEnt.SetGridID(gridID)
+	structEnt.SetPosition(pos)
+	structEnt.AddTag(stype)
+	structEnt.SetState(entity.Revealed) // Les structures sont visibles
+
+	structPtr := &structEnt
+	w.Entities.Register(structPtr)
+	plot.PushEntity(string(structPtr.GetID()))
+
+	w.EventBus.Publish(event.NewEntityCreatedEvent(string(structPtr.GetID()), "structure"))
+	return structPtr, nil
 }
 
 // RevealTile révèle une entité sur une position
