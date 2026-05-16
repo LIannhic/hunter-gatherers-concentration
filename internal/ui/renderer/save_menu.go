@@ -149,7 +149,7 @@ func (m *SaveMenu) drawConfirmation(screen *ebiten.Image) {
 	cw, ch := 400, 150
 	cx, cy := (m.width-cw)/2, (m.height-ch)/2
 	vector.DrawFilledRect(screen, float32(cx), float32(cy), float32(cw), float32(ch), color.RGBA{40, 20, 20, 255}, true)
-	vector.StrokeRect(screen, float32(cx), float32(cy), float32(cw), float32(ch), 2, color.Red, true)
+	vector.StrokeRect(screen, float32(cx), float32(cy), float32(cw), float32(ch), 2, color.RGBA{255, 0, 0, 255}, true)
 
 	msg := fmt.Sprintf("Supprimer le profil %d ?", m.confirmDeleteSlot)
 	text.Draw(screen, msg, basicfont.Face7x13, cx+100, cy+50, color.White)

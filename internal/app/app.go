@@ -12,9 +12,9 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
-	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
+	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/hud"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/input"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/renderer"
@@ -33,17 +33,23 @@ type Application struct {
 	Engine      *domain.Engine
 
 	// Infrastructure
-	Assets *assets.Manager
-	Config *loader.GameConfig
+	Assets      *assets.Manager
+	Config      *loader.GameConfig
+	Persistence *usecase.PersistenceManager
 
 	// UI
 	Renderer    *renderer.BoardRenderer
 	TitleScreen *renderer.TitleScreen
+	SaveMenu    *renderer.SaveMenu
 	Input       *input.Handler
 	HUD         *hud.HUD
 
 	// Game State
 	State domain.GameState
+
+	// Session tracking
+	sessionStartTime time.Time
+	hasSaves         bool
 
 	// Debug
 	debug *DebugStats
@@ -71,9 +77,14 @@ func NewApplication() (*Application, error) {
 	// 4. Infrastructure
 	app.Assets = assets.NewManager()
 
+	// Initialisation de la persistance (dossier ./saves)
+	repo := infraPersistence.NewJsonRepository("./saves")
+	app.Persistence = usecase.NewPersistenceManager(repo)
+
 	// 5. UI
 	app.Renderer = renderer.NewBoardRenderer(app.Assets)
 	app.TitleScreen = renderer.NewTitleScreen()
+	app.SaveMenu = renderer.NewSaveMenu()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
 
@@ -91,9 +102,21 @@ func NewApplication() (*Application, error) {
 
 	// 10. État initial : Menu
 	app.State = domain.StateMenu
+	app.checkSaves()
 	fmt.Println("[STATE] État initial: MENU")
 
 	return app, nil
+}
+
+func (app *Application) checkSaves() {
+	metas, _ := app.Persistence.GetSaveSummaries()
+	app.hasSaves = len(metas) > 0
+	// Mise à jour du texte du bouton de l'écran titre
+	if app.hasSaves {
+		app.TitleScreen.ButtonText = "CONTINUER"
+	} else {
+		app.TitleScreen.ButtonText = "DEMARRER"
+	}
 }
 
 // setupGrids crée les grids initiaux
@@ -463,13 +486,52 @@ func (app *Application) Update() error {
 	return nil
 }
 
-// updateMenu gère l'écran titre
+// updateMenu gère l'écran titre et le menu de sauvegarde
 func (app *Application) updateMenu() error {
-	// Vérifie le clic sur le bouton démarrer
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	if app.SaveMenu.IsVisible() {
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+			app.SaveMenu.SetVisible(false)
+			return nil
+		}
+
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+			x, y := ebiten.CursorPosition()
+			action := app.SaveMenu.HandleClick(x, y)
+
+			switch action.Type {
+			case renderer.ActionBack:
+				app.SaveMenu.SetVisible(false)
+			case renderer.ActionLoad, renderer.ActionNew:
+				app.StartGameWithSlot(action.Slot)
+			case renderer.ActionDelete:
+				_ = app.Persistence.DeleteSave(action.Slot)
+				metas, _ := app.Persistence.GetSaveSummaries()
+				app.SaveMenu.UpdateMetas(metas)
+				app.checkSaves()
+			}
+		}
+		return nil
+	}
+
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
 		if app.TitleScreen.IsStartButtonClicked(x, y) {
-			app.StartGame()
+			if app.hasSaves {
+				// Charger la dernière partie directement (Bouton "Continuer")
+				app.StartGameWithSlot(0)
+			} else {
+				// Première fois : ouvrir la sélection
+				metas, _ := app.Persistence.GetSaveSummaries()
+				app.SaveMenu.UpdateMetas(metas)
+				app.SaveMenu.SetVisible(true)
+			}
+		} else if app.hasSaves {
+			// Bouton "Changer de profil" (situé sous le bouton démarrer)
+			if y > 410 && y < 450 && x > 300 && x < 500 {
+				metas, _ := app.Persistence.GetSaveSummaries()
+				app.SaveMenu.UpdateMetas(metas)
+				app.SaveMenu.SetVisible(true)
+			}
 		}
 	}
 	return nil
@@ -486,6 +548,12 @@ func (app *Application) updatePlaying() error {
 	// Vérification de la mort
 	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
+
+		// Logique de mort persistante
+		if err := app.Persistence.HandleDeath(app.World.Hub, app.World.Player); err != nil {
+			fmt.Printf("[SAVE] Erreur lors de la mise à jour du compteur de décès : %v\n", err)
+		}
+
 		app.State = domain.StateGameOver
 	}
 
@@ -502,18 +570,47 @@ func (app *Application) updateGameOver() error {
 	return nil
 }
 
-// StartGame démarre le jeu depuis le menu
+// StartGameWithSlot démarre le jeu avec un slot spécifique
+func (app *Application) StartGameWithSlot(slotID int) {
+	fmt.Printf("[SAVE] Starting game with slot %d\n", slotID)
+
+	// Tentative de chargement ou création
+	var save *domain.SaveData
+	var err error
+
+	if slotID == 0 {
+		save, err = app.Persistence.LoadLatestGame()
+	} else {
+		save, err = app.Persistence.LoadGame(slotID)
+		if err != nil {
+			fmt.Printf("[SAVE] No save found for slot %d, creating new game\n", slotID)
+			save, _ = app.Persistence.CreateNewGame(slotID)
+		}
+	}
+
+	if save != nil {
+		// Mise à jour des stats de session
+		save.Meta.SessionCount++
+		app.sessionStartTime = time.Now()
+
+		// Injection de l'état sauvegardé dans le World
+		app.World.Hub = save.Hub
+		app.World.Player = save.Player
+
+		app.StartGame()
+	}
+}
+
+// StartGame démarre le jeu depuis le menu (logique commune)
 func (app *Application) StartGame() {
 	oldState := app.State
 	app.State = domain.StatePlaying
+	app.SaveMenu.SetVisible(false)
 
 	// Publie l'événement de changement de phase
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
 
 	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
-
-	// Réinitialise le joueur
-	app.World.Player = player.New("player_1")
 
 	// Réinitialise le monde (tour, etc.)
 	app.World.Turn = 0
@@ -539,8 +636,17 @@ func (app *Application) StartGame() {
 
 // ReturnToMenu retourne au menu principal
 func (app *Application) ReturnToMenu() {
+	// Sauvegarde de la progression avant de quitter
+	if app.State == domain.StatePlaying {
+		duration := time.Since(app.sessionStartTime).Seconds()
+		if err := app.Persistence.SaveCurrentGame(app.World.Hub, app.World.Player, duration); err != nil {
+			fmt.Printf("[SAVE] Erreur lors de la sauvegarde auto : %v\n", err)
+		}
+	}
+
 	oldState := app.State
 	app.State = domain.StateMenu
+	app.checkSaves()
 
 	// Publie l'événement de changement de phase
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
@@ -578,6 +684,14 @@ func (app *Application) Draw(screen *ebiten.Image) {
 // drawMenu dessine l'écran titre
 func (app *Application) drawMenu(screen *ebiten.Image) {
 	app.TitleScreen.Render(screen)
+
+	if app.hasSaves {
+		text.Draw(screen, "[ CHANGER DE PROFIL ]", basicfont.Face7x13, 335, 430, color.RGBA{150, 150, 255, 255})
+	}
+
+	if app.SaveMenu.IsVisible() {
+		app.SaveMenu.Render(screen)
+	}
 }
 
 // drawPlaying dessine le jeu en cours

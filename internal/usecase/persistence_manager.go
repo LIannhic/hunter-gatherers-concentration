@@ -57,6 +57,31 @@ func (m *PersistenceManager) LoadLatestGame() (*persistence.SaveData, error) {
 	return m.LoadGame(slotID)
 }
 
+// SaveCurrentGame enregistre l'état actuel et met à jour le temps de jeu
+func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, sessionDuration float64) error {
+	if m.currentSlot == 0 {
+		return fmt.Errorf("aucun slot actif")
+	}
+
+	save, err := m.repo.Load(m.currentSlot)
+	if err != nil {
+		return err
+	}
+
+	// Mise à jour des données
+	save.Hub = hub
+	save.Player = p
+	save.Meta.TotalPlaytime += sessionDuration
+
+	// Mise à jour du score (basé sur l'XP)
+	save.Meta.LastScore = p.Stats.Experience
+	if save.Meta.LastScore > save.Meta.MaxScore {
+		save.Meta.MaxScore = save.Meta.LastScore
+	}
+
+	return m.repo.Save(m.currentSlot, save)
+}
+
 // HandleDeath implémente la logique de "Fail State" persistante
 func (m *PersistenceManager) HandleDeath(hub *meta.Hub, p *player.Player) error {
 	if m.currentSlot == 0 {

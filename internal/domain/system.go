@@ -32,6 +32,9 @@ type World struct {
 	MaxTurns   int
 	PlayerID   string
 
+	// Meta progression
+	Hub *meta.Hub
+
 	// Player logic
 	Player *player.Player
 
@@ -67,6 +70,7 @@ func NewWorld() *World {
 		Difficulty:           meta.GetSettings(meta.LevelNormal),
 		CreatureFactory:      creature.NewFactory(),
 		ResourceFactory:      resource.NewFactory(),
+		Hub:                  meta.NewHub(),
 		Player:               p,
 		playerPosition:       entity.Position{X: 0, Y: 0},
 		tilesFlippedThisTurn: make([]board.Position, 0),
