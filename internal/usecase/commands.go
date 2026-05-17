@@ -197,20 +197,32 @@ func (c *MatchTilesCommand) Execute() error {
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
 
-		// Note: on les retire du monde (elles seront nettoyées de la grille par RemoveEntity)
-		c.World.RemoveEntity(entity1.GetID())
-		c.World.RemoveEntity(entity2.GetID())
+		// On récupère le nom pour le loot AVANT la suppression
+		name := "unknown"
+		if r, ok := entity1.(*domain.Resource); ok {
+			name = r.ResourceType
+		} else if c, ok := entity1.(*domain.Creature); ok {
+			name = c.Species
+		}
 
-		c.World.EventBus.Publish(domain.Event{
-			Type:     domain.EventType("tiles_matched"),
-			SourceID: "player",
+		// Publie l'événement de match (utilisé par le LootSystem)
+		c.World.EventBus.Publish(event.Event{
+			Type:     event.TileMatched,
+			SourceID: string(entity1.GetID()),
 			Payload: map[string]interface{}{
-				"position1":  c.Pos1,
-				"position2":  c.Pos2,
-				"grid_id":    c.GridID,
-				"assoc_type": matchType,
+				"position":    c.Pos1,
+				"entity_id":   string(entity1.GetID()),
+				"other_id":    string(entity2.GetID()),
+				"grid_id":     c.GridID,
+				"name":        name,
+				"entity_type": entity1.GetType(),
+				"assoc_type":  matchType,
 			},
 		})
+
+		// Note: on les retire du monde
+		c.World.RemoveEntity(entity1.GetID())
+		c.World.RemoveEntity(entity2.GetID())
 
 		if c.OnSuccess != nil {
 			c.OnSuccess()

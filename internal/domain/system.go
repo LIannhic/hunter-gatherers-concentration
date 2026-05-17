@@ -435,11 +435,6 @@ func (w *World) MatchTile(gridID string, pos board.Position) error {
 
 	ent.SetState(entity.Matched)
 
-	w.EventBus.Publish(event.NewTileMatchedEvent(
-		entity.Position{X: pos.X, Y: pos.Y},
-		string(topID),
-	))
-
 	return nil
 }
 
@@ -1351,6 +1346,87 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 	}
 }
 
+// LootSystem gère l'acquisition du loot lors d'un match
+type LootSystem struct {
+	world *World
+}
+
+func NewLootSystem(world *World) *LootSystem {
+	ls := &LootSystem{world: world}
+	// S'abonne aux événements de match
+	world.EventBus.SubscribeFunc(event.TileMatched, ls.onTileMatched)
+	return ls
+}
+
+func (s *LootSystem) Priority() int { return 10 }
+
+func (s *LootSystem) Update(world *World) {
+	// Pas de logique frame-by-frame pour le moment
+}
+
+func (s *LootSystem) onTileMatched(e event.Event) {
+	// Récupère l'entité matchée principale
+	entID := entity.ID(e.SourceID)
+
+	name := "unknown"
+	var eType entity.Type = entity.TypeResource
+
+	// 1. Tente de récupérer depuis le manager si l'entité existe encore
+	if ent, ok := s.world.Entities.Get(entID); ok {
+		name = s.getEntityName(ent)
+		eType = ent.GetType()
+	}
+
+	// 2. Sinon (ou si getEntityName a échoué), tente de récupérer depuis le payload
+	if name == "unknown" || name == "" {
+		if n, exists := e.Payload["name"].(string); exists {
+			name = n
+		}
+		if t, exists := e.Payload["entity_type"].(entity.Type); exists {
+			eType = t
+		}
+	}
+
+	// 3. Cas particulier : pièges ou entités sans butin
+	if name == "unknown" || name == "" || name == "trap" {
+		return
+	}
+
+	// Un match = un loot
+	loot := &player.LootItem{
+		ID:          string(entity.NewID()),
+		Name:        name,
+		Type:        eType,
+		SourceID:    string(entID),
+		IsDeletable: true, // Par défaut, les items de match sont supprimables
+	}
+
+	// Tente d'ajouter à l'inventaire
+	err := s.world.Player.Inventory.AddItem(loot)
+	if err != nil {
+		// Inventaire plein : on détruit le loot
+		fmt.Printf("[LOOT] Inventaire plein ! Le loot %s est perdu.\n", name)
+		s.world.EventBus.PublishImmediate(event.NewInventoryFullEvent())
+		return
+	}
+
+	// Une fois le loot acquis, on peut retirer les entités du board (Optionnel selon gameplay)
+	// Pour v0.2, les tuiles "Matched" restent visibles en taille 1.2x mais sont "récoltées" techniquement
+
+	fmt.Printf("[LOOT] Acquisition : %s (ID: %s)\n", name, entID)
+	s.world.EventBus.PublishImmediate(event.NewLootAcquiredEvent(loot.ID, loot.Name, loot.Type))
+}
+
+func (s *LootSystem) getEntityName(ent entity.Entity) string {
+	if r, ok := ent.(*resource.Resource); ok {
+		return r.ResourceType
+	}
+	if c, ok := ent.(*creature.Creature); ok {
+		return c.Species
+	}
+	return "unknown_loot"
+}
+
 // Engine orchestre tous les systèmes
 type Engine struct {
 	systems        []System
@@ -1358,11 +1434,13 @@ type Engine struct {
 	Running        bool
 	movementSystem *CreatureMovementSystem // Référence directe pour les mises à jour
 	previewSystem  *PreviewSystem          // Référence pour les événements
+	lootSystem     *LootSystem
 }
 
 func NewEngine(world *World) *Engine {
 	moveSys := NewCreatureMovementSystem()
 	prevSys := NewPreviewSystem()
+	lootSys := NewLootSystem(world)
 
 	e := &Engine{
 		world: world,
@@ -1372,10 +1450,12 @@ func NewEngine(world *World) *Engine {
 			&CreatureAISystem{},
 			moveSys,
 			&TriggerSystem{},
+			lootSys,
 		},
 		Running:        false,
 		movementSystem: moveSys,
 		previewSystem:  prevSys,
+		lootSystem:     lootSys,
 	}
 
 	// S'abonne aux entrées de grille
