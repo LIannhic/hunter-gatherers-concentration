@@ -17,6 +17,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
 	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/hud"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/input"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/renderer"
@@ -92,6 +93,7 @@ func NewApplication() (*Application, error) {
 
 	// 6. Connecte les composants UI
 	app.Input.SetRenderer(app.Renderer)
+	app.Input.OnToggleDetails = app.HUD.ToggleDetails
 
 	// 7. Configure les callbacks
 	app.setupCallbacks()
@@ -126,9 +128,9 @@ func (app *Application) setupGrids() {
 	app.World.GenerateLayout("dream_plane_1")
 	fmt.Printf("Generated Dream Plane with %d zones\n", len(app.World.Grids))
 
-	// Définit le premier grid comme ID actif par défaut
-	if len(app.World.GridOrder) > 0 {
-		app.World.CurrentGridID = app.World.GridOrder[0]
+	// Définit la grille de commencement comme grille active par défaut
+	if app.World.DreamPlane != nil {
+		app.World.CurrentGridID = app.World.DreamPlane.StartZoneID
 	}
 }
 
@@ -466,7 +468,7 @@ func (app *Application) spawnInitialEntities() {
 		for pos, plot := range grid.Plots {
 			if plot.StructureID != "" {
 				stype := "unknown"
-				if plot.StructureID == "inactive_portal" || plot.StructureID == "active_portal" {
+				if plot.StructureID == "commencement_portal" || plot.StructureID == "finish_portal" {
 					stype = plot.StructureID
 				} else if strings.HasPrefix(plot.StructureID, "struct_") {
 					parts := strings.Split(plot.StructureID, "_")
@@ -484,17 +486,6 @@ func (app *Application) spawnInitialEntities() {
 		// 2. Remplissage aléatoire du reste (seulement si ce n'est pas une zone de portail)
 		if !isPortalZone {
 			app.FillGridRandomly(gridID)
-
-			// Si c'est une petite grille 2x2, on révèle tout (comme demandé)
-			if grid.Width == 2 && grid.Height == 2 {
-				for _, plot := range grid.Plots {
-					for _, id := range plot.EntitiesID {
-						if e, ok := app.World.Entities.Get(entity.ID(id)); ok {
-							e.SetState(entity.Revealed)
-						}
-					}
-				}
-			}
 		}
 	}
 }
@@ -587,6 +578,14 @@ func (app *Application) updatePlaying() error {
 		}
 
 		app.State = domain.StateGameOver
+	}
+
+	// Gère les entrées HUD (ex: fermer fenêtre détails)
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		mx, my := ebiten.CursorPosition()
+		if app.HUD.HandleClick(mx, my) {
+			return nil
+		}
 	}
 
 	// Gère les entrées
@@ -740,18 +739,14 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 	// Fond noir
 	screen.Fill(color.Black)
 
-	// Calcule la position de la barre latérale
-	width, _ := app.Layout(0, 0)
-	hudX := width - 280 // Largeur fixe pour la barre latérale
-
 	// Dessine le plateau
 	app.Renderer.Render(screen, app.World)
 
 	// Dessine les surbrillances de sélection
 	app.Input.Draw(screen)
 
-	// Dessine le HUD dans la barre latérale
-	app.HUD.Render(screen, hudX)
+	// Dessine le HUD
+	app.HUD.Render(screen)
 
 	// Message si aucune entité
 	if app.World.Entities.Count() == 0 {
@@ -802,34 +797,10 @@ func (app *Application) Layout(outsideWidth, outsideHeight int) (int, int) {
 		return app.TitleScreen.Layout()
 	}
 
-	// Calcule la taille nécessaire pour afficher tous les grids
-	numGrids := len(app.World.Grids)
-	if numGrids == 0 {
-		return 1100, 600
+	// En jeu, utilise la taille fixe définie dans l'issue
+	if app.State == domain.StatePlaying {
+		return ui.ScreenWidth, ui.ScreenHeight
 	}
 
-	// Prend le premier grid comme référence de taille
-	var gridWidth, gridHeight int
-	if len(app.World.GridOrder) > 0 {
-		if firstGrid, ok := app.World.GetGrid(app.World.GridOrder[0]); ok {
-			gridWidth = firstGrid.Width * 64
-			gridHeight = firstGrid.Height * 64
-		}
-	}
-
-	gridsPerRow := 2
-	numRows := (numGrids + gridsPerRow - 1) / gridsPerRow
-
-	// Largeur suffisante pour la grille (avec espacement) + la barre latérale du HUD (300px)
-	width := gridWidth*gridsPerRow + 50*(gridsPerRow+1) + 300
-	height := gridHeight*numRows + 100*(numRows+1)
-
-	if width < 1100 {
-		width = 1100
-	}
-	if height < 600 {
-		height = 600
-	}
-
-	return width, height
+	return 1100, 600
 }
