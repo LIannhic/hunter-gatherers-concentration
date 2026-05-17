@@ -39,6 +39,8 @@ type Handler struct {
 	OnResetRotation       func()              // Callback pour réinitialiser la rotation
 	OnExitToMenu          func()              // Callback pour retourner au menu
 	OnToggleDetails       func()              // Callback pour afficher les détails
+	OnToggleInvDetails    func()              // Callback pour afficher l'inventaire détaillé
+	OnFillInventory       func()              // Callback pour remplir l'inventaire (debug)
 	OnRevealAll           func(gridID string) // F5: Cheat - révéler tout
 	OnHideAll             func(gridID string) // F6: Cheat - cacher tout
 	OnForceTurn           func()              // F3: Forcer le prochain tour
@@ -103,6 +105,15 @@ func (h *Handler) getEntityInfo(ent entity.Entity) string {
 }
 
 func (h *Handler) handleMouse() error {
+	// Clic droit : Désélection
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+		if h.selectedTile != nil {
+			fmt.Printf("[SÉLECTION] Tuile en %v désélectionnée (clic droit)\n", *h.selectedTile)
+			h.ClearSelection()
+		}
+		return nil
+	}
+
 	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		return nil
 	}
@@ -304,6 +315,18 @@ func (h *Handler) handleKeyboard() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
 		if h.OnToggleDetails != nil {
 			h.OnToggleDetails()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
+		if h.OnToggleInvDetails != nil {
+			h.OnToggleInvDetails()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyB) {
+		if h.OnFillInventory != nil {
+			h.OnFillInventory()
 		}
 	}
 

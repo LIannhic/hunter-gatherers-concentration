@@ -14,6 +14,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
 	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
@@ -94,6 +95,20 @@ func NewApplication() (*Application, error) {
 	// 6. Connecte les composants UI
 	app.Input.SetRenderer(app.Renderer)
 	app.Input.OnToggleDetails = app.HUD.ToggleDetails
+	app.Input.OnToggleInvDetails = app.HUD.ToggleInventoryDetails
+	app.Input.OnFillInventory = func() {
+		fmt.Println("[DEBUG] Remplissage de l'inventaire avec des Bulles de Savon")
+		for i := 0; i < 30; i++ {
+			loot := &player.LootItem{
+				ID:          string(entity.NewID()),
+				Name:        "bulle de savon",
+				Type:        entity.TypeResource,
+				SourceID:    "debug",
+				IsDeletable: true,
+			}
+			_ = app.World.Player.Inventory.AddItem(loot)
+		}
+	}
 
 	// 7. Configure les callbacks
 	app.setupCallbacks()
@@ -564,6 +579,9 @@ func (app *Application) updatePlaying() error {
 	// Met à jour les processus temps réel (comme les timers de preview)
 	app.Engine.UpdateFrame()
 
+	// Mise à jour de l'HUD (animations, timers)
+	app.HUD.Update()
+
 	// Traite les événements en attente
 	app.World.EventBus.ProcessQueue()
 
@@ -581,12 +599,20 @@ func (app *Application) updatePlaying() error {
 	}
 
 	// Gère les entrées HUD (ex: fermer fenêtre détails)
+	mx, my := ebiten.CursorPosition()
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		mx, my := ebiten.CursorPosition()
 		if app.HUD.HandleClick(mx, my) {
 			return nil
 		}
 	}
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+		if app.HUD.HandleRightClick(mx, my) {
+			return nil
+		}
+	}
+
+	// Gère le scroll HUD
+	app.HUD.HandleScroll(mx, my)
 
 	// Gère les entrées
 	return app.Input.Update()
@@ -655,6 +681,10 @@ func (app *Application) StartGame() {
 	app.World.Turn = 0
 	app.World.MaxTurns = app.World.Player.Stats.MaxSanity
 
+	// V0.2: L'inventaire est vidé à chaque nouvelle partie
+	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
+	app.World.Player.Inventory.ScrollOffset = 0
+
 	// Démarre l'engine (nécessaire pour les mouvements des créatures)
 	app.Engine.Start()
 	fmt.Println("[ENGINE] Started")
@@ -704,6 +734,9 @@ func (app *Application) ReturnToMenu() {
 		cmd := &usecase.ClearBoardCommand{World: app.World, GridID: gridID}
 		cmd.Execute()
 	}
+
+	// Vide l'inventaire
+	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
 
 	fmt.Println("[MENU] Retour au menu principal")
 }
