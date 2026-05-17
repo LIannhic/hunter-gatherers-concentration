@@ -2,6 +2,8 @@ package player
 
 import (
 	"errors"
+
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
 // Stats représente les caractéristiques du joueur
@@ -16,57 +18,54 @@ type Stats struct {
 	Level      int
 }
 
+// LootItem représente un objet récolté
+type LootItem struct {
+	ID            string
+	Name          string
+	Type          entity.Type
+	SourceID      string
+	IsDeletable   bool // Si faux, l'objet ne peut pas être supprimé par le joueur
+}
+
 // Inventory inventaire du joueur
 type Inventory struct {
-	Resources map[string]int // ID ressource -> quantité
-	Artifacts []string       // IDs des artefacts
-	Tools     []string       // IDs des outils équipés
-	MaxSize   int
+	Items      []*LootItem // Liste ordonnée des objets (slots)
+	MaxSize    int
+	ScrollOffset float64 // Changé en float64 pour défilement fluide
 }
 
 func NewInventory(maxSize int) *Inventory {
 	return &Inventory{
-		Resources: make(map[string]int),
-		Artifacts: make([]string, 0),
-		Tools:     make([]string, 0),
-		MaxSize:   maxSize,
+		Items:   make([]*LootItem, 0, maxSize),
+		MaxSize: maxSize,
+		ScrollOffset: 0,
 	}
 }
 
-func (inv *Inventory) AddResource(id string, qty int) error {
-	current := inv.GetTotalItems()
-	if current+qty > inv.MaxSize {
+// AddItem ajoute un objet à l'inventaire dans le premier slot disponible
+func (inv *Inventory) AddItem(item *LootItem) error {
+	if len(inv.Items) >= inv.MaxSize {
 		return errors.New("inventaire plein")
 	}
-	inv.Resources[id] += qty
+	inv.Items = append(inv.Items, item)
 	return nil
 }
 
-func (inv *Inventory) RemoveResource(id string, qty int) error {
-	if inv.Resources[id] < qty {
-		return errors.New("quantité insuffisante")
+// RemoveItem retire un objet par son index
+func (inv *Inventory) RemoveItem(index int) error {
+	if index < 0 || index >= len(inv.Items) {
+		return errors.New("index invalide")
 	}
-	inv.Resources[id] -= qty
-	if inv.Resources[id] == 0 {
-		delete(inv.Resources, id)
-	}
+	inv.Items = append(inv.Items[:index], inv.Items[index+1:]...)
 	return nil
 }
 
 func (inv *Inventory) GetTotalItems() int {
-	total := len(inv.Artifacts) + len(inv.Tools)
-	for _, qty := range inv.Resources {
-		total += qty
-	}
-	return total
+	return len(inv.Items)
 }
 
-func (inv *Inventory) HasResource(id string) bool {
-	return inv.Resources[id] > 0
-}
-
-func (inv *Inventory) GetResourceCount(id string) int {
-	return inv.Resources[id]
+func (inv *Inventory) IsFull() bool {
+	return len(inv.Items) >= inv.MaxSize
 }
 
 // Skills capacités débloquées
@@ -98,7 +97,7 @@ func New(id string) *Player {
 			MaxSanity: 100,
 			Level:     1,
 		},
-		Inventory: *NewInventory(20),
+		Inventory: *NewInventory(30),
 		Skills: Skills{
 			UnlockedAssociations: []string{"identical"},
 			Resistances:          make(map[string]int),

@@ -3,6 +3,7 @@ package usecase
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/association"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -100,7 +101,19 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 			fmt.Printf("  -> Effet détecté : %s sur la cible %s\n", eff.Type, eff.Target)
 		}
 
-		mm.eventBus.PublishImmediate(event.NewTileMatchedEvent(entity.Position(pos), string(secondID)))
+		// On envoie les deux IDs pour que le LootSystem puisse identifier la paire
+		mm.eventBus.PublishImmediate(event.Event{
+			Type:     event.TileMatched,
+			SourceID: string(secondID),
+			Payload: map[string]interface{}{
+				"position":    entity.Position(pos),
+				"entity_id":   string(secondID),
+				"other_id":    string(firstID),
+				"name":        ent.GetType().String(), // Fallback simple
+				"entity_type": ent.GetType(),
+			},
+			Timestamp: time.Now(),
+		})
 	} else {
 		fmt.Printf("[ÉCHEC] Les tuiles ne correspondent pas. Raison : %v\n", err)
 

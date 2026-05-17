@@ -368,6 +368,12 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 			op.GeoM.Scale(math.Abs(math.Cos(rotateY*math.Pi/180)), 1)
 			op.GeoM.Translate(centerX, 0)
 		}
+	} else if visualState == entity.Matched {
+		// "Raised" effect: matched tiles are 20% larger
+		scale := 1.2
+		op.GeoM.Translate(-centerX, -centerY)
+		op.GeoM.Scale(scale, scale)
+		op.GeoM.Translate(centerX, centerY)
 	}
 
 	op.GeoM.Translate(x, y)

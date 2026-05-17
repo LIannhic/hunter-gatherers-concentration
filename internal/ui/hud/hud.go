@@ -9,6 +9,8 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -18,21 +20,53 @@ import (
 
 // HUD affiche les informations de jeu
 type HUD struct {
-	world       *domain.World
-	showDetails bool
+	world                *domain.World
+	showDetails          bool
+	showInventoryDetails bool
+	fullFeedbackTimer    int // Timer pour le retour visuel d'inventaire plein
+
+	inventoryOffscreen *ebiten.Image // Buffer pour le clipping de l'inventaire
+
+	// Gestion de la suppression et sélection
+	selectedLoots   map[int]bool // Indices sélectionnés
+	confirmClearAll bool         // vrai si on a cliqué sur X sans sélection
 }
 
 // NewHUD crée un nouveau HUD
 func NewHUD(world *domain.World) *HUD {
-	return &HUD{
-		world:       world,
-		showDetails: false,
+	h := &HUD{
+		world:                world,
+		showDetails:          false,
+		showInventoryDetails: false,
+		fullFeedbackTimer:    0,
+		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 331),
+		selectedLoots:        make(map[int]bool),
+		confirmClearAll:      false,
+	}
+
+	// S'abonne aux événements d'inventaire plein
+	world.EventBus.SubscribeFunc("inventory_full", func(e event.Event) {
+		h.fullFeedbackTimer = 60 // 1 seconde à 60 fps
+	})
+
+	return h
+}
+
+// Update met à jour l'état interne de l'HUD (animations, timers)
+func (h *HUD) Update() {
+	if h.fullFeedbackTimer > 0 {
+		h.fullFeedbackTimer--
 	}
 }
 
 // ToggleDetails bascule l'affichage de la fenêtre de détails
 func (h *HUD) ToggleDetails() {
 	h.showDetails = !h.showDetails
+}
+
+// ToggleInventoryDetails bascule l'affichage de la liste de l'inventaire
+func (h *HUD) ToggleInventoryDetails() {
+	h.showInventoryDetails = !h.showInventoryDetails
 }
 
 // Render dessine le HUD complet
@@ -44,6 +78,10 @@ func (h *HUD) Render(screen *ebiten.Image) {
 
 	if h.showDetails {
 		h.renderDetailWindow(screen)
+	}
+
+	if h.showInventoryDetails {
+		h.renderInventoryWindow(screen)
 	}
 }
 
@@ -124,6 +162,8 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 		"CLIC: Ouvrir",
 		"M: Matcher",
 		"I: Zones",
+		"L: Liste Inv",
+		"B: Remplir Inv",
 		"ZQSD: Naviguer",
 		"ESPACE: Fin",
 		"F1-F4: Diff",
@@ -172,30 +212,96 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 }
 
 func (h *HUD) renderInventory(screen *ebiten.Image) {
-	// Inventory Panel
-	vector.StrokeRect(screen, ui.InventoryX, ui.InventoryY, ui.InventoryW, ui.InventoryH, 1, color.RGBA{100, 100, 100, 255}, true)
-	text.Draw(screen, "INVENTORY", basicfont.Face7x13, ui.InventoryX+10, ui.InventoryY+20, color.RGBA{100, 200, 255, 255})
+	// Inventory Panel border
+	panelClr := color.RGBA{100, 100, 100, 255}
+	inv := h.world.Player.Inventory
 
-	// Loot Slots (Grid 3x4)
-	for i := 0; i < 12; i++ {
-		row := i / ui.LootSlotsPerRow
-		col := i % ui.LootSlotsPerRow
-		sx := ui.InventoryX + float64(col)*(ui.LootSlotSize+ui.LootSlotPadding) + 5
-		sy := ui.InventoryY + 40 + float64(row)*(ui.LootSlotSize+ui.LootSlotPadding)
-		vector.StrokeRect(screen, float32(sx), float32(sy), float32(ui.LootSlotSize), float32(ui.LootSlotSize), 1, color.RGBA{50, 50, 50, 255}, true)
+	// Orange if full
+	if inv.IsFull() {
+		panelClr = color.RGBA{255, 165, 0, 255} // Orange
 	}
 
-	// Loot counter
+	if h.fullFeedbackTimer > 0 {
+		if h.fullFeedbackTimer%10 < 5 {
+			panelClr = color.RGBA{255, 100, 0, 255} // Flash Orange/Darker Orange
+		}
+	}
+	vector.StrokeRect(screen, ui.InventoryX, ui.InventoryY, ui.InventoryW, ui.InventoryH, 1, panelClr, true)
+	text.Draw(screen, "INVENTORY", basicfont.Face7x13, int(ui.InventoryX)+10, int(ui.InventoryY)+20, color.RGBA{100, 200, 255, 255})
+
+	items := inv.Items
+
+	// 1. Dessiner les slots dans le buffer offscreen
+	h.inventoryOffscreen.Fill(color.Transparent)
+
+	rowH := ui.LootSlotSize + ui.LootSlotPadding
+	for i := 0; i < inv.MaxSize; i++ {
+		row := i / ui.LootSlotsPerRow
+		col := i % ui.LootSlotsPerRow
+
+		sx := float64(col)*rowH + 5
+		sy := float64(row)*rowH - inv.ScrollOffset
+
+		if sy+rowH < 0 || sy > 331 {
+			continue
+		}
+
+		// Slot border
+		slotClr := color.RGBA{50, 50, 50, 255}
+
+		// Highlight if selected or if clear-all-confirmation is on (and item is deletable)
+		highlight := h.selectedLoots[i]
+		if h.confirmClearAll && i < len(items) && items[i].IsDeletable {
+			highlight = true
+		}
+
+		if highlight {
+			slotClr = color.RGBA{255, 255, 0, 255} // Yellow highlight
+		}
+
+		vector.StrokeRect(h.inventoryOffscreen, float32(sx), float32(sy), float32(ui.LootSlotSize), float32(ui.LootSlotSize), 1, slotClr, true)
+
+		if i < len(items) {
+			item := items[i]
+			itemClr := color.RGBA{150, 150, 150, 255}
+			switch item.Type {
+			case entity.TypeResource:
+				itemClr = color.RGBA{100, 200, 100, 255}
+			case entity.TypeCreature:
+				itemClr = color.RGBA{200, 100, 100, 255}
+			}
+			vector.DrawFilledRect(h.inventoryOffscreen, float32(sx+4), float32(sy+4), float32(ui.LootSlotSize-8), float32(ui.LootSlotSize-8), itemClr, true)
+
+			if len(item.Name) > 0 {
+				text.Draw(h.inventoryOffscreen, string(item.Name[0]), basicfont.Face7x13, int(sx+ui.LootSlotSize/2)-3, int(sy+ui.LootSlotSize/2)+5, color.Black)
+			}
+		}
+	}
+
+	// 2. Afficher le buffer
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(ui.InventoryX, ui.InventoryY+40)
+	screen.DrawImage(h.inventoryOffscreen, op)
+
+	// 3. Loot counter et bouton X
 	lcx := ui.InventoryX + ui.LootCounterRelativeX
 	lcy := ui.InventoryY + ui.LootCounterRelativeY
 	vector.DrawFilledRect(screen, float32(lcx), float32(lcy), float32(ui.LootCounterSize), float32(ui.LootCounterSize), color.RGBA{50, 50, 50, 255}, true)
-	text.Draw(screen, "0", basicfont.Face7x13, int(lcx)+15, int(lcy)+25, color.White)
+	text.Draw(screen, fmt.Sprintf("%d", len(items)), basicfont.Face7x13, int(lcx)+15, int(lcy)+25, color.White)
 
-	// Delete Loot icon
 	dlx := ui.InventoryX + ui.DeleteLootRelativeX
 	dly := ui.InventoryY + ui.DeleteLootRelativeY
-	vector.DrawFilledRect(screen, float32(dlx), float32(dly), float32(ui.DeleteLootSize), float32(ui.DeleteLootSize), color.RGBA{150, 50, 50, 255}, true)
+
+	btnXClr := color.RGBA{150, 50, 50, 255}
+	if len(h.selectedLoots) > 0 || h.confirmClearAll {
+		btnXClr = color.RGBA{255, 50, 50, 255} // Bright red if active
+	}
+	vector.DrawFilledRect(screen, float32(dlx), float32(dly), float32(ui.DeleteLootSize), float32(ui.DeleteLootSize), btnXClr, true)
 	text.Draw(screen, "X", basicfont.Face7x13, int(dlx)+15, int(dly)+25, color.White)
+
+	if inv.IsFull() {
+		text.Draw(screen, "FULL", basicfont.Face7x13, int(ui.InventoryX)+ui.InventoryW/2-15, int(ui.InventoryY)+ui.InventoryH-10, color.RGBA{255, 165, 0, 255})
+	}
 }
 
 func (h *HUD) renderGauges(screen *ebiten.Image) {
@@ -312,10 +418,59 @@ func (h *HUD) renderDetailWindow(screen *ebiten.Image) {
 	}
 }
 
+func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
+	// Position et taille de la fenêtre (identique à renderDetailWindow)
+	winW, winH := 320, 450
+	winX := (ui.ScreenWidth - winW) / 2
+	winY := (ui.ScreenHeight - winH) / 2
+
+	// Fond translucide
+	vector.DrawFilledRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), color.RGBA{10, 20, 10, 230}, true)
+	vector.StrokeRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), 2, color.RGBA{100, 150, 100, 255}, true)
+
+	// Titre
+	text.Draw(screen, "CONTENU DE L'INVENTAIRE", basicfont.Face7x13, winX+20, winY+30, color.RGBA{100, 255, 100, 255})
+
+	// Icone fermer (X)
+	closeX := winX + winW - 30
+	closeY := winY + 10
+	vector.DrawFilledRect(screen, float32(closeX), float32(closeY), 20, 20, color.RGBA{150, 50, 50, 255}, true)
+	text.Draw(screen, "X", basicfont.Face7x13, closeX+6, closeY+15, color.White)
+
+	// Liste des items
+	inv := h.world.Player.Inventory
+	dy := winY + 70
+
+	if len(inv.Items) == 0 {
+		text.Draw(screen, "(Inventaire vide)", basicfont.Face7x13, winX+30, dy, color.RGBA{150, 150, 150, 255})
+		return
+	}
+
+	// Groupement par nom pour la liste détaillée
+	counts := make(map[string]int)
+	for _, item := range inv.Items {
+		counts[item.Name]++
+	}
+
+	keys := make([]string, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		info := fmt.Sprintf("%-20s x%d", k, counts[k])
+		text.Draw(screen, info, basicfont.Face7x13, winX+30, dy, color.White)
+		dy += 20
+		if dy > winY+winH-20 {
+			break
+		}
+	}
+}
+
 // HandleClick gère les clics sur les éléments de l'HUD
 func (h *HUD) HandleClick(x, y int) bool {
 	if h.showDetails {
-		// Vérifie le bouton fermer
 		winW, winH := 320, 450
 		winX := (ui.ScreenWidth - winW) / 2
 		winY := (ui.ScreenHeight - winH) / 2
@@ -327,5 +482,138 @@ func (h *HUD) HandleClick(x, y int) bool {
 			return true
 		}
 	}
+
+	if h.showInventoryDetails {
+		winW, winH := 320, 450
+		winX := (ui.ScreenWidth - winW) / 2
+		winY := (ui.ScreenHeight - winH) / 2
+		closeX := winX + winW - 30
+		closeY := winY + 10
+
+		if x >= closeX && x <= closeX+20 && y >= closeY && y <= closeY+20 {
+			h.showInventoryDetails = false
+			return true
+		}
+	}
+
+	// Gestion du clic sur l'inventaire
+	if float64(x) >= ui.InventoryX && float64(x) <= ui.InventoryX+ui.InventoryW &&
+		float64(y) >= ui.InventoryY && float64(y) <= ui.InventoryY+ui.InventoryH {
+
+		// 1. Détection clic sur les slots (Zone slots commence à InventoryY + 40)
+		slotZoneY := float64(ui.InventoryY + 40)
+		if float64(y) >= slotZoneY && float64(y) <= slotZoneY+331 {
+			localY := float64(y) - slotZoneY + h.world.Player.Inventory.ScrollOffset
+			localX := float64(x) - float64(ui.InventoryX) - 5
+
+			rowH := ui.LootSlotSize + ui.LootSlotPadding
+			row := int(localY / rowH)
+			col := int(localX / rowH)
+
+			if col >= 0 && col < ui.LootSlotsPerRow {
+				idx := row*ui.LootSlotsPerRow + col
+				if idx >= 0 && idx < len(h.world.Player.Inventory.Items) {
+					// Toggle sélection
+					if h.selectedLoots[idx] {
+						delete(h.selectedLoots, idx)
+					} else {
+						h.selectedLoots[idx] = true
+					}
+					h.confirmClearAll = false
+					return true
+				}
+			}
+		}
+
+		// 2. Bouton Delete (X)
+		dlx := float64(ui.InventoryX + ui.DeleteLootRelativeX)
+		dly := float64(ui.InventoryY + ui.DeleteLootRelativeY)
+		if float64(x) >= dlx && float64(x) <= dlx+float64(ui.DeleteLootSize) &&
+			float64(y) >= dly && float64(y) <= dly+float64(ui.DeleteLootSize) {
+
+			inv := &h.world.Player.Inventory
+			if len(h.selectedLoots) > 0 {
+				// Suppression de toutes les tuiles sélectionnées
+				// On trie les indices par ordre décroissant pour ne pas décaler les suivants
+				indices := make([]int, 0, len(h.selectedLoots))
+				for idx := range h.selectedLoots {
+					indices = append(indices, idx)
+				}
+				sort.Sort(sort.Reverse(sort.IntSlice(indices)))
+
+				for _, idx := range indices {
+					// Vérifie si l'item est supprimable
+					if idx < len(inv.Items) && inv.Items[idx].IsDeletable {
+						inv.RemoveItem(idx)
+					}
+				}
+				h.selectedLoots = make(map[int]bool)
+			} else if !h.confirmClearAll {
+				// Première étape : Sélectionner tout (Confirmation)
+				// On ne sélectionne visuellement que ce qui est supprimable
+				if len(inv.Items) > 0 {
+					h.confirmClearAll = true
+				}
+			} else {
+				// Deuxième étape : Supprimer tout ce qui est supprimable
+				newItems := make([]*player.LootItem, 0, inv.MaxSize)
+				for _, item := range inv.Items {
+					if !item.IsDeletable {
+						newItems = append(newItems, item)
+					}
+				}
+				inv.Items = newItems
+				h.confirmClearAll = false
+			}
+			return true
+		}
+	} else {
+		// Clic en dehors de l'inventaire désélectionne tout
+		h.selectedLoots = make(map[int]bool)
+		h.confirmClearAll = false
+	}
+
 	return false
+}
+
+// HandleRightClick gère les clics droits (désélection)
+func (h *HUD) HandleRightClick(x, y int) bool {
+	if float64(x) >= ui.InventoryX && float64(x) <= ui.InventoryX+ui.InventoryW &&
+		float64(y) >= ui.InventoryY && float64(y) <= ui.InventoryY+ui.InventoryH {
+		h.selectedLoots = make(map[int]bool)
+		h.confirmClearAll = false
+		return true
+	}
+	return false
+}
+
+// HandleScroll gère le scroll sur l'inventaire
+func (h *HUD) HandleScroll(x, y int) {
+	if float64(x) >= ui.InventoryX && float64(x) <= ui.InventoryX+ui.InventoryW &&
+		float64(y) >= ui.InventoryY && float64(y) <= ui.InventoryY+ui.InventoryH {
+		_, dy := ebiten.Wheel()
+		if dy != 0 {
+			inv := &h.world.Player.Inventory
+			// Défilement de 20 pixels par cran de molette
+			inv.ScrollOffset -= dy * 20
+
+			// Calcul de la hauteur totale du contenu
+			totalRows := float64((inv.MaxSize + ui.LootSlotsPerRow - 1) / ui.LootSlotsPerRow)
+			rowH := ui.LootSlotSize + ui.LootSlotPadding
+			totalHeight := totalRows * rowH
+			viewportHeight := 331.0
+
+			// Clamp scroll
+			maxScroll := totalHeight - viewportHeight
+			if maxScroll < 0 {
+				maxScroll = 0
+			}
+			if inv.ScrollOffset < 0 {
+				inv.ScrollOffset = 0
+			}
+			if inv.ScrollOffset > maxScroll {
+				inv.ScrollOffset = maxScroll
+			}
+		}
+	}
 }

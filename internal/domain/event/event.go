@@ -22,6 +22,8 @@ const (
 	TurnEnded          Type = "turn_ended"
 	TileRevealed       Type = "tile_revealed"
 	TileMatched        Type = "tile_matched"
+	LootAcquired       Type = "loot_acquired"
+	InventoryFull      Type = "inventory_full"
 	EntityCreated      Type = "entity_created"
 	EntityRemoved      Type = "entity_removed"
 	DifficultyChanged  Type = "difficulty_changed"
@@ -179,14 +181,38 @@ func NewEntityRevealedEvent(tilePos entity.Position, entityID string, gridID str
 	}
 }
 
-func NewTileMatchedEvent(tilePos entity.Position, entityID string) Event {
+func NewTileMatchedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type) Event {
 	return Event{
 		Type:     TileMatched,
 		SourceID: entityID,
 		Payload: map[string]interface{}{
-			"position":  tilePos,
-			"entity_id": entityID,
+			"position":    tilePos,
+			"entity_id":   entityID,
+			"name":        name,
+			"entity_type": entityType,
 		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewLootAcquiredEvent(itemID string, name string, entityType entity.Type) Event {
+	return Event{
+		Type:     LootAcquired,
+		SourceID: itemID,
+		Payload: map[string]interface{}{
+			"item_id":     itemID,
+			"name":        name,
+			"entity_type": entityType,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewInventoryFullEvent() Event {
+	return Event{
+		Type:      InventoryFull,
+		SourceID:  "inventory",
+		Payload:   map[string]interface{}{},
 		Timestamp: time.Now(),
 	}
 }
