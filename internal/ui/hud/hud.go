@@ -4,9 +4,12 @@ package hud
 import (
 	"fmt"
 	"image/color"
+	"sort"
+	"strings"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -15,101 +18,247 @@ import (
 
 // HUD affiche les informations de jeu
 type HUD struct {
-	world *domain.World
+	world       *domain.World
+	showDetails bool
 }
 
 // NewHUD crée un nouveau HUD
 func NewHUD(world *domain.World) *HUD {
 	return &HUD{
-		world: world,
+		world:       world,
+		showDetails: false,
 	}
 }
 
-// Render dessine le HUD dans la barre latérale
-func (h *HUD) Render(screen *ebiten.Image, x int) {
-	y := 30
-	
-	// --- SECTION: TITRE & TOUR ---
-	title := fmt.Sprintf("TOUR %d", h.world.Turn)
-	text.Draw(screen, "HUNTER-GATHERERS", basicfont.Face7x13, x, y, color.RGBA{255, 200, 100, 255})
-	y += 16
-	text.Draw(screen, title, basicfont.Face7x13, x, y, color.White)
-	y += 30
+// ToggleDetails bascule l'affichage de la fenêtre de détails
+func (h *HUD) ToggleDetails() {
+	h.showDetails = !h.showDetails
+}
 
-	// --- SECTION: STATISTIQUES ---
-	text.Draw(screen, "-- STATS --", basicfont.Face7x13, x, y, color.RGBA{100, 200, 255, 255})
-	y += 18
+// Render dessine le HUD complet
+func (h *HUD) Render(screen *ebiten.Image) {
+	h.renderPortrait(screen)
+	h.renderInventory(screen)
+	h.renderGauges(screen)
+	h.renderMiniMap(screen)
 
-	p := h.world.Player
-	h.drawStat(screen, x, y, "HP", p.Stats.Health, p.Stats.MaxHealth)
-	y += 14
-	h.drawStat(screen, x, y, "MN", p.Stats.Mana, p.Stats.MaxMana)
-	y += 14
-	h.drawStat(screen, x, y, "SN", p.Stats.Sanity, p.Stats.MaxSanity)
-	y += 30
+	if h.showDetails {
+		h.renderDetailWindow(screen)
+	}
+}
 
-	// --- SECTION: MONDE & DIFFICULTÉ ---
-	text.Draw(screen, "-- WORLD --", basicfont.Face7x13, x, y, color.RGBA{100, 255, 100, 255})
-	y += 18
-	text.Draw(screen, fmt.Sprintf("Diff: %s", h.world.Difficulty.Level), basicfont.Face7x13, x, y, color.White)
-	y += 14
-	text.Draw(screen, fmt.Sprintf("Active: %s", h.world.CurrentGridID), basicfont.Face7x13, x, y, color.RGBA{255, 255, 0, 255})
-	y += 20
+// getGridDetailedCounts retourne le nombre d'entités par type/espèce pour une grille donnée
+func (h *HUD) getGridDetailedCounts(gridID string) map[string]int {
+	counts := make(map[string]int)
 
-	// --- SECTION: MINI-MAP ---
-	h.drawMiniMap(screen, x, y)
-	y += 130 // Espace pour la minimap (9x12px + padding)
+	// Ressources
+	for _, e := range h.world.Entities.GetByType(entity.TypeResource) {
+		if e.GetGridID() == gridID && e.GetState() != entity.Matched {
+			if r, ok := e.(*domain.Resource); ok {
+				counts[r.ResourceType]++
+			}
+		}
+	}
+	// Créatures
+	for _, e := range h.world.Entities.GetByType(entity.TypeCreature) {
+		if e.GetGridID() == gridID && e.GetState() != entity.Matched {
+			if c, ok := e.(*domain.Creature); ok {
+				counts[c.Species]++
+			}
+		}
+	}
+	// Structures & Portails
+	for _, e := range h.world.Entities.GetByType(entity.TypeStructure) {
+		if e.GetGridID() == gridID {
+			label := "structure"
+			if e.HasTag("commencement_portal") {
+				label = "portail_entree"
+			} else if e.HasTag("finish_portal") {
+				label = "portail_sortie"
+			} else if e.HasTag("dolmen") {
+				label = "dolmen"
+			} else if e.HasTag("obelisk") {
+				label = "obelisque"
+			}
+			counts[label]++
+		}
+	}
+	return counts
+}
 
-	// --- SECTION: ENTITÉS ---
-	h.RenderEntityList(screen, x, y)
-	
-	// --- SECTION: CONTRÔLES (en bas) ---
-	y = 480 // Remonté un peu pour laisser de la place
-	text.Draw(screen, "-- CONTROLS --", basicfont.Face7x13, x, y, color.RGBA{150, 150, 150, 255})
-	y += 18
+// getGridEntityCounts retourne le nombre total de ressources, créatures et structures sur un grid
+func (h *HUD) getGridEntityCounts(gridID string) (resCount, creCount, structCount int) {
+	for _, e := range h.world.Entities.GetByType(entity.TypeResource) {
+		if e.GetGridID() == gridID && e.GetState() != entity.Matched {
+			resCount++
+		}
+	}
+	for _, e := range h.world.Entities.GetByType(entity.TypeCreature) {
+		if e.GetGridID() == gridID && e.GetState() != entity.Matched {
+			creCount++
+		}
+	}
+	for _, e := range h.world.Entities.GetByType(entity.TypeStructure) {
+		if e.GetGridID() == gridID {
+			structCount++
+		}
+	}
+	return
+}
+
+func (h *HUD) renderPortrait(screen *ebiten.Image) {
+	// Portrait Holder
+	vector.StrokeRect(screen, ui.PortraitX, ui.PortraitY, ui.PortraitW, ui.PortraitH, 1, color.RGBA{100, 100, 100, 255}, true)
+
+	// Turn and Difficulty (aligned)
+	infoX := int(ui.PortraitX) + 60
+	infoY := int(ui.PortraitY) + 25
+	text.Draw(screen, fmt.Sprintf("T:%d", h.world.Turn), basicfont.Face7x13, infoX, infoY, color.White)
+	text.Draw(screen, fmt.Sprintf("D:%s", h.world.Difficulty.Level), basicfont.Face7x13, infoX+60, infoY, color.RGBA{255, 200, 100, 255})
+
+	// --- COLUMN LEFT: CONTROLS ---
+	y := int(ui.PortraitY) + 85
+	text.Draw(screen, "ACTION:", basicfont.Face7x13, int(ui.PortraitX)+10, y-15, color.RGBA{100, 200, 255, 255})
+
 	controls := []string{
-		"Click : Reveler",
-		"M : Matcher",
-		"SPACE : Fin de tour",
-		"F1-F4 : Difficulte",
-		"F5/F6 : Reveal/Hide All",
-		"S : Spawn paires",
-		"ESC : Abandonner",
+		"CLIC: Ouvrir",
+		"M: Matcher",
+		"I: Zones",
+		"ESPACE: Fin",
+		"F1-F4: Diff",
+		"F5/F6: R/H All",
+		"ESC: Menu",
 	}
 	for _, c := range controls {
-		text.Draw(screen, c, basicfont.Face7x13, x, y, color.RGBA{180, 180, 180, 255})
-		y += 14
+		text.Draw(screen, c, basicfont.Face7x13, int(ui.PortraitX)+10, y, color.RGBA{160, 160, 160, 255})
+		y += 18
 	}
+
+	// --- COLUMN RIGHT: CURRENT GRID DETAILS ---
+	rx := int(ui.PortraitX) + 125
+	ry := int(ui.PortraitY) + 85
+	text.Draw(screen, "SUR ZONE:", basicfont.Face7x13, rx, ry-15, color.RGBA{100, 200, 255, 255})
+
+	counts := h.getGridDetailedCounts(h.world.CurrentGridID)
+
+	keys := make([]string, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		label := strings.Title(strings.ReplaceAll(k, "_", " "))
+		if len(label) > 12 {
+			label = label[:12]
+		}
+		info := fmt.Sprintf("%s:%d", label, counts[k])
+		text.Draw(screen, info, basicfont.Face7x13, rx, ry, color.White)
+		ry += 16
+		if ry > int(ui.PortraitY)+int(ui.PortraitH)-20 {
+			break
+		}
+	}
+
+	if len(keys) == 0 {
+		text.Draw(screen, "(Zone vide)", basicfont.Face7x13, rx, ry, color.RGBA{150, 150, 150, 255})
+	}
+
+	// Menu Icon
+	mx := ui.PortraitX + ui.MenuIconRelativeX
+	my := ui.PortraitY + ui.MenuIconRelativeY
+	vector.DrawFilledRect(screen, float32(mx), float32(my), float32(ui.MenuIconSize), float32(ui.MenuIconSize), color.RGBA{150, 150, 150, 255}, true)
+	text.Draw(screen, "M", basicfont.Face7x13, int(mx)+15, int(my)+25, color.Black)
 }
 
-func (h *HUD) drawStat(screen *ebiten.Image, x, y int, label string, val, max int) {
-	var c color.Color = color.White
-	if val < 20 {
-		c = color.RGBA{255, 100, 100, 255}
+func (h *HUD) renderInventory(screen *ebiten.Image) {
+	// Inventory Panel
+	vector.StrokeRect(screen, ui.InventoryX, ui.InventoryY, ui.InventoryW, ui.InventoryH, 1, color.RGBA{100, 100, 100, 255}, true)
+	text.Draw(screen, "INVENTORY", basicfont.Face7x13, ui.InventoryX+10, ui.InventoryY+20, color.RGBA{100, 200, 255, 255})
+
+	// Loot Slots (Grid 3x4)
+	for i := 0; i < 12; i++ {
+		row := i / ui.LootSlotsPerRow
+		col := i % ui.LootSlotsPerRow
+		sx := ui.InventoryX + float64(col)*(ui.LootSlotSize+ui.LootSlotPadding) + 5
+		sy := ui.InventoryY + 40 + float64(row)*(ui.LootSlotSize+ui.LootSlotPadding)
+		vector.StrokeRect(screen, float32(sx), float32(sy), float32(ui.LootSlotSize), float32(ui.LootSlotSize), 1, color.RGBA{50, 50, 50, 255}, true)
 	}
-	text.Draw(screen, fmt.Sprintf("%s: %d/%d", label, val, max), basicfont.Face7x13, x, y, c)
+
+	// Loot counter
+	lcx := ui.InventoryX + ui.LootCounterRelativeX
+	lcy := ui.InventoryY + ui.LootCounterRelativeY
+	vector.DrawFilledRect(screen, float32(lcx), float32(lcy), float32(ui.LootCounterSize), float32(ui.LootCounterSize), color.RGBA{50, 50, 50, 255}, true)
+	text.Draw(screen, "0", basicfont.Face7x13, int(lcx)+15, int(lcy)+25, color.White)
+
+	// Delete Loot icon
+	dlx := ui.InventoryX + ui.DeleteLootRelativeX
+	dly := ui.InventoryY + ui.DeleteLootRelativeY
+	vector.DrawFilledRect(screen, float32(dlx), float32(dly), float32(ui.DeleteLootSize), float32(ui.DeleteLootSize), color.RGBA{150, 50, 50, 255}, true)
+	text.Draw(screen, "X", basicfont.Face7x13, int(dlx)+15, int(dly)+25, color.White)
 }
 
-func (h *HUD) drawMiniMap(screen *ebiten.Image, x, y int) {
+func (h *HUD) renderGauges(screen *ebiten.Image) {
+	// Gauges Holder
+	vector.StrokeRect(screen, ui.GaugesX, ui.GaugesY, ui.GaugesW, ui.GaugesH, 1, color.RGBA{100, 100, 100, 255}, true)
+
+	p := h.world.Player
+	// Health gauge
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{255, 50, 50, 255})
+	// Mana gauge
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{50, 50, 255, 255})
+	// Sanity gauge
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.SanityGaugeRelativeX, ui.GaugesY+ui.SanityGaugeRelativeY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{50, 255, 50, 255})
+}
+
+func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string, val, max int, clr color.Color) {
+	// Gauge Holder background
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(ui.GaugeW), float32(ui.GaugeH), color.RGBA{30, 30, 30, 255}, true)
+
+	// Rule: 100 hp = 200 px recalculate if over 200 hp for always = 400 px.
+	var totalPx float32
+	if max <= 200 {
+		totalPx = float32(max) * 2
+	} else {
+		totalPx = 400
+	}
+
+	var fillHeight float32
+	if max > 0 {
+		fillHeight = (float32(val) / float32(max)) * totalPx
+	}
+
+	// Draw background of the actual gauge
+	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(totalPx)), float32(ui.GaugeW), totalPx, color.RGBA{50, 50, 50, 255}, true)
+
+	// Fill from bottom
+	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(fillHeight)), float32(ui.GaugeW), fillHeight, clr, true)
+
+	// Label
+	text.Draw(screen, label, basicfont.Face7x13, int(x)+25, int(y)+int(ui.GaugeH)+15, color.White)
+}
+
+func (h *HUD) renderMiniMap(screen *ebiten.Image) {
+	// Minimap Holder
+	vector.StrokeRect(screen, ui.MinimapX, ui.MinimapY, ui.MinimapW, ui.MinimapH, 1, color.RGBA{100, 100, 100, 255}, true)
+	text.Draw(screen, "MINIMAP", basicfont.Face7x13, ui.MinimapX+10, ui.MinimapY+20, color.RGBA{100, 200, 255, 255})
+
 	if h.world.DreamPlane == nil {
 		return
 	}
 
-	const cellSize = 12
-	const padding = 2
+	// Drawing the map as we go along
+	const padding = 10
+	mapW := float32(ui.MinimapW - 2*padding)
+	cellSize := mapW / 9 // Assuming 9x9 grid for minimap
 
 	plane := h.world.DreamPlane
 
-	// Dessine le fond de la minimap
-	text.Draw(screen, "-- MAP --", basicfont.Face7x13, x, y, color.RGBA{100, 200, 255, 255})
-	y += 15
-
 	for row := 0; row < 9; row++ {
 		for col := 0; col < 9; col++ {
-			sx := x + col*(cellSize+padding)
-			sy := y + row*(cellSize+padding)
+			sx := float32(ui.MinimapX+padding) + float32(col)*cellSize
+			sy := float32(ui.MinimapY+padding+20) + float32(row)*cellSize
 
-			// Cherche si une zone occupe ces coordonnées
 			var zoneID string
 			for id, coords := range plane.Coords {
 				if coords.X == col && coords.Y == row {
@@ -118,47 +267,65 @@ func (h *HUD) drawMiniMap(screen *ebiten.Image, x, y int) {
 				}
 			}
 
-			rectColor := color.RGBA{40, 40, 40, 255}
 			if zoneID != "" {
+				var rectColor color.Color = color.RGBA{150, 150, 150, 255}
 				if zoneID == h.world.CurrentGridID {
-					rectColor = color.RGBA{255, 255, 0, 255} // Active
-				} else if zoneID == plane.StartZoneID {
-					rectColor = color.RGBA{100, 255, 100, 255} // Start
-				} else if zoneID == plane.EndZoneID {
-					rectColor = color.RGBA{255, 100, 100, 255} // End
-				} else {
-					rectColor = color.RGBA{150, 150, 150, 255} // Visited/Normal
+					rectColor = color.RGBA{255, 255, 0, 255}
 				}
+				vector.DrawFilledRect(screen, sx, sy, cellSize-1, cellSize-1, rectColor, true)
 			}
-
-			// Dessine le carré de la zone
-			vector.DrawFilledRect(screen, float32(sx), float32(sy), float32(cellSize), float32(cellSize), rectColor, true)
 		}
 	}
 }
 
-// RenderEntityList affiche le décompte des entités par grille
-func (h *HUD) RenderEntityList(screen *ebiten.Image, x, y int) {
-	text.Draw(screen, "-- ENTITIES --", basicfont.Face7x13, x, y, color.RGBA{100, 255, 100, 255})
-	y += 18
+func (h *HUD) renderDetailWindow(screen *ebiten.Image) {
+	// Position et taille de la fenêtre
+	winW, winH := 320, 450
+	winX := (ui.ScreenWidth - winW) / 2
+	winY := (ui.ScreenHeight - winH) / 2
 
+	// Fond translucide
+	vector.DrawFilledRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), color.RGBA{10, 10, 20, 230}, true)
+	vector.StrokeRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), 2, color.RGBA{100, 100, 150, 255}, true)
+
+	// Titre
+	text.Draw(screen, "STATISTIQUES DES ZONES", basicfont.Face7x13, winX+20, winY+30, color.RGBA{100, 200, 255, 255})
+
+	// Icone fermer (X)
+	closeX := winX + winW - 30
+	closeY := winY + 10
+	vector.DrawFilledRect(screen, float32(closeX), float32(closeY), 20, 20, color.RGBA{150, 50, 50, 255}, true)
+	text.Draw(screen, "X", basicfont.Face7x13, closeX+6, closeY+15, color.White)
+
+	// Liste des zones (L'ancienne liste du portrait)
+	dy := winY + 70
 	for _, gridID := range h.world.GridOrder {
-		resCount := 0
-		creCount := 0
-		
-		for _, e := range h.world.Entities.GetByType(entity.TypeResource) {
-			if e.GetGridID() == gridID {
-				resCount++
-			}
-		}
-		for _, e := range h.world.Entities.GetByType(entity.TypeCreature) {
-			if e.GetGridID() == gridID {
-				creCount++
-			}
-		}
+		resCount, creCount, structCount := h.getGridEntityCounts(gridID)
 
-		info := fmt.Sprintf("[%s] R:%d C:%d", gridID, resCount, creCount)
-		text.Draw(screen, info, basicfont.Face7x13, x, y, color.White)
-		y += 14
+		info := fmt.Sprintf("%-15s R:%d C:%d S:%d", gridID, resCount, creCount, structCount)
+		var clr color.Color = color.White
+		if gridID == h.world.CurrentGridID {
+			clr = color.RGBA{255, 255, 0, 255}
+		}
+		text.Draw(screen, info, basicfont.Face7x13, winX+30, dy, clr)
+		dy += 20
 	}
+}
+
+// HandleClick gère les clics sur les éléments de l'HUD
+func (h *HUD) HandleClick(x, y int) bool {
+	if h.showDetails {
+		// Vérifie le bouton fermer
+		winW, winH := 320, 450
+		winX := (ui.ScreenWidth - winW) / 2
+		winY := (ui.ScreenHeight - winH) / 2
+		closeX := winX + winW - 30
+		closeY := winY + 10
+
+		if x >= closeX && x <= closeX+20 && y >= closeY && y <= closeY+20 {
+			h.showDetails = false
+			return true
+		}
+	}
+	return false
 }
