@@ -205,6 +205,7 @@ go test ./internal/domain/... -v
 |--------|--------|
 | Révéler tuile | Click souris |
 | Matcher | M |
+| Naviguer zones | ZQSD / Flèches |
 | Statistiques zones | I |
 | Fin de tour | Espace |
 | Menu / Abandon | Échap |

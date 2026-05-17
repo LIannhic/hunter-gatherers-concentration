@@ -124,9 +124,9 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 		"CLIC: Ouvrir",
 		"M: Matcher",
 		"I: Zones",
+		"ZQSD: Naviguer",
 		"ESPACE: Fin",
 		"F1-F4: Diff",
-		"F5/F6: R/H All",
 		"ESC: Menu",
 	}
 	for _, c := range controls {
