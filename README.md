@@ -157,10 +157,13 @@ go build -o game ./cmd/game
 
 | Action | Touche |
 |--------|--------|
-| Révéler tuile | Click souris |
+| Révéler tuile | Click gauche |
 | Matcher | M |
+| Sélection Butin | Click gauche (Inv) |
+| Désélectionner | Click droit |
 | Naviguer zones | ZQSD / Flèches |
 | Statistiques zones | I |
+| Liste Inventaire | L |
 | Fin de tour | Espace |
 | Menu / Abandon | Échap |
 | Changer de grille | 1-9 |
@@ -169,6 +172,7 @@ go build -o game ./cmd/game
 | Cacher tout (Cheat) | F6 |
 | Rotation plateau | + / - |
 | Reset rotation | R |
+| Remplir Inv (Debug) | B |
 | Spawn entités (debug) | S |
 | Spawn toutes créatures (debug) | Shift+S |
 | Nettoyer plateau (debug) | C |

@@ -61,14 +61,18 @@ func (s *LifecycleSystem) Update(world *World) {
 
 - **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
   - `TileState` : Hidden, Revealed, Matched, Blocked
-  - `Type` : Resource, Creature, Structure, Artefact, Trap
+  - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
   - `Manager` : Stockage et accès rapide aux entités
   - `HasTag(string)` : Méthode permettant de vérifier les propriétés spécifiques d'une entité (ex: "commencement_portal", "dolmen").
 - **`component/`** : Stockage et définition des composants (`Store`)
 - **`system.go`** : Systèmes qui traitent les données
   - `CreatureAISystem` : Gère les comportements de base des créatures
   - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes
-  - `ResourceLifecycleSystem` : Gère la maturation des ressources
+  - `LifecycleSystem` : Gère la maturation des ressources
+  - `PropagationSystem` : Gère l'expansion organique des ressources
+  - `TriggerSystem` : Gère les structures interactives (terriers, etc.)
+  - `PreviewSystem` : Gère la révélation temporaire des tuiles à l'entrée d'une zone
+  - `LootSystem` : Gère la transformation des associations réussies en butin d'inventaire
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)
@@ -287,6 +291,27 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
     }
 }
 ```
+
+---
+
+## 8. Inventaire et Acquisition de Butin (Loot)
+
+### Objectif
+
+L'inventaire agit comme un tampon entre la session de récolte onirique et le foyer familial (méta-progression).
+
+### Fonctionnement du LootSystem
+
+1. **Détection** : Le système écoute les événements `TileMatched`.
+2. **Instanciation** : Il crée un `LootItem` à partir des métadonnées de l'entité matchée (nom de l'espèce ou type de ressource).
+3. **Transfert** : L'objet est ajouté au premier slot disponible de l'inventaire du joueur.
+4. **Overflow** : Si l'inventaire est plein (30 slots), le butin est détruit et un événement `InventoryFull` est émis pour déclencher un retour visuel.
+
+### Caractéristiques de l'Inventaire
+
+- **Multi-sélection** : Permet de sélectionner plusieurs objets pour une suppression groupée.
+- **Sécurité** : Certains objets (ex: Portail Portatif) possèdent le tag `IsDeletable: false` et ne peuvent pas être supprimés par le joueur.
+- **Affichage** : Utilise un système de clipping et de défilement fluide (pixel par pixel) pour suggérer la profondeur de la réserve.
 
 ---
 
