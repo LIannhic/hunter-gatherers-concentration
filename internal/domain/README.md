@@ -63,6 +63,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `TileState` : Hidden, Revealed, Matched, Blocked
   - `Type` : Resource, Creature, Structure, Artefact, Trap
   - `Manager` : Stockage et accès rapide aux entités
+  - `HasTag(string)` : Méthode permettant de vérifier les propriétés spécifiques d'une entité (ex: "commencement_portal", "dolmen").
 - **`component/`** : Stockage et définition des composants (`Store`)
 - **`system.go`** : Systèmes qui traitent les données
   - `CreatureAISystem` : Gère les comportements de base des créatures
@@ -70,9 +71,9 @@ func (s *LifecycleSystem) Update(world *World) {
   - `ResourceLifecycleSystem` : Gère la maturation des ressources
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
-- Une gestion cohérente des états (l'entité contrôle son visibilité)
+- Une gestion cohérente des états (l'entité contrôle sa visibilité)
 - Une séparation claire : le plateau fournit la géométrie, les entités portent la logique
-- Un système plus flexible pour les entités spéciales
+- Un système plus flexible pour les entités spéciales (ex: les portails de commencement qui se bloquent après un délai)
 
 ---
 
