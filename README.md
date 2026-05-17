@@ -159,15 +159,17 @@ go build -o game ./cmd/game
 |--------|--------|
 | Révéler tuile | Click souris |
 | Matcher | M |
+| Naviguer zones | ZQSD / Flèches |
+| Statistiques zones | I |
 | Fin de tour | Espace |
-| Désélectionner | Échap |
+| Menu / Abandon | Échap |
 | Changer de grille | 1-9 |
 | Difficulté | F1 à F4 |
+| Révéler tout (Cheat) | F5 |
+| Cacher tout (Cheat) | F6 |
 | Rotation plateau | + / - |
 | Reset rotation | R |
 | Spawn entités (debug) | S |
 | Spawn toutes créatures (debug) | Shift+S |
 | Nettoyer plateau (debug) | C |
-| Cheat: tout révéler | F5 |
-| Cheat: tout cacher | F6 |
 | Retour menu | \ |

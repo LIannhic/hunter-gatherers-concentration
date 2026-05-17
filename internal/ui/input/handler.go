@@ -38,6 +38,7 @@ type Handler struct {
 	OnRotateBoard         func(delta float64) // Callback pour la rotation du plateau
 	OnResetRotation       func()              // Callback pour réinitialiser la rotation
 	OnExitToMenu          func()              // Callback pour retourner au menu
+	OnToggleDetails       func()              // Callback pour afficher les détails
 	OnRevealAll           func(gridID string) // F5: Cheat - révéler tout
 	OnHideAll             func(gridID string) // F6: Cheat - cacher tout
 	OnForceTurn           func()              // F3: Forcer le prochain tour
@@ -300,6 +301,12 @@ func (h *Handler) processMatchAttempt() {
 }
 
 func (h *Handler) handleKeyboard() {
+	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
+		if h.OnToggleDetails != nil {
+			h.OnToggleDetails()
+		}
+	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
 		h.tryMatchSelected()
 	}

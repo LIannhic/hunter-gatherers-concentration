@@ -133,10 +133,17 @@ if revealCmd.CanExecute() {
 
 ### 4. UI
 
+Le jeu utilise une résolution logique fixe de **1280x720**. L'interface est divisée en plusieurs zones gérées par le `HUD` :
+- **Portrait** (270x270) : Affiche les statistiques du personnage, les contrôles et le contenu dynamique de la zone.
+- **Inventaire** (270x420) : Grille 3x4 pour les objets récoltés.
+- **Playmat** (700x700) : Zone centrale contenant le plateau de jeu (525x525), les boutons d'action et les indicateurs de sortie.
+- **Gauges** (270x420) : Barres verticales de Santé, Mana et Santé Mentale.
+- **Minimap** (270x270) : Carte interactive du Plan de Rêve.
+
 Séparation des responsabilités :
-- **Renderer**: Dessine uniquement, pas de logique
-- **Input**: Capture les événements, délègue aux usecases
-- **HUD**: Affiche les informations (découplé du renderer)
+- **Renderer**: Dessine le plateau central avec espacement dynamique (remplit toujours l'espace de 525x525 quelle que soit la taille de la grille).
+- **Input**: Capture les événements, gère la navigation entre les zones et les raccourcis clavier.
+- **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
 
 ### 5. App (Wiring)
 
@@ -194,36 +201,24 @@ go test ./internal/domain/... -v
 
 ### Jeu de base
 
-| Touche | Action |
+| Action | Touche |
 |--------|--------|
-| Click | Révéler tuile / Sélectionner |
-| M | Matcher la sélection |
-| Espace | Fin de tour |
-| Échap | Désélectionner |
-
-### Navigation
-
-| Touche | Action |
-|--------|--------|
-| 1-9 | Changer de grille (grid 1-9) |
-| R | Réinitialiser la rotation |
-| + / - | Rotation horaire / anti-horaire |
-| \ | Retour au menu |
-
-### Debug / Test
-
-| Touche | Action |
-|--------|--------|
-| S | Spawner des entités de test (ressources + lumifly) |
-| Shift+S | Spawner toutes les créatures de test |
-| C | Nettoyer le plateau |
-| F1 | Info debug (FPS, entités) |
-| F2 | Afficher les profils de mouvement |
-| F3 | Forcer le prochain tour |
-| F5 | Révéler toutes les tuiles (cheat debug) |
-| F6 | Cacher toutes les tuiles (cheat debug) |
-| F9 | Spawn créature aléatoire |
-| F10 | Toggle mouvement automatique ON/OFF |
+| Révéler tuile | Click souris |
+| Matcher | M |
+| Naviguer zones | ZQSD / Flèches |
+| Statistiques zones | I |
+| Fin de tour | Espace |
+| Menu / Abandon | Échap |
+| Changer de grille | 1-9 |
+| Difficulté | F1 à F4 |
+| Révéler tout (Cheat) | F5 |
+| Cacher tout (Cheat) | F6 |
+| Rotation plateau | + / - |
+| Reset rotation | R |
+| Spawn entités (debug) | S |
+| Spawn toutes créatures (debug) | Shift+S |
+| Nettoyer plateau (debug) | C |
+| Retour menu | \ |
 
 ## Ajouter une fonctionnalité
 

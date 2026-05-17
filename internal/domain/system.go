@@ -125,9 +125,11 @@ func (w *World) GenerateLayout(id string) {
 	gen := board.NewLayoutGenerator()
 	w.DreamPlane = gen.GenerateDreamPlane(id, w.Difficulty.Level, w.WorldsCleared)
 
-	// Nettoie les anciens grids si nécessaire
+	// Nettoie les anciens grids et entités
 	w.Grids = make(map[string]*board.Grid)
 	w.GridOrder = make([]string, 0)
+	w.Entities = entity.NewManager() // Reset des entités
+	w.Components = component.NewStore()
 
 	// Enregistre les zones dans World
 	for _, gridID := range []string{w.DreamPlane.StartZoneID, w.DreamPlane.EndZoneID} {
@@ -213,26 +215,38 @@ func (w *World) CanFlipTile() bool {
 	return len(w.tilesFlippedThisTurn) < 2
 }
 
-// SpawnResource crée une ressource dans le monde sur un grid spécifique
-func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) (*resource.Resource, error) {
+// getPlotForSpawn est une méthode utilitaire interne pour centraliser la récupération d'une parcelle valide pour le spawn
+func (w *World) getPlotForSpawn(gridID string, pos entity.Position) (*board.Grid, *board.Plot, error) {
 	grid, ok := w.Grids[gridID]
 	if !ok {
-		return nil, fmt.Errorf("grid %s introuvable", gridID)
+		return nil, nil, ErrGridNotFound
 	}
 
 	boardPos := board.Position{X: pos.X, Y: pos.Y}
-
 	plot, err := grid.Get(boardPos)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if plot.Modifier.Obstructed {
+		return nil, nil, fmt.Errorf("position %v est obstruée", pos)
+	}
+
+	return grid, plot, nil
+}
+
+// SpawnResource crée une ressource dans le monde sur un grid spécifique
+func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) (*resource.Resource, error) {
+	_, plot, err := w.getPlotForSpawn(gridID, pos)
 	if err != nil {
 		return nil, err
 	}
 
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
+
 	// Uniquement une ressource par parcelle
 	if w.HasResourceAt(gridID, boardPos) {
 		return nil, fmt.Errorf("position %v contient déjà une ressource", pos)
-	}
-	if plot.Modifier.Obstructed {
-		return nil, fmt.Errorf("position %v est obstruée", pos)
 	}
 
 	r := w.ResourceFactory.Create(rtype, entity.Position{X: pos.X, Y: pos.Y})
@@ -253,23 +267,13 @@ func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) 
 
 // SpawnCreature crée une créature dans le monde sur un grid spécifique
 func (w *World) SpawnCreature(gridID string, species string, pos entity.Position) (*creature.Creature, error) {
-	grid, ok := w.Grids[gridID]
-	if !ok {
-		return nil, ErrGridNotFound
-	}
-
-	boardPos := board.Position{X: pos.X, Y: pos.Y}
-
-	plot, err := grid.Get(boardPos)
+	_, plot, err := w.getPlotForSpawn(gridID, pos)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(plot.EntitiesID) > 0 {
 		return nil, fmt.Errorf("position %v is already occupied by %d entities", pos, len(plot.EntitiesID))
-	}
-	if plot.Modifier.Obstructed {
-		return nil, fmt.Errorf("position %v is obstructed", pos)
 	}
 
 	c, err := w.CreatureFactory.Create(species, pos)
@@ -308,11 +312,18 @@ func (w *World) SpawnTrap(gridID string, pos entity.Position) (entity.Entity, er
 		return nil, fmt.Errorf("position %v déjà occupée", pos)
 	}
 
-	trap := entity.NewBaseEntity(entity.TypeTrap)
-	trap.SetGridID(gridID)
-	trap.SetPosition(pos)
+	// Création explicite d'un pointeur vers une BaseEntity
+	trapPtr := &entity.BaseEntity{
+		ID:       entity.NewID(),
+		EType:    entity.TypeTrap,
+		Pos:      pos,
+		GridID:   gridID,
+		Active:   true,
+		State:    entity.Hidden,
+		Tags:     []string{"trap"},
+		Metadata: make(map[string]interface{}),
+	}
 
-	trapPtr := &trap
 	w.Entities.Register(trapPtr)
 	plot.PushEntity(string(trapPtr.GetID()))
 
@@ -333,13 +344,27 @@ func (w *World) SpawnStructure(gridID string, stype string, pos entity.Position)
 		return nil, err
 	}
 
-	structEnt := entity.NewBaseEntity(entity.TypeStructure)
-	structEnt.SetGridID(gridID)
-	structEnt.SetPosition(pos)
-	structEnt.AddTag(stype)
-	structEnt.SetState(entity.Revealed) // Les structures sont visibles
+	// Création explicite d'un pointeur vers une BaseEntity
+	structPtr := &entity.BaseEntity{
+		ID:       entity.NewID(),
+		EType:    entity.TypeStructure,
+		Pos:      pos,
+		GridID:   gridID,
+		Active:   true,
+		State:    entity.Hidden,
+		Tags:     []string{stype},
+		Metadata: make(map[string]interface{}),
+	}
 
-	structPtr := &structEnt
+	// Logique de visibilité initiale
+	if stype == "commencement_portal" {
+		structPtr.SetState(entity.Revealed)
+	} else if stype == "finish_portal" {
+		structPtr.SetState(entity.Hidden)
+	} else {
+		structPtr.SetState(entity.Revealed)
+	}
+
 	w.Entities.Register(structPtr)
 	plot.PushEntity(string(structPtr.GetID()))
 
@@ -1211,6 +1236,16 @@ func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
 		return
 	}
 
+	// Pas de prévisualisation dans les zones de commencement et de fin
+	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+	if isPortalZone {
+		if gridID == world.DreamPlane.StartZoneID {
+			// Dans la zone de commencement, on laisse 5 secondes au joueur pour voir le portail
+			s.previewTimers[gridID] = 5 * 60 // 5 secondes
+		}
+		return
+	}
+
 	settings := world.Difficulty
 	if settings.PreviewRatio <= 0 {
 		return
@@ -1293,6 +1328,19 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 		if len(tile.EntitiesID) > 0 {
 			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
+				// Gestion spécifique des structures
+				if e.GetType() == entity.TypeStructure {
+					if e.HasTag("commencement_portal") {
+						// Portail de commencement : se cache de manière permanente
+						e.SetState(entity.Blocked)
+						world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+							e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+						continue
+					}
+					// Les autres structures (dolmens, portail de fin) restent révélées
+					continue
+				}
+
 				if e.GetState() == entity.Revealed {
 					e.SetState(entity.Hidden)
 					world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
