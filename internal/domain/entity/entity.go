@@ -98,6 +98,7 @@ type Entity interface {
 	Deactivate()
 	GetState() TileState
 	SetState(TileState)
+	HasTag(string) bool
 }
 
 // BaseEntity implémentation commune

@@ -188,9 +188,9 @@ func (g *LayoutGenerator) SetupPortalArea(grid *Grid, isStart bool) {
 	portalPos := Position{2, 2}
 	if plot, err := grid.Get(portalPos); err == nil {
 		if isStart {
-			plot.StructureID = "inactive_portal"
+			plot.StructureID = "commencement_portal"
 		} else {
-			plot.StructureID = "active_portal"
+			plot.StructureID = "finish_portal"
 		}
 	}
 }
