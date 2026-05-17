@@ -47,6 +47,7 @@ const (
 	TypeStructure
 	TypeArtefact
 	TypeTrap // Changé de TypeEmptyTile à TypeTrap
+	TypeLoot
 )
 
 func (t Type) String() string {
@@ -61,6 +62,8 @@ func (t Type) String() string {
 		return "artefact"
 	case TypeTrap:
 		return "trap"
+	case TypeLoot:
+		return "loot"
 	}
 	return "unknown"
 }
