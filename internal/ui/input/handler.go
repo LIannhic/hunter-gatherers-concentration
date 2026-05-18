@@ -268,6 +268,10 @@ func (h *Handler) handleMouse() error {
 			num := len(h.revealedTiles) + 1
 			fmt.Printf("[SÉLECTION] Choix #%d : Tuile révélée en %v sur %s -> %s\n", num, pos, gridID, info)
 			h.revealedTiles = append(h.revealedTiles, pos)
+			// Action volontaire : reset du compte à rebours temps réel
+			if h.world.TurnTimer != nil {
+				h.world.TurnTimer.Reset()
+			}
 		}
 
 		// On met à jour le gridID pour la résolution du match
@@ -314,14 +318,23 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 	case actionbuttons.BtnMatch:
 		fmt.Println("[ACTION] Bouton Match activé")
 		h.processMatchAttempt()
+		if h.world.TurnTimer != nil {
+			h.world.TurnTimer.Reset()
+		}
 	case actionbuttons.BtnSkip:
 		fmt.Println("[ACTION] Bouton Skip activé")
 		h.processSkip()
+		if h.world.TurnTimer != nil {
+			h.world.TurnTimer.Reset()
+		}
 	case actionbuttons.BtnEndTurn:
 		fmt.Println("[ACTION] Bouton End Turn activé")
 		// Si des tuiles sont révélées mais non matchées, on les recache d'abord
 		if len(h.revealedTiles) > 0 {
 			h.hideRevealedTiles()
+		}
+		if h.world.TurnTimer != nil {
+			h.world.TurnTimer.Reset()
 		}
 		if h.OnTurnEnd != nil {
 			h.OnTurnEnd()
@@ -516,6 +529,9 @@ func (h *Handler) handleKeyboard() {
 		if len(h.revealedTiles) == 2 {
 			fmt.Println("[ACTION] Raccourci clavier : Match")
 			h.processMatchAttempt()
+			if h.world.TurnTimer != nil {
+				h.world.TurnTimer.Reset()
+			}
 		} else {
 			h.tryMatchSelected()
 		}
@@ -525,8 +541,14 @@ func (h *Handler) handleKeyboard() {
 		if len(h.revealedTiles) == 2 {
 			fmt.Println("[ACTION] Raccourci clavier : Skip")
 			h.processSkip()
+			if h.world.TurnTimer != nil {
+				h.world.TurnTimer.Reset()
+			}
 		} else if h.OnTurnEnd != nil {
 			fmt.Println("[TOUR] Passage au tour suivant")
+			if h.world.TurnTimer != nil {
+				h.world.TurnTimer.Reset()
+			}
 			h.OnTurnEnd()
 		}
 	}
@@ -678,6 +700,10 @@ func (h *Handler) setDifficulty(level meta.DifficultyLevel) {
 	settings := meta.GetSettings(level)
 	h.world.Difficulty = settings
 	fmt.Printf("[DIFFICULTÉ] Niveau changé pour : %s\n", level)
+	// Synchronise la durée du timer temps réel
+	if h.world.TurnTimer != nil {
+		h.world.TurnTimer.SetMaxTime(settings.TurnTimerDuration)
+	}
 	h.world.EventBus.PublishImmediate(domain.Event{
 		Type:     domain.EventType("difficulty_changed"),
 		SourceID: "player",
@@ -901,6 +927,19 @@ func (h *Handler) SetPortablePortalMode(active bool) {
 
 func (h *Handler) IsPortablePortalMode() bool {
 	return h.portablePortalMode
+}
+
+// ResetTimerSkip est appelé par l'app quand le timer temps réel expire.
+// Il simule un Skip sans reset du timer (le reset est fait côté app).
+func (h *Handler) ResetTimerSkip() {
+	if len(h.revealedTiles) > 0 {
+		h.hideRevealedTiles()
+	}
+	h.isProcessing = false
+	h.ClearSelection()
+	if h.OnTurnEnd != nil {
+		h.OnTurnEnd()
+	}
 }
 
 // ResetGameState réinitialise l'état du jeu (pour retour au menu)

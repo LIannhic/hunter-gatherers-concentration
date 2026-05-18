@@ -100,9 +100,37 @@ func NewApplication() (*Application, error) {
 	btnManager := actionbuttons.NewManager(
 		func() int { return len(app.Input.GetRevealedTiles()) },
 		func() *player.Player { return app.World.Player },
+		func() float64 {
+			if app.World.TurnTimer != nil {
+				return app.World.TurnTimer.Progress()
+			}
+			return 0
+		},
+		func() bool {
+			if app.World.TurnTimer != nil {
+				return app.World.TurnTimer.IsPanic()
+			}
+			return false
+		},
 	)
 	app.Renderer.ActionButtons = btnManager
 	app.Input.SetActionButtonsManager(btnManager)
+
+	// 5.2 Feedback temps réel sur le HUD (pulse Sanity Gauge)
+	app.HUD.SetTimerCallbacks(
+		func() float64 {
+			if app.World.TurnTimer != nil {
+				return app.World.TurnTimer.Remaining
+			}
+			return 0
+		},
+		func() bool {
+			if app.World.TurnTimer != nil {
+				return app.World.TurnTimer.IsPanic()
+			}
+			return false
+		},
+	)
 
 	// 6. Connecte les composants UI
 	app.Input.SetRenderer(app.Renderer)
@@ -597,6 +625,17 @@ func (app *Application) updatePlaying() error {
 	// Met à jour les processus temps réel (comme les timers de preview)
 	app.Engine.UpdateFrame()
 
+	// Mise à jour du compte à rebours temps réel (60 fps fixe)
+	if app.World.TurnTimer != nil {
+		expired := app.World.TurnTimer.Update(1.0 / 60.0)
+		if expired {
+			fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
+			// Simule un Skip : recache les tuiles et consomme le tour
+			app.Input.ResetTimerSkip()
+			app.World.TurnTimer.Reset()
+		}
+	}
+
 	// Mise à jour de l'HUD (animations, timers)
 	app.HUD.Update()
 
@@ -709,6 +748,13 @@ func (app *Application) StartGame() {
 	app.Engine.Start()
 	fmt.Println("[ENGINE] Started")
 
+	// Démarre le compte à rebours temps réel avec la durée de la difficulté courante
+	if app.World.TurnTimer != nil {
+		app.World.TurnTimer.SetMaxTime(app.World.Difficulty.TurnTimerDuration)
+		app.World.TurnTimer.Reset()
+		fmt.Printf("[TIMER] Compte à rebours démarré : %.1fs\n", app.World.Difficulty.TurnTimerDuration)
+	}
+
 	// Spawn les entités initiales si nécessaire
 	if app.World.Entities.Count() == 0 {
 		fmt.Println("=== Spawning initial entities ===")
@@ -725,6 +771,11 @@ func (app *Application) StartGame() {
 
 // ReturnToMenu retourne au menu principal
 func (app *Application) ReturnToMenu() {
+	// Arrête le timer temps réel
+	if app.World.TurnTimer != nil {
+		app.World.TurnTimer.Stop()
+	}
+
 	// Sauvegarde de la progression avant de quitter
 	if app.State == domain.StatePlaying {
 		duration := time.Since(app.sessionStartTime).Seconds()
