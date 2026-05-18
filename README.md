@@ -23,6 +23,39 @@ L'expérience propose une profondeur stratégique s'appuyant sur une double bouc
 Le gameplay repose sur une gestion rigoureuse des ressources et du temps, dictée par un système en tour par tour. Chaque interaction, qu’il s’agisse de retourner une tuile ou d’utiliser un objet, consomme une unité de ressource (temps ou mana), forçant le joueur à planifier ses mouvements au sein d’une limite de tours impartis. La survie dépend de la gestion d'une barre de santé, physique ou mentale, qui s’érode au fil des erreurs ou des confrontations.
 L’aspect central de l’association étendue enrichit la mécanique de mémoire classique : le joueur doit identifier des paires dont la corrélation peut être identique, logique (clé et serrure), élémentaire ou narrative. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
 
+### Compte à rebours temps réel (Turn Timer)
+
+Pour rompre le rythme classique du Memory et simuler l'urgence de la survie en plan onirique, chaque tour est soumis à une **pression temporelle dynamique** :
+
+- **Durée** : dépend de la difficulté (10s en Easy, 8s en Normal, 5s en Hard, 4s en Insane).
+- **Reset** : le timer se réinitialise à chaque action volontaire (retourner une tuile, Match, Skip, Fin de tour).
+- **Auto-skip** : si le timer atteint 0, le système simule automatiquement un **Skip** — les tuiles retournées se referment et le tour est consommé, entraînant la pénalité de Santé Mentale associée.
+- **Feedback visuel** :
+  - Le bouton **Skip** se remplit progressivement d'une couleur violette, puis passe au rouge brique en phase d'alerte.
+  - La jauge de **Santé Mentale** tremble de plus en plus fort lorsque le timer descend sous les 3 secondes (phase de panique).
+
+### Boutons d'action réactifs du Playmat
+
+Quatre boutons fixes occupent les coins du Playmat. Leur accessibilité est purement réactive :
+
+| Bouton | Position | Comportement |
+|--------|----------|--------------|
+| **MATCH** | Haut-gauche | Actif uniquement quand 2 tuiles sont retournées. Valide la paire si les entités sont identiques (coûte du Mana). |
+| **SKIP** | Haut-droite | Actif uniquement quand 2 tuiles sont retournées. Referme les tuiles et consomme le tour (coûte de la Santé Mentale). Affiche le remplissage temporel. |
+| **TURN** | Bas-gauche | Toujours actif. Force la fin du tour. |
+| **MENU** | Bas-droite | Toujours actif. Retour au menu principal. |
+
+### Troubles cognitifs (Status Effects)
+
+Le joueur peut subir des altérations mentales qui déforment l'interface :
+
+- **Aphasia** – brouille les labels des boutons (ex: "MATCH" devient "???" ou est permuté).
+- **Agnosia** – rend les boutons visuellement indifférenciés (couleurs altérées).
+- **Ataxia** – scramble les positions des boutons (ex: le bouton Match peut basculer au coin bas-droit).
+- **Amnesia** – désactive aléatoirement des boutons (30% de chance d'"oublier" un bouton).
+
+Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
+
 ## Verbes
 
 Pour le joueur :Pendant les parties (Actions directes)
@@ -159,13 +192,14 @@ go build -o game ./cmd/game
 | Action | Touche |
 |--------|--------|
 | Révéler tuile | Click gauche |
-| Matcher | M |
+| Matcher (ou valider paire) | M |
+| Skip (ou passer quand 2 tuiles) | Espace |
 | Sélection Butin | Click gauche (Inv) |
 | Désélectionner | Click droit |
 | Naviguer zones | ZQSD / Flèches |
 | Statistiques zones | I |
 | Liste Inventaire | L |
-| Fin de tour | Espace |
+| Fin de tour | Espace (hors match en cours) |
 | Menu / Abandon | Échap |
 | Changer de grille | 1-9 |
 | Difficulté | F1 à F4 |
