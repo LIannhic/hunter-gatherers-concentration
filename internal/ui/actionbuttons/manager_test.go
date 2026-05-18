@@ -11,6 +11,8 @@ func TestNewManager(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
 		func() *player.Player { return player.New("test") },
+		func() float64 { return 0 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 	if len(states) != 4 {
@@ -22,6 +24,8 @@ func TestButtonActivationAtRest(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
 		func() *player.Player { return player.New("test") },
+		func() float64 { return 0 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -45,6 +49,8 @@ func TestButtonActivationWhenTwoTilesRevealed(t *testing.T) {
 	m := NewManager(
 		func() int { return 2 },
 		func() *player.Player { return player.New("test") },
+		func() float64 { return 0.5 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -60,6 +66,8 @@ func TestBaseCoordinates(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
 		func() *player.Player { return player.New("test") },
+		func() float64 { return 0 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -85,6 +93,8 @@ func TestImpairmentScrambling(t *testing.T) {
 	m := NewManager(
 		func() int { return 2 },
 		func() *player.Player { return p },
+		func() float64 { return 0 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -104,6 +114,8 @@ func TestHitTest(t *testing.T) {
 	m := NewManager(
 		func() int { return 2 },
 		func() *player.Player { return player.New("test") },
+		func() float64 { return 0.3 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 

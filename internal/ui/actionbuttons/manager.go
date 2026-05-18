@@ -23,13 +23,15 @@ const btnCount = 4
 
 // ButtonState représente l'état calculé d'un bouton pour la frame courante
 type ButtonState struct {
-	ID        ButtonID
-	Label     string
-	Active    bool
-	X, Y      float64 // Coordonnées finales à l'écran (déjà transformées)
-	Width     float64
-	Height    float64
-	Scrambled bool    // Vrai si les coordonnées ont été altérées par un trouble
+	ID           ButtonID
+	Label        string
+	Active       bool
+	X, Y         float64 // Coordonnées finales à l'écran (déjà transformées)
+	Width        float64
+	Height       float64
+	Scrambled    bool    // Vrai si les coordonnées ont été altérées par un trouble
+	FillProgress float64 // 0.0 → 1.0, remplissage temporel (Skip uniquement)
+	FillAlert    bool    // Vrai si le timer est en phase critique ou expiré
 }
 
 // Manager gère l'état réactif des 4 boutons d'action du Playmat.
@@ -39,6 +41,8 @@ type Manager struct {
 	// Références externes
 	getRevealedTileCount func() int
 	getPlayer            func() *player.Player
+	getTimerProgress     func() float64 // 0.0 → 1.0 (temps écoulé)
+	getTimerPanic        func() bool    // true si < 3s restantes
 
 	// Base coordinates (fixed by UI spec)
 	baseCoords [btnCount]struct{ x, y float64 }
@@ -52,10 +56,13 @@ type Manager struct {
 // NewManager crée un nouveau gestionnaire de boutons d'action.
 // getRevealedTileCount doit retourner le nombre de tuiles révélées ce tour.
 // getPlayer doit retourner le joueur courant (pour les StatusEffects).
-func NewManager(getRevealedTileCount func() int, getPlayer func() *player.Player) *Manager {
+// getTimerProgress / getTimerPanic fournissent l'état du compte à rebours temps réel.
+func NewManager(getRevealedTileCount func() int, getPlayer func() *player.Player, getTimerProgress func() float64, getTimerPanic func() bool) *Manager {
 	m := &Manager{
 		getRevealedTileCount: getRevealedTileCount,
 		getPlayer:            getPlayer,
+		getTimerProgress:     getTimerProgress,
+		getTimerPanic:        getTimerPanic,
 		baseCoords: [btnCount]struct{ x, y float64 }{
 			{ui.ActionBtn1X, ui.ActionBtn1Y},
 			{ui.ActionBtn2X, ui.ActionBtn2Y},
@@ -104,6 +111,15 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 	// Les boutons EndTurn et Menu restent toujours actifs
 	states[BtnEndTurn].Active = true
 	states[BtnMenu].Active = true
+
+	// --- FEEDBACK TEMPS RÉEL : Remplissage du bouton Skip ---
+	if m.getTimerProgress != nil {
+		states[BtnSkip].FillProgress = m.getTimerProgress()
+		states[BtnSkip].FillAlert = states[BtnSkip].FillProgress >= 1.0
+	}
+	if m.getTimerPanic != nil && m.getTimerPanic() {
+		states[BtnSkip].FillAlert = true
+	}
 
 	// --- TROUBLES COGNITIFS : Transformation des coordonnées ---
 	if p != nil && p.StatusEffects != nil && p.StatusEffects.HasAnyImpairment() {

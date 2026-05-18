@@ -61,6 +61,9 @@ type World struct {
 
 	// Progression
 	WorldsCleared int
+
+	// Real-time turn pressure timer
+	TurnTimer *TurnTimer
 }
 
 func NewWorld() *World {
@@ -82,6 +85,7 @@ func NewWorld() *World {
 		playerPosition:       entity.Position{X: 0, Y: 0},
 		tilesFlippedThisTurn: make([]board.Position, 0),
 		lastTurnNumber:       0,
+		TurnTimer:            NewTurnTimer(meta.GetSettings(meta.LevelNormal).TurnTimerDuration),
 	}
 }
 

@@ -4,6 +4,7 @@ package hud
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"sort"
 	"strings"
 
@@ -31,6 +32,11 @@ type HUD struct {
 	selectedLoots    map[int]bool // Indices sélectionnés
 	selectedLootIndex int         // Item currently selected for usage
 	confirmClearAll  bool         // vrai si on a cliqué sur X sans sélection
+
+	// Feedback temps réel du compte à rebours
+	getTimerRemaining func() float64 // Temps restant du timer
+	getTimerPanic     func() bool    // true si < 3s
+	pulseFrame        int            // Compteur de frames pour l'animation de pulse
 }
 
 // NewHUD crée un nouveau HUD
@@ -59,6 +65,13 @@ func (h *HUD) Update() {
 	if h.fullFeedbackTimer > 0 {
 		h.fullFeedbackTimer--
 	}
+	h.pulseFrame++
+}
+
+// SetTimerCallbacks injecte les accesseurs au compte à rebours temps réel.
+func (h *HUD) SetTimerCallbacks(getRemaining func() float64, getPanic func() bool) {
+	h.getTimerRemaining = getRemaining
+	h.getTimerPanic = getPanic
 }
 
 func (h *HUD) GetSelectedLootItem() *player.LootItem {
@@ -352,8 +365,32 @@ func (h *HUD) renderGauges(screen *ebiten.Image) {
     // Mana gauge
     h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255})
     
-    // Sanity gauge
-    h.drawVerticalGauge(screen, ui.GaugesX+ui.SanityGaugeRelativeX, ui.GaugesY+ui.SanityGaugeRelativeY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255})
+    // Sanity gauge (avec pulse si panique)
+    var sanityX float64 = ui.GaugesX + ui.SanityGaugeRelativeX
+    var sanityY float64 = ui.GaugesY + ui.SanityGaugeRelativeY
+    if h.getTimerPanic != nil && h.getTimerPanic() {
+        // Phase de panique : la jauge de santé mentale tremble de plus en plus fort
+        offset := h.computePanicOffset()
+        sanityX += offset
+    }
+    h.drawVerticalGauge(screen, sanityX, sanityY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255})
+}
+
+// computePanicOffset calcule un décalage oscillant dont l'amplitude augmente
+// à mesure que le timer approche de 0 (entre 3s et 0s).
+func (h *HUD) computePanicOffset() float64 {
+	if h.getTimerRemaining == nil {
+		return 0
+	}
+	remaining := h.getTimerRemaining()
+	if remaining <= 0 || remaining >= 3.0 {
+		return 0
+	}
+	// Intensité inversement proportionnelle au temps restant
+	intensity := (3.0 - remaining) / 3.0 // 0.0 → 1.0
+	maxAmp := 6.0 * intensity             // amplitude max 6 px
+	freq := 0.4 + (intensity * 0.6)       // fréquence accélère
+	return math.Sin(float64(h.pulseFrame)*freq) * maxAmp
 }
 
 func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string, val, max int, clr color.Color) {

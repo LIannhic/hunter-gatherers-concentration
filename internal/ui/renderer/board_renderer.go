@@ -185,6 +185,18 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 
 	vector.DrawFilledRect(screen, float32(s.X), float32(s.Y), float32(s.Width), float32(s.Height), bgColor, true)
 
+	// Effet de remplissage temporel (Skip uniquement)
+	if s.ID == actionbuttons.BtnSkip && s.FillProgress > 0 {
+		fillW := float32(s.Width * s.FillProgress)
+		var fillColor color.Color
+		if s.FillAlert {
+			fillColor = color.RGBA{180, 50, 50, 200} // Rouge brique / alerte
+		} else {
+			fillColor = color.RGBA{100, 80, 150, 160} // Violet onirique
+		}
+		vector.DrawFilledRect(screen, float32(s.X), float32(s.Y), fillW, float32(s.Height), fillColor, true)
+	}
+
 	// Bordure
 	var borderColor color.Color
 	if s.Active && !s.Scrambled {

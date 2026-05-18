@@ -17,14 +17,15 @@ cmd/game              # Point d'entrée
         README.md     # Documentation des patterns
         game.go       # Ré-export des types
         system.go     # World, Systems, Engine (CreatureAISystem, CreatureMovementSystem)
+        timer.go      # Compte à rebours temps réel par tour (TurnTimer)
         /board        # Plateau, grilles, positions (gère la géométrie)
         /entity       # Identités, Manager, États (TileState, Type)
         /component    # Données ECS (Lifecycle, Matchable...)
         /creature     # Créatures, IA et mouvements avancés
         /resource     # Ressources récoltables
         /event        # Bus d'événements
-        /player       # Stats, inventaire
-        /meta         # Progression entre missions
+        /player       # Stats, inventaire, altérations d'état (StatusEffects)
+        /meta         # Progression entre missions, paramètres de difficulté
         /association  # Système de Memory (Strategy pattern)
         
     /usecase          # Actions applicatives
@@ -38,6 +39,7 @@ cmd/game              # Point d'entrée
         /renderer     # Dessin du plateau
         /input        # Gestion souris/clavier
         /hud          # Affichage infos
+        /actionbuttons # Gestionnaire réactif des 4 boutons d'action du Playmat
 ```
 
 ## Flux de données
@@ -84,6 +86,16 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
   - **ResourceLifecycleSystem** : Gère la maturation des ressources
+
+- **TurnTimer** (`timer.go`) : Compte à rebours temps réel par tour
+  - Décrémente à chaque frame (60 fps)
+  - Déclenche un auto-skip à l'expiration
+  - Phase de panique (< 3s) utilisée pour les feedbacks visuels (pulse Sanity Gauge)
+  - Durée maximale synchronisée avec `meta.DifficultySettings.TurnTimerDuration`
+
+- **StatusEffects** (`player/status.go`) : Altérations mentales du joueur
+  - `Aphasia`, `Agnosia`, `Ataxia`, `Amnesia`
+  - Interceptées par le rendu UI pour scrambler les coordonnées/labels des boutons d'action
 
 - **Types d'entités** :
   - `TypeResource` : Ressources récoltables
@@ -187,6 +199,7 @@ Séparation des responsabilités :
 - **Renderer**: Dessine le plateau central avec espacement dynamique (remplit toujours l'espace de 525x525 quelle que soit la taille de la grille).
 - **Input**: Capture les événements, gère la navigation entre les zones et les raccourcis clavier.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
+- **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip.
 
 ### 5. App (Wiring)
 
@@ -247,10 +260,11 @@ go test ./internal/domain/... -v
 | Action | Touche |
 |--------|--------|
 | Révéler tuile | Click souris |
-| Matcher | M |
+| Matcher (valider paire) | M |
+| Skip (quand 2 tuiles retournées) | Espace |
 | Naviguer zones | ZQSD / Flèches |
 | Statistiques zones | I |
-| Fin de tour | Espace |
+| Fin de tour | Espace (hors match en cours) |
 | Menu / Abandon | Échap |
 | Changer de grille | 1-9 |
 | Difficulté | F1 à F4 |
