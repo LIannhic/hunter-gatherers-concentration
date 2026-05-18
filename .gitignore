@@ -6,3 +6,9 @@ icone-hgc-64.ico
 icone-hgc-128.ico
 icone-hgc-256.ico
 cmd/game/rsrc.syso
+
+# Sauvegardes
+saves/
+*.json
+!go.mod
+!go.sum

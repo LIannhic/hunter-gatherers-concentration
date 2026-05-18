@@ -28,10 +28,11 @@ L’aspect central de l’association étendue enrichit la mécanique de mémoir
 Pour le joueur :Pendant les parties (Actions directes)
 
 * Dévoiler : Révéler le contenu d’une tuile face cachée (consomme du temps ou du mana).
-* Prendre : Collecter des éléments ou capturer des créatures simples via l'identification d'une paire identique.
+* Prendre : Collecter des éléments ou capturer des créatures simples via l’identification d’une paire identique.
 * Associer : Créer un lien logique entre deux tuiles complémentaires (ex: Clé + Serrure) pour synthétiser des ressources ou capturer des entités complexes.
 * Utiliser : Activer un outil, une ressource consommable ou une capacité de créature pour modifier le plateau ou protéger ses statistiques.
-* S'extraire : Initier la fin de l'incursion pour sécuriser le butin avant l'épuisement des ressources de survie.
+* Déployer portail : Activer un portail portable pour créer une zone de dégagement 3x3 et initier l’extraction du plan.
+* S’extraire : Initier la fin de l’incursion pour sécuriser le butin avant l’épuisement des ressources de survie.
 
 Entre les parties (Méta-progression)
 
@@ -157,17 +158,23 @@ go build -o game ./cmd/game
 
 | Action | Touche |
 |--------|--------|
-| Révéler tuile | Click souris |
+| Révéler tuile | Click gauche |
 | Matcher | M |
+| Sélection Butin | Click gauche (Inv) |
+| Désélectionner | Click droit |
+| Naviguer zones | ZQSD / Flèches |
+| Statistiques zones | I |
+| Liste Inventaire | L |
 | Fin de tour | Espace |
-| Désélectionner | Échap |
+| Menu / Abandon | Échap |
 | Changer de grille | 1-9 |
 | Difficulté | F1 à F4 |
+| Révéler tout (Cheat) | F5 |
+| Cacher tout (Cheat) | F6 |
 | Rotation plateau | + / - |
 | Reset rotation | R |
+| Remplir Inv (Debug) | B |
 | Spawn entités (debug) | S |
 | Spawn toutes créatures (debug) | Shift+S |
 | Nettoyer plateau (debug) | C |
-| Cheat: tout révéler | F5 |
-| Cheat: tout cacher | F6 |
 | Retour menu | \ |

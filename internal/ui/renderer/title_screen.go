@@ -15,6 +15,7 @@ type TitleScreen struct {
 	width      int
 	height     int
 	buttonRect Rect
+	ButtonText string // Texte dynamique du bouton
 }
 
 // Rect représente un rectangle
@@ -33,6 +34,7 @@ func NewTitleScreen() *TitleScreen {
 			W: 200,
 			H: 50,
 		},
+		ButtonText: "DEMARRER", // Texte par défaut
 	}
 }
 
@@ -49,18 +51,18 @@ func (t *TitleScreen) Render(screen *ebiten.Image) {
 	// Sous-titre
 	subtitle := "Memory Game"
 	subX := t.width/2 - len(subtitle)*3
-	text.Draw(screen, subtitle, basicfont.Face7x13, subX, 240, color.RGBA{150, 150, 150, 255})
+	text.Draw(screen, subtitle, basicfont.Face7x13, subX, 240, color.RGBA{150, 150, 255, 255})
 
-	// Bouton Démarrer
+	// Bouton principal
 	t.drawButton(screen)
 
 	// Instructions
-	hint := "En jeu: Appuyez sur * pour retourner au menu"
+	hint := "En jeu: Appuyez sur \\ pour retourner au menu"
 	hintX := t.width/2 - len(hint)*3
-	text.Draw(screen, hint, basicfont.Face7x13, hintX, 450, color.RGBA{100, 100, 100, 255})
+	text.Draw(screen, hint, basicfont.Face7x13, hintX, 500, color.RGBA{100, 100, 100, 255})
 }
 
-// drawButton dessine le bouton "Démarrer"
+// drawButton dessine le bouton principal
 func (t *TitleScreen) drawButton(screen *ebiten.Image) {
 	// Fond du bouton
 	vector.DrawFilledRect(
@@ -69,7 +71,7 @@ func (t *TitleScreen) drawButton(screen *ebiten.Image) {
 		float32(t.buttonRect.Y),
 		float32(t.buttonRect.W),
 		float32(t.buttonRect.H),
-		color.RGBA{60, 100, 60, 255},
+		color.RGBA{30, 50, 30, 255},
 		true,
 	)
 
@@ -86,7 +88,10 @@ func (t *TitleScreen) drawButton(screen *ebiten.Image) {
 	)
 
 	// Texte du bouton
-	btnText := "DEMARRER"
+	btnText := t.ButtonText
+	if btnText == "" {
+		btnText = "DEMARRER"
+	}
 	btnX := t.buttonRect.X + t.buttonRect.W/2 - len(btnText)*3
 	btnY := t.buttonRect.Y + t.buttonRect.H/2 + 4
 	text.Draw(screen, btnText, basicfont.Face7x13, btnX, btnY, color.White)

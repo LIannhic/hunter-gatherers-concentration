@@ -83,7 +83,7 @@ func (m *Manager) GetTheme(name string) TileTheme {
 
 // generateAllAssets génère tous les assets du jeu
 func (m *Manager) generateAllAssets() {
-	size := 64
+	size := 88 // Augmenté pour correspondre au nouveau rendu (87.5px)
 
 	// Image par défaut
 	defaultImg := ebiten.NewImage(size, size)
@@ -108,9 +108,31 @@ func (m *Manager) generateAllAssets() {
 		blockedImg := generateTileBlocked(size, theme)
 		m.images["tile_blocked_"+themeName] = blockedImg
 
+		// Tuile scellée
+		sealedImg := generateTileSealed(size, theme)
+		m.images["tile_sealed_"+themeName] = sealedImg
+
 		// Tuile piège (trap)
 		trapTileImg := generateTileTrap(size, theme)
 		m.images["tile_trap_"+themeName] = trapTileImg
+
+		// Tuile structure (base révélée pour les structures visibles)
+		structImg := generateTileRevealed(size, theme)
+		// On ajoute un motif de pierre/structure au milieu
+		vector.StrokeRect(structImg, float32(size)/4, float32(size)/4, float32(size)/2, float32(size)/2, 2, theme.RevealedPattern, true)
+		m.images["tile_structure_"+themeName] = structImg
+
+		// Tuile dolmen
+		dolmenImg := generateTileDolmen(size, theme)
+		m.images["tile_dolmen_"+themeName] = dolmenImg
+
+		// Tuile obélisque
+		obeliskImg := generateTileObelisk(size, theme)
+		m.images["tile_obelisk_"+themeName] = obeliskImg
+
+		// Tuile portail
+		portalImg := generateTilePortal(size, theme)
+		m.images["tile_portal_"+themeName] = portalImg
 	}
 
 	// Tuiles par défaut (sans suffixe de thème)
@@ -118,7 +140,17 @@ func (m *Manager) generateAllAssets() {
 	m.images["tile_revealed"] = m.images["tile_revealed_default"]
 	m.images["tile_matched"] = m.images["tile_matched_default"]
 	m.images["tile_blocked"] = m.images["tile_blocked_default"]
+	m.images["tile_sealed"] = m.images["tile_sealed_default"]
 	m.images["tile_trap"] = m.images["tile_trap_default"]
+	m.images["tile_structure"] = m.images["tile_structure_default"]
+	m.images["tile_dolmen"] = m.images["tile_dolmen_default"]
+	m.images["tile_obelisk"] = m.images["tile_obelisk_default"]
+	m.images["tile_portal"] = m.images["tile_portal_default"]
+
+	// Image pour case vide (sol nu sombre)
+	emptyImg := ebiten.NewImage(size, size)
+	emptyImg.Fill(color.RGBA{20, 20, 25, 255})
+	m.images["square_empty"] = emptyImg
 
 	// Compatibilité
 	m.images["tile_empty"] = m.images["tile_trap"]

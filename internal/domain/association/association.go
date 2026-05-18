@@ -13,6 +13,7 @@ const (
 	Logical               // Clé + Serrure, Marteau + Enclume
 	Elemental             // Feu + Bois, Eau + Plante
 	Narrative             // Indices d'histoire, symboles liés
+	Orientation           // Moitiés de flèches de navigation
 )
 
 func (t Type) String() string {
@@ -25,6 +26,8 @@ func (t Type) String() string {
 		return "elemental"
 	case Narrative:
 		return "narrative"
+	case Orientation:
+		return "orientation"
 	}
 	return "unknown"
 }
@@ -264,6 +267,41 @@ func (s *NarrativeStrategy) Resolve(a, b Matchable) (Result, error) {
 	}, nil
 }
 
+// OrientationStrategy : Moitiés de flèches (Nord/Nord, etc.)
+type OrientationStrategy struct{}
+
+func (s *OrientationStrategy) Type() Type { return Orientation }
+
+func (s *OrientationStrategy) CanAssociate(a, b Matchable) bool {
+	tagA, tagB := a.GetMatchID(), b.GetMatchID()
+	// On attend des tags comme "exit_north_0" et "exit_north_1"
+	if len(tagA) < 11 || len(tagB) < 11 {
+		return false
+	}
+	prefixA := tagA[:len(tagA)-1]
+	prefixB := tagB[:len(tagB)-1]
+
+	// Même direction mais index différent
+	return prefixA == prefixB && tagA != tagB && (prefixA == "exit_north_" || prefixA == "exit_south_" || prefixA == "exit_east_" || prefixA == "exit_west_")
+}
+
+func (s *OrientationStrategy) Resolve(a, b Matchable) (Result, error) {
+	if !s.CanAssociate(a, b) {
+		return Result{Success: false}, errors.New("orientation non complémentaire")
+	}
+
+	direction := a.GetMatchID()[5 : len(a.GetMatchID())-2]
+
+	return Result{
+		Success: true,
+		Type:    Orientation,
+		Message: fmt.Sprintf("Passage ouvert vers le %s", direction),
+		Effects: []Effect{
+			{Type: "unlock_navigation", Target: "board", Metadata: map[string]interface{}{"direction": direction}},
+		},
+	}, nil
+}
+
 // Engine orchestre les stratégies
 type Engine struct {
 	strategies []Strategy
@@ -276,6 +314,7 @@ func NewEngine() *Engine {
 			NewLogicalStrategy(),
 			NewElementalStrategy(),
 			NewNarrativeStrategy(),
+			&OrientationStrategy{},
 		},
 	}
 }

@@ -6,15 +6,19 @@ import (
 	"fmt"
 	"image/color"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
+	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/hud"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/input"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/renderer"
@@ -33,8 +37,9 @@ type Application struct {
 	Engine      *domain.Engine
 
 	// Infrastructure
-	Assets *assets.Manager
-	Config *loader.GameConfig
+	Assets      *assets.Manager
+	Config      *loader.GameConfig
+	Persistence *usecase.PersistenceManager
 
 	// UI
 	Renderer    *renderer.BoardRenderer
@@ -45,6 +50,10 @@ type Application struct {
 
 	// Game State
 	State domain.GameState
+
+	// Session tracking
+	sessionStartTime time.Time
+	hasSaves         bool
 
 	// Debug
 	debug *DebugStats
@@ -69,18 +78,56 @@ func NewApplication() (*Application, error) {
 	// 3. Crée plusieurs grids
 	app.setupGrids()
 
+	// Ajoute le portail portable à l'inventaire initial du joueur
+	_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
+
 	// 4. Infrastructure
 	app.Assets = assets.NewManager()
+
+	// Initialisation de la persistance (dossier ./saves)
+	repo := infraPersistence.NewJsonRepository("./saves")
+	app.Persistence = usecase.NewPersistenceManager(repo)
 
 	// 5. UI
 	app.Renderer = renderer.NewBoardRenderer(app.Assets)
 	app.TitleScreen = renderer.NewTitleScreen()
 	app.IncursionScreen = renderer.NewIncursionScreen()
+	app.SaveMenu = renderer.NewSaveMenu()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
 
 	// 6. Connecte les composants UI
 	app.Input.SetRenderer(app.Renderer)
+	app.Input.OnToggleDetails = app.HUD.ToggleDetails
+	app.Input.OnToggleInvDetails = app.HUD.ToggleInventoryDetails
+	app.Input.OnFillInventory = func() {
+		fmt.Println("[DEBUG] Remplissage de l'inventaire avec des Bulles de Savon")
+		for i := 0; i < 30; i++ {
+			loot := &player.LootItem{
+				ID:          string(entity.NewID()),
+				Name:        "bulle de savon",
+				Type:        entity.TypeResource,
+				SourceID:    "debug",
+				IsDeletable: true,
+			}
+			_ = app.World.Player.Inventory.AddItem(loot)
+		}
+	}
+
+	app.Input.OnUsePortablePortal = func(gridID string, center board.Position) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+		fmt.Println("[ACTION] Utilisation du portail portable")
+		cmd := &usecase.UsePortablePortalCommand{World: app.World, GridID: gridID, Center: center}
+		if err := cmd.Execute(); err != nil {
+			fmt.Printf("[ERROR] Impossible de déployer le portail portable : %v\n", err)
+		} else {
+			fmt.Println("[SUCCESS] Portail portable déployé.")
+			app.HUD.ClearActiveLootSelection()
+			app.Input.SetPortablePortalMode(false)
+		}
+	}
 
 	// 7. Configure les callbacks
 	app.setupCallbacks()
@@ -93,34 +140,31 @@ func NewApplication() (*Application, error) {
 
 	// 10. État initial : Menu
 	app.State = domain.StateMenu
+	app.checkSaves()
 	fmt.Println("[STATE] État initial: MENU")
 
 	return app, nil
 }
 
-// setupGrids crée les grids initiaux
+func (app *Application) checkSaves() {
+	metas, _ := app.Persistence.GetSaveSummaries()
+	app.hasSaves = len(metas) > 0
+	// Mise à jour du texte du bouton de l'écran titre
+	if app.hasSaves {
+		app.TitleScreen.ButtonText = "CONTINUER"
+	} else {
+		app.TitleScreen.ButtonText = "DEMARRER"
+	}
+}
+
+// setupGrids crée les grids initiaux via le générateur procédural
 func (app *Application) setupGrids() {
-	gridConfigs := []struct {
-		id     string
-		width  int
-		height int
-		biome  domain.BiomeType
-	}{
-		{"forest", 6, 6, domain.BiomeForest},
-		{"cave", 6, 6, domain.BiomeCave},
-		{"meadow", 6, 6, domain.BiomeForest},
-		{"swamp", 6, 6, domain.BiomeCave},
-	}
+	app.World.GenerateLayout("dream_plane_1")
+	fmt.Printf("Generated Dream Plane with %d zones\n", len(app.World.Grids))
 
-	for _, cfg := range gridConfigs {
-		app.World.CreateGrid(cfg.id, cfg.width, cfg.height, cfg.biome)
-		fmt.Printf("Created grid: %s (%dx%d)\n", cfg.id, cfg.width, cfg.height)
-	}
-
-	// Définit le premier grid comme ID actif par défaut,
-	// mais on ne déclenche pas SetCurrentGrid ici pour éviter de lancer le Preview pendant le menu.
-	if len(app.World.GridOrder) > 0 {
-		app.World.CurrentGridID = app.World.GridOrder[0]
+	// Définit la grille de commencement comme grille active par défaut
+	if app.World.DreamPlane != nil {
+		app.World.CurrentGridID = app.World.DreamPlane.StartZoneID
 	}
 }
 
@@ -133,11 +177,15 @@ func (app *Application) FillGridRandomly(gridID string) {
 
 	fmt.Printf("[INIT] Filling grid %s randomly...\n", gridID)
 
-	// 1. Liste toutes les positions possibles
+	// 1. Liste toutes les positions libres
 	var positions []entity.Position
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
-			positions = append(positions, entity.Position{X: x, Y: y})
+			pos := board.Position{X: x, Y: y}
+			plot, _ := grid.Get(pos)
+			if len(plot.EntitiesID) == 0 && !plot.Modifier.Obstructed {
+				positions = append(positions, entity.Position{X: x, Y: y})
+			}
 		}
 	}
 
@@ -185,29 +233,6 @@ func (app *Application) FillGridRandomly(gridID string) {
 	if posIdx < totalTiles {
 		fmt.Printf("  - [%s] Spawning lone trap at %v\n", gridID, positions[posIdx])
 		app.World.SpawnTrap(gridID, positions[posIdx])
-	}
-}
-
-func (app *Application) fillGridWithTraps(gridID string) {
-	grid, ok := app.World.GetGrid(gridID)
-	if !ok {
-		return
-	}
-
-	for y := 0; y < grid.Height; y++ {
-		for x := 0; x < grid.Width; x++ {
-			pos := board.Position{X: x, Y: y}
-			plot, err := grid.Get(pos)
-			if err != nil {
-				continue
-			}
-
-			if len(plot.EntitiesID) > 0 || plot.Modifier.Obstructed {
-				continue
-			}
-
-			app.World.SpawnTrap(gridID, entity.Position{X: x, Y: y})
-		}
 	}
 }
 
@@ -404,6 +429,20 @@ func (app *Application) setupDebugCallbacks() {
 		}
 	}
 
+	// F7: Désceller les sorties (cheat)
+	app.Input.OnUnlockNavigation = func(gridID string) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+		cmd := &usecase.UnlockNavigationCommand{
+			World:  app.World,
+			GridID: gridID,
+		}
+		if err := cmd.Execute(); err == nil {
+			fmt.Println("[CHEAT] Sorties déscellées pour la zone actuelle")
+		}
+	}
+
 	// F10: Toggle mouvement automatique
 	app.Input.OnToggleAutoMove = func() {
 		app.Engine.Running = !app.Engine.Running
@@ -441,9 +480,38 @@ func (app *Application) setupEventSubscriptions() {
 
 // spawnInitialEntities crée quelques entités au démarrage sur différents grids
 func (app *Application) spawnInitialEntities() {
-	fmt.Println("[INIT] Filling all grids randomly...")
+	fmt.Println("[INIT] Populating dream plane...")
 	for _, gridID := range app.World.GridOrder {
-		app.FillGridRandomly(gridID)
+		grid, ok := app.World.GetGrid(gridID)
+		if !ok {
+			continue
+		}
+
+		isPortalZone := gridID == app.World.DreamPlane.StartZoneID || gridID == app.World.DreamPlane.EndZoneID
+
+		// 1. Spawner les structures marquées par le générateur
+		for pos, plot := range grid.Plots {
+			if plot.StructureID != "" {
+				stype := "unknown"
+				if plot.StructureID == "commencement_portal" || plot.StructureID == "finish_portal" {
+					stype = plot.StructureID
+				} else if strings.HasPrefix(plot.StructureID, "struct_") {
+					parts := strings.Split(plot.StructureID, "_")
+					if len(parts) >= 2 {
+						stype = parts[1]
+					}
+				}
+
+				if stype != "unknown" {
+					app.World.SpawnStructure(gridID, stype, entity.Position{X: pos.X, Y: pos.Y})
+				}
+			}
+		}
+
+		// 2. Remplissage aléatoire du reste (seulement si ce n'est pas une zone de portail)
+		if !isPortalZone {
+			app.FillGridRandomly(gridID)
+		}
 	}
 }
 
@@ -465,13 +533,52 @@ func (app *Application) Update() error {
 	return nil
 }
 
-// updateMenu gère l'écran titre
+// updateMenu gère l'écran titre et le menu de sauvegarde
 func (app *Application) updateMenu() error {
-	// Vérifie le clic sur le bouton démarrer
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	if app.SaveMenu.IsVisible() {
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+			app.SaveMenu.SetVisible(false)
+			return nil
+		}
+
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+			x, y := ebiten.CursorPosition()
+			action := app.SaveMenu.HandleClick(x, y)
+
+			switch action.Type {
+			case renderer.ActionBack:
+				app.SaveMenu.SetVisible(false)
+			case renderer.ActionLoad, renderer.ActionNew:
+				app.StartGameWithSlot(action.Slot)
+			case renderer.ActionDelete:
+				_ = app.Persistence.DeleteSave(action.Slot)
+				metas, _ := app.Persistence.GetSaveSummaries()
+				app.SaveMenu.UpdateMetas(metas)
+				app.checkSaves()
+			}
+		}
+		return nil
+	}
+
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
 		if app.TitleScreen.IsStartButtonClicked(x, y) {
-			app.StartGame()
+			if app.hasSaves {
+				// Charger la dernière partie directement (Bouton "Continuer")
+				app.StartGameWithSlot(0)
+			} else {
+				// Première fois : ouvrir la sélection
+				metas, _ := app.Persistence.GetSaveSummaries()
+				app.SaveMenu.UpdateMetas(metas)
+				app.SaveMenu.SetVisible(true)
+			}
+		} else if app.hasSaves {
+			// Bouton "Changer de profil" (situé sous le bouton démarrer)
+			if y > 410 && y < 450 && x > 300 && x < 500 {
+				metas, _ := app.Persistence.GetSaveSummaries()
+				app.SaveMenu.UpdateMetas(metas)
+				app.SaveMenu.SetVisible(true)
+			}
 		}
 	}
 	return nil
@@ -482,18 +589,44 @@ func (app *Application) updatePlaying() error {
 	// Met à jour les processus temps réel (comme les timers de preview)
 	app.Engine.UpdateFrame()
 
+	// Mise à jour de l'HUD (animations, timers)
+	app.HUD.Update()
+
 	// Traite les événements en attente
 	app.World.EventBus.ProcessQueue()
 
 	// Vérification de la mort
 	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
+
+		// Logique de mort persistante
+		diff := string(app.World.Difficulty.Level)
+		if err := app.Persistence.HandleDeath(app.World.Hub, app.World.Player, diff); err != nil {
+			fmt.Printf("[SAVE] Erreur lors de la mise à jour du compteur de décès : %v\n", err)
+		}
+
 		app.State = domain.StateGameOver
 	}
 
 	// Configure le renderer pour le mode incursion (avant input)
 	app.Renderer.SetRenderConfig(377.5, 97.5, 87.5, app.World.CurrentGridID)
 	defer app.Renderer.ResetRenderConfig()
+	// Gère les entrées HUD (ex: fermer fenêtre détails)
+	mx, my := ebiten.CursorPosition()
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		if app.HUD.HandleClick(mx, my) {
+			app.Input.SetPortablePortalMode(app.HUD.IsPortablePortalSelected())
+			return nil
+		}
+	}
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+		if app.HUD.HandleRightClick(mx, my) {
+			return nil
+		}
+	}
+
+	// Gère le scroll HUD
+	app.HUD.HandleScroll(mx, my)
 
 	// Gère les entrées
 	return app.Input.Update()
@@ -508,22 +641,64 @@ func (app *Application) updateGameOver() error {
 	return nil
 }
 
-// StartGame démarre le jeu depuis le menu
+// StartGameWithSlot démarre le jeu avec un slot spécifique
+func (app *Application) StartGameWithSlot(slotID int) {
+	fmt.Printf("[SAVE] Starting game with slot %d\n", slotID)
+
+	// Tentative de chargement ou création
+	var save *domain.SaveData
+	var err error
+
+	if slotID == 0 {
+		save, err = app.Persistence.LoadLatestGame()
+	} else {
+		save, err = app.Persistence.LoadGame(slotID)
+		if err != nil {
+			fmt.Printf("[SAVE] No save found for slot %d, creating new game\n", slotID)
+			save, _ = app.Persistence.CreateNewGame(slotID)
+		}
+	}
+
+	if save != nil {
+		// Mise à jour des stats de session
+		save.Meta.SessionCount++
+		app.sessionStartTime = time.Now()
+
+		// Chaque expédition démarre avec un nouvel état de joueur et de hub.
+		app.World.Hub = meta.NewHub()
+		app.World.Player = player.New(save.Player.ID)
+
+		// Applique la difficulté sauvegardée
+		if save.Meta.Difficulty != "" {
+			app.World.Difficulty = meta.GetSettings(meta.DifficultyLevel(save.Meta.Difficulty))
+		}
+
+		// Régénère le monde à chaque nouveau départ (même après Game Over)
+		app.World.GenerateLayout("dream_plane_1")
+
+		app.StartGame()
+	}
+}
+
+// StartGame démarre le jeu depuis le menu (logique commune)
 func (app *Application) StartGame() {
 	oldState := app.State
 	app.State = domain.StatePlaying
+	app.SaveMenu.SetVisible(false)
 
 	// Publie l'événement de changement de phase
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
 
 	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
 
-	// Réinitialise le joueur
-	app.World.Player = player.New("player_1")
-
 	// Réinitialise le monde (tour, etc.)
 	app.World.Turn = 0
 	app.World.MaxTurns = app.World.Player.Stats.MaxSanity
+
+	// V0.2: L'inventaire est vidé à chaque nouvelle partie
+	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
+	_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
+	app.World.Player.Inventory.ScrollOffset = 0
 
 	// Démarre l'engine (nécessaire pour les mouvements des créatures)
 	app.Engine.Start()
@@ -545,8 +720,18 @@ func (app *Application) StartGame() {
 
 // ReturnToMenu retourne au menu principal
 func (app *Application) ReturnToMenu() {
+	// Sauvegarde de la progression avant de quitter
+	if app.State == domain.StatePlaying {
+		duration := time.Since(app.sessionStartTime).Seconds()
+		diff := string(app.World.Difficulty.Level)
+		if err := app.Persistence.SaveCurrentGame(app.World.Hub, app.World.Player, diff, duration); err != nil {
+			fmt.Printf("[SAVE] Erreur lors de la sauvegarde auto : %v\n", err)
+		}
+	}
+
 	oldState := app.State
 	app.State = domain.StateMenu
+	app.checkSaves()
 
 	// Publie l'événement de changement de phase
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
@@ -564,6 +749,9 @@ func (app *Application) ReturnToMenu() {
 		cmd := &usecase.ClearBoardCommand{World: app.World, GridID: gridID}
 		cmd.Execute()
 	}
+
+	// Vide l'inventaire
+	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
 
 	fmt.Println("[MENU] Retour au menu principal")
 }
@@ -584,6 +772,14 @@ func (app *Application) Draw(screen *ebiten.Image) {
 // drawMenu dessine l'écran titre
 func (app *Application) drawMenu(screen *ebiten.Image) {
 	app.TitleScreen.Render(screen)
+
+	if app.hasSaves {
+		text.Draw(screen, "[ CHANGER DE PROFIL ]", basicfont.Face7x13, 335, 430, color.RGBA{150, 150, 255, 255})
+	}
+
+	if app.SaveMenu.IsVisible() {
+		app.SaveMenu.Render(screen)
+	}
 }
 
 // drawPlaying dessine le jeu en cours

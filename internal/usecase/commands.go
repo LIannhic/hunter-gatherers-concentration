@@ -49,7 +49,7 @@ func (c *RevealTileCommand) CanExecute() bool {
 
 	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 	ent, ok := c.World.Entities.Get(entity.ID(topID))
-	if !ok || ent.GetState() != entity.Hidden {
+	if !ok || ent.GetState()&entity.Hidden == 0 {
 		return false
 	}
 
@@ -139,7 +139,7 @@ func (c *MatchTilesCommand) CanExecute() bool {
 	}
 
 	// Vérifie que les entités sont bien révélées
-	if e1.GetState() != entity.Revealed || e2.GetState() != entity.Revealed {
+	if e1.GetState()&entity.Revealed == 0 || e2.GetState()&entity.Revealed == 0 {
 		return false
 	}
 
@@ -197,20 +197,32 @@ func (c *MatchTilesCommand) Execute() error {
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
 
-		// Note: on les retire du monde (elles seront nettoyées de la grille par RemoveEntity)
-		c.World.RemoveEntity(entity1.GetID())
-		c.World.RemoveEntity(entity2.GetID())
+		// On récupère le nom pour le loot AVANT la suppression
+		name := "unknown"
+		if r, ok := entity1.(*domain.Resource); ok {
+			name = r.ResourceType
+		} else if c, ok := entity1.(*domain.Creature); ok {
+			name = c.Species
+		}
 
-		c.World.EventBus.Publish(domain.Event{
-			Type:     domain.EventType("tiles_matched"),
-			SourceID: "player",
+		// Publie l'événement de match (utilisé par le LootSystem)
+		c.World.EventBus.Publish(event.Event{
+			Type:     event.TileMatched,
+			SourceID: string(entity1.GetID()),
 			Payload: map[string]interface{}{
-				"position1":  c.Pos1,
-				"position2":  c.Pos2,
-				"grid_id":    c.GridID,
-				"assoc_type": matchType,
+				"position":    c.Pos1,
+				"entity_id":   string(entity1.GetID()),
+				"other_id":    string(entity2.GetID()),
+				"grid_id":     c.GridID,
+				"name":        name,
+				"entity_type": entity1.GetType(),
+				"assoc_type":  matchType,
 			},
 		})
+
+		// Note: on les retire du monde
+		c.World.RemoveEntity(entity1.GetID())
+		c.World.RemoveEntity(entity2.GetID())
 
 		if c.OnSuccess != nil {
 			c.OnSuccess()
@@ -300,7 +312,8 @@ func (c *ClearBoardCommand) CanExecute() bool {
 }
 
 func (c *ClearBoardCommand) Execute() error {
-	if _, ok := c.World.GetGrid(c.GridID); !ok {
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
 		return errors.New("grid not found")
 	}
 
@@ -311,7 +324,39 @@ func (c *ClearBoardCommand) Execute() error {
 		}
 	}
 
+	grid.InitialMatchableCount = 0
+
 	return nil
+}
+
+type UsePortablePortalCommand struct {
+	World  *domain.World
+	GridID string
+	Center board.Position
+}
+
+func (c *UsePortablePortalCommand) CanExecute() bool {
+	if c.World == nil {
+		return false
+	}
+	if _, ok := c.World.GetGrid(c.GridID); !ok {
+		return false
+	}
+	return c.World.HasPortablePortal()
+}
+
+func (c *UsePortablePortalCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("cannot deploy portable portal")
+	}
+
+	if c.Center.X < 0 || c.Center.Y < 0 {
+		_, err := c.World.DeployPortablePortal(c.GridID)
+		return err
+	}
+
+	_, err := c.World.DeployPortablePortalAt(c.GridID, c.Center)
+	return err
 }
 
 type ClearAllBoardsCommand struct {
@@ -351,6 +396,80 @@ func (c *SwitchGridCommand) Execute() error {
 	grid, _ := c.World.GetGrid(c.GridID)
 	playerPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
 	c.World.SetPlayerPosition(playerPos)
+
+	return nil
+}
+
+type UnlockNavigationCommand struct {
+	World  *domain.World
+	GridID string
+}
+
+func (c *UnlockNavigationCommand) CanExecute() bool {
+	_, ok := c.World.GetGrid(c.GridID)
+	return ok
+}
+
+func (c *UnlockNavigationCommand) Execute() error {
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
+		return errors.New("grid not found")
+	}
+
+	grid.NavigationForcedOpen = true
+	fmt.Printf("[DEBUG] Navigation forcée pour la zone %s\n", c.GridID)
+	return nil
+}
+
+type SwitchZoneCommand struct {
+	World     *domain.World
+	Direction board.Direction
+}
+
+func (c *SwitchZoneCommand) CanExecute() bool {
+	if c.World.DreamPlane == nil {
+		return false
+	}
+	_, ok := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)
+	if !ok {
+		return false
+	}
+
+	// La navigation n'est possible que si le seuil de complétion est atteint
+	return c.World.IsNavigationOpen(c.World.CurrentGridID)
+}
+
+func (c *SwitchZoneCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("aucune zone connectée dans cette direction ou conditions non remplies")
+	}
+
+	// Marque les sorties comme révélées et appairées lors de la transition (pour cohérence visuelle)
+	if grid, ok := c.World.GetGrid(c.World.CurrentGridID); ok {
+		grid.ExitsState[c.Direction] = [2]entity.TileState{
+			entity.Revealed | entity.Matched,
+			entity.Revealed | entity.Matched,
+		}
+	}
+
+	targetID, _ := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)
+	c.World.SetCurrentGrid(targetID)
+
+	// Positionne le joueur de l'autre côté de la grille (entrée logique)
+	grid, _ := c.World.GetGrid(targetID)
+	newPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
+
+	switch c.Direction {
+	case board.North:
+		newPos = entity.Position{X: grid.Width / 2, Y: grid.Height - 1}
+	case board.South:
+		newPos = entity.Position{X: grid.Width / 2, Y: 0}
+	case board.East:
+		newPos = entity.Position{X: 0, Y: grid.Height / 2}
+	case board.West:
+		newPos = entity.Position{X: grid.Width - 1, Y: grid.Height / 2}
+	}
+	c.World.SetPlayerPosition(newPos)
 
 	return nil
 }

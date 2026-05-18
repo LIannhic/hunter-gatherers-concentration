@@ -10,6 +10,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/resource"
 )
@@ -63,6 +64,11 @@ type (
 	PlayerStats = player.Stats
 	Family      = meta.Family
 	AssocEngine = association.Engine
+
+	// Persistence
+	SaveData = persistence.SaveData
+	SaveMeta = persistence.Metadata
+	SaveRepo = persistence.Repository
 )
 
 // Constantes
@@ -134,4 +140,6 @@ var (
 	NewAssocEngine = association.NewEngine
 
 	NewPhaseChangedEvent = event.NewPhaseChangedEvent
+
+	NewSaveData = persistence.NewSaveData
 )

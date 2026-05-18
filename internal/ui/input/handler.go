@@ -8,6 +8,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/usecase"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -19,6 +20,7 @@ type Renderer interface {
 	ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool)
 	ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool)
 	RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, color color.Color, world *domain.World)
+	RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World)
 }
 
 type Handler struct {
@@ -29,24 +31,34 @@ type Handler struct {
 	selectedTile   *board.Position
 	selectedGridID string
 
+	portablePortalMode bool
+
 	OnTurnEnd             func()
 	OnSpawnEntities       func(gridID string)
 	OnSpawnAllCreatures   func(gridID string) // Shift+S: Spawn toutes les créatures
 	OnSpawnRandomCreature func(gridID string) // F9: Spawn créature aléatoire
 	OnClearBoard          func(gridID string)
 	OnSwitchGrid          func(gridID string)
-	OnRotateBoard         func(delta float64) // Callback pour la rotation du plateau
-	OnResetRotation       func()              // Callback pour réinitialiser la rotation
-	OnExitToMenu          func()              // Callback pour retourner au menu
-	OnRevealAll           func(gridID string) // F5: Cheat - révéler tout
-	OnHideAll             func(gridID string) // F6: Cheat - cacher tout
-	OnForceTurn           func()              // F3: Forcer le prochain tour
-	OnToggleAutoMove      func()              // F10: Toggle mouvement auto
+	OnRotateBoard         func(delta float64)                        // Callback pour la rotation du plateau
+	OnResetRotation       func()                                     // Callback pour réinitialiser la rotation
+	OnExitToMenu          func()                                     // Callback pour retourner au menu
+	OnToggleDetails       func()                                     // Callback pour afficher les détails
+	OnToggleInvDetails    func()                                     // Callback pour afficher l'inventaire détaillé
+	OnFillInventory       func()                                     // Callback pour remplir l'inventaire (debug)
+	OnRevealAll           func(gridID string)                        // F5: Cheat - révéler tout
+	OnHideAll             func(gridID string)                        // F6: Cheat - cacher tout
+	OnUnlockNavigation    func(gridID string)                        // F7: Cheat - désceller sorties
+	OnUsePortablePortal   func(gridID string, center board.Position) // P / grid placement: Déployer le portail portable
+	OnForceTurn           func()                                     // F3: Forcer le prochain tour
+	OnToggleAutoMove      func()                                     // F10: Toggle mouvement auto
 
 	// Gestion du tour de jeu memory
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
 	isProcessing  bool             // Évite les clics pendant l'animation
 	matchTimer    int              // Compteur de frames pour le délai de matching
+
+	isTransitioning bool // Bloque les entrées pendant le changement de zone
+	transitionTimer int  // Frames restantes pour le blocage
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
@@ -61,6 +73,14 @@ func (h *Handler) SetRenderer(r Renderer) {
 }
 
 func (h *Handler) Update() error {
+	if h.isTransitioning {
+		h.transitionTimer--
+		if h.transitionTimer <= 0 {
+			h.isTransitioning = false
+		}
+		return nil
+	}
+
 	if err := h.handleMouse(); err != nil {
 		return err
 	}
@@ -102,6 +122,15 @@ func (h *Handler) getEntityInfo(ent entity.Entity) string {
 }
 
 func (h *Handler) handleMouse() error {
+	// Clic droit : Désélection
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+		if h.selectedTile != nil {
+			fmt.Printf("[SÉLECTION] Tuile en %v désélectionnée (clic droit)\n", *h.selectedTile)
+			h.ClearSelection()
+		}
+		return nil
+	}
+
 	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		return nil
 	}
@@ -111,8 +140,85 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
+	// Gestion des clics sur les sorties (navigation zone par zone)
+	if dir, index, ok := h.getClickedExit(); ok {
+		// Vérifie si la sortie existe
+		if _, hasExit := h.world.DreamPlane.GetConnectedZone(h.world.CurrentGridID, dir); !hasExit {
+			return nil
+		}
+
+		// Vérifie si la navigation est ouverte
+		if !h.world.IsNavigationOpen(h.world.CurrentGridID) {
+			fmt.Println("[NAVIGATION] Sortie scellée. Trouvez plus de paires !")
+			return nil
+		}
+
+		grid, _ := h.world.GetGrid(h.world.CurrentGridID)
+
+		// État actuel des tuiles de cette sortie
+		states := grid.ExitsState[dir]
+		currentState := states[index]
+
+		// 1. Si la sortie est déjà appairée, on change de zone
+		if currentState&entity.Matched != 0 {
+			cmd := &usecase.SwitchZoneCommand{World: h.world, Direction: dir}
+			if err := cmd.Execute(); err == nil {
+				fmt.Printf("[NAVIGATION] Passage vers le %v -> %s\n", dir, h.world.CurrentGridID)
+				h.ClearSelection()
+				h.isTransitioning = true
+				h.transitionTimer = 30
+			}
+			return nil
+		}
+
+		// 2. Sinon, on révèle la tuile si elle est cachée
+		if currentState&entity.Hidden != 0 {
+			// Révélation de la première moitié
+			states[index] = (currentState & ^entity.Hidden) | entity.Revealed
+			fmt.Printf("[NAVIGATION] Tuile de sortie %v #%d révélée\n", dir, index)
+			grid.ExitsState[dir] = states
+
+			// 3. Vérification de l'association via le DOMAINE
+			otherIndex := 1 - index
+			if states[otherIndex]&entity.Revealed != 0 {
+				dirName := "north"
+				switch dir {
+				case board.South:
+					dirName = "south"
+				case board.East:
+					dirName = "east"
+				case board.West:
+					dirName = "west"
+				}
+
+				// On crée des wrappers Matchable pour le moteur d'association
+				m1 := &exitMatchable{id: fmt.Sprintf("exit_%s_%d", dirName, index)}
+				m2 := &exitMatchable{id: fmt.Sprintf("exit_%s_%d", dirName, otherIndex)}
+
+				result, err := h.assocEngine.TryAssociate(m1, m2)
+				if err == nil && result.Success {
+					states[0] |= entity.Matched
+					states[1] |= entity.Matched
+					grid.ExitsState[dir] = states
+					fmt.Printf("[NAVIGATION] %s (Moteur Domaine)\n", result.Message)
+				}
+			}
+		}
+		return nil
+	}
+
 	pos, gridID, ok := h.getHoveredTile()
 	if !ok {
+		return nil
+	}
+
+	if h.portablePortalMode && h.OnUsePortablePortal != nil {
+		grid, _ := h.world.GetGrid(gridID)
+		if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
+			h.OnUsePortablePortal(gridID, pos)
+			return nil
+		}
+		fmt.Println("[ACTION] Zone de déploiement invalide pour le portail portable")
 		return nil
 	}
 
@@ -128,16 +234,22 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
-	switch ent.GetState() {
-	case entity.Hidden:
+	state := ent.GetState()
+	if state&entity.Hidden != 0 {
 		// Vérifie si on a déjà révélé 2 tuiles ce tour
 		if len(h.revealedTiles) >= 2 {
 			fmt.Println("[INPUT] Déjà 2 tuiles révélées ce tour. Veuillez attendre la fin du traitement.")
 			return nil
 		}
 
+		// Ne permet pas de révéler une tuile bloquée
+		if state&entity.Blocked != 0 {
+			fmt.Println("[INPUT] Cette tuile est scellée ou bloquée.")
+			return nil
+		}
+
 		// Calcule la direction de flip basée sur la position du clic dans la tuile
-		flipDir := h.calculateFlipDirection(gridID, pos)
+		flipDir := h.calculateFlipDirection(gridID)
 
 		cmd := &usecase.RevealTileCommand{
 			World:         h.world,
@@ -165,7 +277,7 @@ func (h *Handler) handleMouse() error {
 			fmt.Println("[MATCH] Délai de 800ms avant résolution...")
 		}
 
-	case entity.Revealed:
+	} else if state&entity.Revealed != 0 {
 		if ent.GetType() == entity.TypeTrap {
 			fmt.Printf("[ACTION] Suppression du piège en %v\n", pos)
 			h.world.RemoveEntity(ent.GetID())
@@ -300,6 +412,34 @@ func (h *Handler) processMatchAttempt() {
 }
 
 func (h *Handler) handleKeyboard() {
+	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
+		if h.OnToggleDetails != nil {
+			h.OnToggleDetails()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
+		if h.OnToggleInvDetails != nil {
+			h.OnToggleInvDetails()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyB) {
+		if h.OnFillInventory != nil {
+			h.OnFillInventory()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		if h.OnUsePortablePortal != nil {
+			center := board.Position{X: -1, Y: -1}
+			if hovered, _, ok := h.getHoveredTile(); ok {
+				center = hovered
+			}
+			h.OnUsePortablePortal(h.GetCurrentGridID(), center)
+		}
+	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
 		h.tryMatchSelected()
 	}
@@ -310,6 +450,9 @@ func (h *Handler) handleKeyboard() {
 			h.OnTurnEnd()
 		}
 	}
+
+	// Navigation entre zones (Dream Plane)
+	h.handleNavigationKeys()
 
 	// Changement de difficulté (Touches F1, F2, F3, F4)
 	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
@@ -355,6 +498,13 @@ func (h *Handler) handleKeyboard() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF6) {
 		if h.OnHideAll != nil {
 			h.OnHideAll(h.GetCurrentGridID())
+		}
+	}
+
+	// F7: Cheat - désceller les sorties
+	if inpututil.IsKeyJustPressed(ebiten.KeyF7) {
+		if h.OnUnlockNavigation != nil {
+			h.OnUnlockNavigation(h.GetCurrentGridID())
 		}
 	}
 
@@ -411,6 +561,35 @@ func (h *Handler) handleKeyboard() {
 		fmt.Println("[KEY] \\ : Retour au menu")
 		if h.OnExitToMenu != nil {
 			h.OnExitToMenu()
+		}
+	}
+}
+
+func (h *Handler) handleNavigationKeys() {
+	var dir board.Direction
+	var pressed bool
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
+		dir = board.North
+		pressed = true
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) && !ebiten.IsKeyPressed(ebiten.KeyShift) {
+		dir = board.South
+		pressed = true
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) || inpututil.IsKeyJustPressed(ebiten.KeyA) {
+		dir = board.West
+		pressed = true
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowRight) || inpututil.IsKeyJustPressed(ebiten.KeyD) {
+		dir = board.East
+		pressed = true
+	}
+
+	if pressed {
+		cmd := &usecase.SwitchZoneCommand{World: h.world, Direction: dir}
+		if err := cmd.Execute(); err == nil {
+			fmt.Printf("[NAVIGATION] Passage à la zone: %s\n", h.world.CurrentGridID)
+			h.ClearSelection()
+			h.isTransitioning = true
+			h.transitionTimer = 30
 		}
 	}
 }
@@ -501,8 +680,49 @@ func (h *Handler) getHoveredTile() (board.Position, string, bool) {
 	return h.renderer.ScreenToGrid(x, y, h.world)
 }
 
+func (h *Handler) getClickedExit() (board.Direction, int, bool) {
+	x, y := ebiten.CursorPosition()
+	// Coordonnées relatives au Playmat
+	px := float64(x) - ui.PlaymatX
+	py := float64(y) - ui.PlaymatY
+
+	return h.checkExitClick(px, py)
+}
+
+func (h *Handler) checkExitClick(px, py float64) (board.Direction, int, bool) {
+	if px >= ui.ExitNorthX && px < ui.ExitNorthX+ui.ExitNorthW && py >= ui.ExitNorthY && py < ui.ExitNorthY+ui.ExitNorthH {
+		index := 0
+		if px >= ui.ExitNorthX+ui.TileSize {
+			index = 1
+		}
+		return board.North, index, true
+	}
+	if px >= ui.ExitEastX && px < ui.ExitEastX+ui.ExitEastW && py >= ui.ExitEastY && py < ui.ExitEastY+ui.ExitEastH {
+		index := 0
+		if py >= ui.ExitEastY+ui.TileSize {
+			index = 1
+		}
+		return board.East, index, true
+	}
+	if px >= ui.ExitSouthX && px < ui.ExitSouthX+ui.ExitSouthW && py >= ui.ExitSouthY && py < ui.ExitSouthY+ui.ExitSouthH {
+		index := 0
+		if px >= ui.ExitSouthX+ui.TileSize {
+			index = 1
+		}
+		return board.South, index, true
+	}
+	if px >= ui.ExitWestX && px < ui.ExitWestX+ui.ExitWestW && py >= ui.ExitWestY && py < ui.ExitWestY+ui.ExitWestH {
+		index := 0
+		if py >= ui.ExitWestY+ui.TileSize {
+			index = 1
+		}
+		return board.West, index, true
+	}
+	return 0, 0, false
+}
+
 // calculateFlipDirection détermine la direction de flip basée sur la position du clic dans la tuile
-func (h *Handler) calculateFlipDirection(gridID string, pos board.Position) domain.FlipDirection {
+func (h *Handler) calculateFlipDirection(gridID string) domain.FlipDirection {
 	if h.renderer == nil {
 		return usecase.DefaultFlipDirection
 	}
@@ -541,16 +761,25 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 		}
 
 		var highlightColor color.Color
-		switch ent.GetState() {
-		case entity.Hidden:
+		state := ent.GetState()
+		if state&entity.Hidden != 0 {
 			highlightColor = color.RGBA{255, 255, 0, 100}
-		case entity.Revealed:
+		} else if state&entity.Revealed != 0 {
 			highlightColor = color.RGBA{0, 255, 255, 100}
-		default:
+		} else {
 			highlightColor = color.RGBA{255, 255, 255, 50}
 		}
 
 		h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
+	}
+
+	if h.portablePortalMode {
+		if hovered, gridID, ok := h.getHoveredTile(); ok {
+			grid, ok := h.world.GetGrid(gridID)
+			if ok && h.isValidPortalPreviewPosition(grid, hovered) {
+				h.renderer.RenderPortalPlacementPreview(screen, hovered, gridID, h.world)
+			}
+		}
 	}
 
 	if h.selectedTile != nil {
@@ -562,6 +791,10 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 			h.world,
 		)
 	}
+}
+
+func (h *Handler) isValidPortalPreviewPosition(grid *board.Grid, center board.Position) bool {
+	return center.X >= 1 && center.Y >= 1 && center.X <= grid.Width-2 && center.Y <= grid.Height-2
 }
 
 func (h *Handler) GetCurrentGridID() string {
@@ -576,6 +809,14 @@ func (h *Handler) ClearSelection() {
 	h.selectedGridID = ""
 }
 
+func (h *Handler) SetPortablePortalMode(active bool) {
+	h.portablePortalMode = active
+}
+
+func (h *Handler) IsPortablePortalMode() bool {
+	return h.portablePortalMode
+}
+
 // ResetGameState réinitialise l'état du jeu (pour retour au menu)
 func (h *Handler) ResetGameState() {
 	h.selectedTile = nil
@@ -584,3 +825,14 @@ func (h *Handler) ResetGameState() {
 	h.isProcessing = false
 	h.matchTimer = 0
 }
+
+// exitMatchable est un wrapper pour soumettre les sorties au moteur d'association
+type exitMatchable struct {
+	id string
+}
+
+func (m *exitMatchable) GetMatchID() string      { return m.id }
+func (m *exitMatchable) GetLogicKey() string     { return "" }
+func (m *exitMatchable) GetElement() string      { return "" }
+func (m *exitMatchable) GetNarrativeTag() string { return "" }
+func (m *exitMatchable) GetMatchTypes() []string { return []string{"orientation"} }

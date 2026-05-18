@@ -5,6 +5,7 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 )
 
 func TestNewWorld(t *testing.T) {
@@ -150,6 +151,71 @@ func TestWorldSetPlayerPosition(t *testing.T) {
 	pos := w.GetPlayerPosition()
 	if pos.X != 2 || pos.Y != 3 {
 		t.Error("Player position not set correctly")
+	}
+}
+
+func TestWorldFindAvailable3x3DeploymentArea(t *testing.T) {
+	w := NewWorld()
+	w.CreateGrid("test", 6, 6, board.BiomeForest)
+
+	center, ok := w.FindAvailable3x3DeploymentArea("test")
+	if !ok {
+		t.Fatal("Expected to find a 3x3 deployment area")
+	}
+
+	expected := board.Position{X: 1, Y: 1}
+	if center != expected {
+		t.Errorf("Expected center at (1,1), got %v", center)
+	}
+}
+
+func TestWorldDeployPortablePortalSuccess(t *testing.T) {
+	w := NewWorld()
+	w.CreateGrid("test", 6, 6, board.BiomeForest)
+	_ = w.Player.Inventory.AddItem(player.NewPortablePortalItem())
+
+	portal, err := w.DeployPortablePortal("test")
+	if err != nil {
+		t.Fatalf("Failed to deploy portable portal: %v", err)
+	}
+
+	if portal == nil {
+		t.Fatal("Expected portal entity to be created")
+	}
+
+	if w.Player.Inventory.GetTotalItems() != 0 {
+		t.Fatal("Portable portal item should be removed from inventory")
+	}
+
+	if w.Player.Stats.Health != 100 {
+		t.Errorf("Expected no health penalty, got %d", w.Player.Stats.Health)
+	}
+}
+
+func TestWorldDeployPortablePortalForcedPenalty(t *testing.T) {
+	w := NewWorld()
+	w.CreateGrid("test", 6, 6, board.BiomeForest)
+	grid, _ := w.GetGrid("test")
+
+	for _, plot := range grid.Plots {
+		if len(plot.EntitiesID) == 0 {
+			_, _ = w.SpawnTrap("test", entity.Position{X: plot.Position.X, Y: plot.Position.Y})
+		}
+	}
+
+	_ = w.Player.Inventory.AddItem(player.NewPortablePortalItem())
+
+	portal, err := w.DeployPortablePortal("test")
+	if err != nil {
+		t.Fatalf("Failed forced portable portal deployment: %v", err)
+	}
+
+	if portal == nil {
+		t.Fatal("Expected portal entity to be created")
+	}
+
+	if w.Player.Stats.Health >= 100 {
+		t.Errorf("Expected health penalty after forced deployment, got %d", w.Player.Stats.Health)
 	}
 }
 

@@ -120,6 +120,7 @@ if revealCmd.CanExecute() {
 - `RevealTileCommand` : Révèle une entité (passe son état de Hidden à Revealed)
 - `MatchTilesCommand` : Appaire deux entités (passe leur état à Matched)
 - `SwitchGridCommand` : Change de grille active
+- `UsePortablePortalCommand` : Active un portail portable pour créer une zone de dégagement et extraire le joueur du plan
 
 ### 3. Infrastructure
 
@@ -131,12 +132,61 @@ if revealCmd.CanExecute() {
   
 - **Loader**: Configuration depuis JSON (avec fallback par défaut)
 
+### Système de Portail Portable
+
+Le portail portable permet au joueur d'extraire rapidement du plan actif. Ce système gère :
+
+#### Recherche de Zone de Dégagement (3x3)
+
+```go
+// Cherche une zone 3x3 libre n'importe où sur la grille
+pos, ok := world.FindAvailable3x3DeploymentArea(gridID)
+
+// Trouve la meilleure zone 3x3 (minimise les obstructions)
+pos, ok := world.findBest3x3DeploymentArea(gridID)
+```
+
+#### Déploiement du Portail
+
+```go
+// Déploie à la meilleure position trouvée automatiquement
+portal, err := world.DeployPortablePortal(gridID)
+
+// Déploie à une position spécifique (centre de la zone 3x3)
+portal, err := world.DeployPortablePortalAt(gridID, center)
+```
+
+#### Activation via Commande
+
+```go
+cmd := &usecase.UsePortablePortalCommand{
+    World:  world,
+    GridID: "forest",
+    Center: board.Position{X: 3, Y: 3}, // Position du centre, ou négatif pour auto
+}
+if cmd.CanExecute() {
+    err := cmd.Execute()
+}
+```
+
+Le système valide que :
+- Une zone 3x3 est disponible (aucune tuile obstruée ou occupée)
+- Le joueur possède un portail portable en inventaire
+- La grille cible existe
+
 ### 4. UI
 
+Le jeu utilise une résolution logique fixe de **1280x720**. L'interface est divisée en plusieurs zones gérées par le `HUD` :
+- **Portrait** (270x270) : Affiche les statistiques du personnage, les contrôles et le contenu dynamique de la zone.
+- **Inventaire** (270x420) : Grille 3x4 pour les objets récoltés.
+- **Playmat** (700x700) : Zone centrale contenant le plateau de jeu (525x525), les boutons d'action et les indicateurs de sortie.
+- **Gauges** (270x420) : Barres verticales de Santé, Mana et Santé Mentale.
+- **Minimap** (270x270) : Carte interactive du Plan de Rêve.
+
 Séparation des responsabilités :
-- **Renderer**: Dessine uniquement, pas de logique
-- **Input**: Capture les événements, délègue aux usecases
-- **HUD**: Affiche les informations (découplé du renderer)
+- **Renderer**: Dessine le plateau central avec espacement dynamique (remplit toujours l'espace de 525x525 quelle que soit la taille de la grille).
+- **Input**: Capture les événements, gère la navigation entre les zones et les raccourcis clavier.
+- **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
 
 ### 5. App (Wiring)
 
@@ -194,36 +244,24 @@ go test ./internal/domain/... -v
 
 ### Jeu de base
 
-| Touche | Action |
+| Action | Touche |
 |--------|--------|
-| Click | Révéler tuile / Sélectionner |
-| M | Matcher la sélection |
-| Espace | Fin de tour |
-| Échap | Désélectionner |
-
-### Navigation
-
-| Touche | Action |
-|--------|--------|
-| 1-9 | Changer de grille (grid 1-9) |
-| R | Réinitialiser la rotation |
-| + / - | Rotation horaire / anti-horaire |
-| \ | Retour au menu |
-
-### Debug / Test
-
-| Touche | Action |
-|--------|--------|
-| S | Spawner des entités de test (ressources + lumifly) |
-| Shift+S | Spawner toutes les créatures de test |
-| C | Nettoyer le plateau |
-| F1 | Info debug (FPS, entités) |
-| F2 | Afficher les profils de mouvement |
-| F3 | Forcer le prochain tour |
-| F5 | Révéler toutes les tuiles (cheat debug) |
-| F6 | Cacher toutes les tuiles (cheat debug) |
-| F9 | Spawn créature aléatoire |
-| F10 | Toggle mouvement automatique ON/OFF |
+| Révéler tuile | Click souris |
+| Matcher | M |
+| Naviguer zones | ZQSD / Flèches |
+| Statistiques zones | I |
+| Fin de tour | Espace |
+| Menu / Abandon | Échap |
+| Changer de grille | 1-9 |
+| Difficulté | F1 à F4 |
+| Révéler tout (Cheat) | F5 |
+| Cacher tout (Cheat) | F6 |
+| Rotation plateau | + / - |
+| Reset rotation | R |
+| Spawn entités (debug) | S |
+| Spawn toutes créatures (debug) | Shift+S |
+| Nettoyer plateau (debug) | C |
+| Retour menu | \ |
 
 ## Ajouter une fonctionnalité
 

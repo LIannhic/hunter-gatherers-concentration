@@ -13,18 +13,19 @@ type DifficultySettings struct {
 	Level           DifficultyLevel
 	PreviewDuration float64 // Temps avant que les tuiles ne se recachent
 	PreviewRatio    float64 // Pourcentage de tuiles à montrer (1.0 = 100%)
+	NavThreshold    float64 // Pourcentage de paires à trouver pour ouvrir les sorties
 }
 
 func GetSettings(level DifficultyLevel) DifficultySettings {
 	switch level {
 	case LevelEasy:
-		return DifficultySettings{Level: LevelEasy, PreviewDuration: 5.0, PreviewRatio: 1.0}
+		return DifficultySettings{Level: LevelEasy, PreviewDuration: 5.0, PreviewRatio: 1.0, NavThreshold: 0.25}
 	case LevelNormal:
-		return DifficultySettings{Level: LevelNormal, PreviewDuration: 3.0, PreviewRatio: 0.5}
+		return DifficultySettings{Level: LevelNormal, PreviewDuration: 3.0, PreviewRatio: 0.5, NavThreshold: 0.50}
 	case LevelHard:
-		return DifficultySettings{Level: LevelHard, PreviewDuration: 0.0, PreviewRatio: 0.0}
+		return DifficultySettings{Level: LevelHard, PreviewDuration: 0.0, PreviewRatio: 0.0, NavThreshold: 0.75}
 	case LevelInsane:
-		return DifficultySettings{Level: LevelInsane, PreviewDuration: 1.0, PreviewRatio: 1.0}
+		return DifficultySettings{Level: LevelInsane, PreviewDuration: 1.0, PreviewRatio: 1.0, NavThreshold: 1.00}
 	default:
 		return GetSettings(LevelNormal)
 	}

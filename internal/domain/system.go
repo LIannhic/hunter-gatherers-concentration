@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sort"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/component"
@@ -32,6 +33,9 @@ type World struct {
 	MaxTurns   int
 	PlayerID   string
 
+	// Meta progression
+	Hub *meta.Hub
+
 	// Player logic
 	Player *player.Player
 
@@ -40,6 +44,9 @@ type World struct {
 
 	// Difficulty
 	Difficulty meta.DifficultySettings
+
+	// Dream Plane (Mega-board structure)
+	DreamPlane *board.DreamPlane
 
 	// Factories
 	CreatureFactory *creature.Factory
@@ -51,6 +58,9 @@ type World struct {
 	// Turn state tracking
 	tilesFlippedThisTurn []board.Position // Tracks tiles flipped in current turn (max 2)
 	lastTurnNumber       int              // Used to detect turn changes
+
+	// Progression
+	WorldsCleared int
 }
 
 func NewWorld() *World {
@@ -67,6 +77,7 @@ func NewWorld() *World {
 		Difficulty:           meta.GetSettings(meta.LevelNormal),
 		CreatureFactory:      creature.NewFactory(),
 		ResourceFactory:      resource.NewFactory(),
+		Hub:                  meta.NewHub(),
 		Player:               p,
 		playerPosition:       entity.Position{X: 0, Y: 0},
 		tilesFlippedThisTurn: make([]board.Position, 0),
@@ -83,6 +94,50 @@ func (w *World) CreateGrid(id string, width, height int, biome board.BiomeType) 
 		w.CurrentGridID = id
 	}
 	return grid
+}
+
+func (w *World) GetCompletionRatio(gridID string) float64 {
+	grid, ok := w.GetGrid(gridID)
+	if !ok || grid.InitialMatchableCount == 0 {
+		return 1.0 // Toujours ouvert si pas de contenu matchable
+	}
+
+	// Compte les entités matchables restantes
+	currentMatchable := 0
+	for _, e := range w.Entities.GetAllActive() {
+		// On compte ressources, créatures et pièges comme éléments à appairer
+		if e.GetGridID() == gridID && (e.GetType() == entity.TypeResource ||
+			e.GetType() == entity.TypeCreature ||
+			e.GetType() == entity.TypeTrap) {
+			currentMatchable++
+		}
+	}
+
+	matched := grid.InitialMatchableCount - currentMatchable
+	if matched < 0 {
+		matched = 0
+	}
+	return float64(matched) / float64(grid.InitialMatchableCount)
+}
+
+func (w *World) IsNavigationOpen(gridID string) bool {
+	grid, ok := w.GetGrid(gridID)
+	if !ok {
+		return false
+	}
+
+	// Cheat flag
+	if grid.NavigationForcedOpen {
+		return true
+	}
+
+	// V0.2: Les zones de portail (Départ/Arrivée) sont toujours ouvertes à la navigation
+	if w.DreamPlane != nil && (gridID == w.DreamPlane.StartZoneID || gridID == w.DreamPlane.EndZoneID) {
+		return true
+	}
+
+	ratio := w.GetCompletionRatio(gridID)
+	return ratio >= w.Difficulty.NavThreshold
 }
 
 // GetGrid retourne un grid par son ID
@@ -108,6 +163,43 @@ func (w *World) SetCurrentGrid(gridID string) bool {
 		return true
 	}
 	return false
+}
+
+// GenerateLayout génère la structure du monde (Dream Plane)
+func (w *World) GenerateLayout(id string) {
+	gen := board.NewLayoutGenerator()
+	w.DreamPlane = gen.GenerateDreamPlane(id, w.Difficulty.Level, w.WorldsCleared)
+
+	// Nettoie les anciens grids et entités
+	w.Grids = make(map[string]*board.Grid)
+	w.GridOrder = make([]string, 0)
+	w.Entities = entity.NewManager() // Reset des entités
+	w.Components = component.NewStore()
+
+	// Enregistre les zones dans World
+	for _, gridID := range []string{w.DreamPlane.StartZoneID, w.DreamPlane.EndZoneID} {
+		if grid, ok := w.DreamPlane.Zones[gridID]; ok {
+			w.Grids[grid.ID] = grid
+			w.GridOrder = append(w.GridOrder, grid.ID)
+		}
+	}
+
+	// Ajoute les autres zones (intermédiaires et impasses)
+	for id, grid := range w.DreamPlane.Zones {
+		found := false
+		for _, addedID := range w.GridOrder {
+			if addedID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			w.Grids[id] = grid
+			w.GridOrder = append(w.GridOrder, id)
+		}
+	}
+
+	w.CurrentGridID = w.DreamPlane.StartZoneID
 }
 
 // GetGridForEntity retourne le grid sur lequel se trouve une entité
@@ -147,9 +239,271 @@ func (w *World) GetPlayerPosition() entity.Position {
 	return w.playerPosition
 }
 
-// AddFlippedTile adds a flipped tile to the current turn's tracking
-func (w *World) AddFlippedTile(pos board.Position) {
-	w.tilesFlippedThisTurn = append(w.tilesFlippedThisTurn, pos)
+// FindAvailable3x3DeploymentArea cherche une zone 3x3 libre sur un grid
+func (w *World) FindAvailable3x3DeploymentArea(gridID string) (board.Position, bool) {
+	grid, ok := w.GetGrid(gridID)
+	if !ok || grid.Width < 3 || grid.Height < 3 {
+		return board.Position{}, false
+	}
+
+	for y := 0; y <= grid.Height-3; y++ {
+		for x := 0; x <= grid.Width-3; x++ {
+			okArea := true
+			for dy := 0; dy < 3; dy++ {
+				for dx := 0; dx < 3; dx++ {
+					plot, err := grid.Get(board.Position{X: x + dx, Y: y + dy})
+					if err != nil {
+						okArea = false
+						break
+					}
+					if plot.Modifier.Obstructed {
+						okArea = false
+						break
+					}
+					for _, entityID := range plot.EntitiesID {
+						if e, ok := w.Entities.Get(entity.ID(entityID)); ok {
+							if e.GetType() == entity.TypeStructure {
+								okArea = false
+								break
+							}
+						}
+					}
+					if !okArea {
+						break
+					}
+				}
+				if !okArea {
+					break
+				}
+			}
+			if okArea {
+				return board.Position{X: x + 1, Y: y + 1}, true
+			}
+		}
+	}
+	return board.Position{}, false
+}
+
+func (w *World) findBest3x3DeploymentArea(gridID string) (board.Position, bool) {
+	grid, ok := w.GetGrid(gridID)
+	if !ok || grid.Width < 3 || grid.Height < 3 {
+		return board.Position{}, false
+	}
+
+	bestScore := 1<<31 - 1
+	bestPos := board.Position{}
+	for y := 0; y <= grid.Height-3; y++ {
+		for x := 0; x <= grid.Width-3; x++ {
+			score := 0
+			hasStructure := false
+			for dy := 0; dy < 3; dy++ {
+				for dx := 0; dx < 3; dx++ {
+					plot, err := grid.Get(board.Position{X: x + dx, Y: y + dy})
+					if err != nil {
+						hasStructure = true
+						break
+					}
+					if plot.Modifier.Obstructed {
+						score += 10
+					}
+					for _, entityID := range plot.EntitiesID {
+						if e, ok := w.Entities.Get(entity.ID(entityID)); ok {
+							if e.GetType() == entity.TypeStructure {
+								hasStructure = true
+								break
+							}
+						}
+					}
+					if hasStructure {
+						break
+					}
+					if len(plot.EntitiesID) > 0 {
+						score += 1
+					}
+				}
+				if hasStructure {
+					break
+				}
+			}
+			if hasStructure {
+				continue
+			}
+			if score < bestScore {
+				bestScore = score
+				bestPos = board.Position{X: x + 1, Y: y + 1}
+			}
+		}
+	}
+	if bestScore == 1<<31-1 {
+		return board.Position{}, false
+	}
+	return bestPos, true
+}
+
+func (w *World) isValid3x3DeploymentCenter(grid *board.Grid, center board.Position) bool {
+	return center.X >= 1 && center.Y >= 1 && center.X <= grid.Width-2 && center.Y <= grid.Height-2
+}
+
+func (w *World) is3x3DeploymentAreaClear(grid *board.Grid, center board.Position) bool {
+	for dy := 0; dy < 3; dy++ {
+		for dx := 0; dx < 3; dx++ {
+			plot, err := grid.Get(board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy})
+			if err != nil {
+				return false
+			}
+			if plot.Modifier.Obstructed {
+				return false
+			}
+			for _, entityID := range plot.EntitiesID {
+				if e, ok := w.Entities.Get(entity.ID(entityID)); ok {
+					if e.GetType() == entity.TypeStructure {
+						return false
+					}
+				}
+			}
+		}
+	}
+	return true
+}
+
+func (w *World) clear3x3DeploymentArea(grid *board.Grid, center board.Position) {
+	idsToRemove := make([]string, 0)
+	for dy := 0; dy < 3; dy++ {
+		for dx := 0; dx < 3; dx++ {
+			pos := board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy}
+			plot, err := grid.Get(pos)
+			if err != nil {
+				continue
+			}
+			for _, id := range plot.EntitiesID {
+				idsToRemove = append(idsToRemove, id)
+			}
+			plot.Modifier.Obstructed = false
+			plot.StructureID = ""
+			plot.EntitiesID = []string{}
+		}
+	}
+
+	for _, id := range idsToRemove {
+		w.RemoveEntity(entity.ID(id))
+	}
+}
+
+func (w *World) HasPortablePortal() bool {
+	for _, item := range w.Player.Inventory.Items {
+		if item.SourceID == player.PortablePortalItemSourceID {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *World) RemovePortablePortal() bool {
+	for idx, item := range w.Player.Inventory.Items {
+		if item.SourceID == player.PortablePortalItemSourceID {
+			_ = w.Player.Inventory.RemoveItem(idx)
+			return true
+		}
+	}
+	return false
+}
+
+func (w *World) applyPortablePortalLootTax() {
+	taxAmount := int(float64(len(w.Player.Inventory.Items)) * float64(player.PortablePortalLootTaxPercent) / 100.0)
+	if taxAmount <= 0 {
+		return
+	}
+
+	indices := make([]int, 0, len(w.Player.Inventory.Items))
+	for idx := range w.Player.Inventory.Items {
+		indices = append(indices, idx)
+	}
+
+	rand.Shuffle(len(indices), func(i, j int) {
+		indices[i], indices[j] = indices[j], indices[i]
+	})
+
+	indices = indices[:taxAmount]
+	sort.Sort(sort.Reverse(sort.IntSlice(indices)))
+	for _, idx := range indices {
+		_ = w.Player.Inventory.RemoveItem(idx)
+	}
+}
+
+func (w *World) applyDreamBreachPenalty() {
+	w.Player.TakeDamage(5, "dream_breach")
+	w.Player.ConsumeSanity(0)
+	w.EventBus.PublishImmediate(event.Event{
+		Type:     event.Type("dream_breach"),
+		SourceID: "portable_portal",
+		Payload: map[string]interface{}{
+			"damage": 5,
+			"sanity": 0,
+			"reason": "Forced portable portal deployment",
+		},
+	})
+}
+
+func (w *World) DeployPortablePortal(gridID string) (entity.Entity, error) {
+	return w.DeployPortablePortalAt(gridID, board.Position{X: -1, Y: -1})
+}
+
+func (w *World) DeployPortablePortalAt(gridID string, center board.Position) (entity.Entity, error) {
+	if !w.HasPortablePortal() {
+		return nil, errors.New("aucun portail portable disponible")
+	}
+
+	grid, ok := w.GetGrid(gridID)
+	if !ok {
+		return nil, ErrGridNotFound
+	}
+
+	forced := false
+	if center.X < 0 || center.Y < 0 {
+		center, ok = w.FindAvailable3x3DeploymentArea(gridID)
+		if !ok {
+			forced = true
+			center, ok = w.findBest3x3DeploymentArea(gridID)
+			if !ok {
+				return nil, errors.New("impossible de trouver une zone 3x3 pour le portail portable")
+			}
+		}
+	} else {
+		if !w.isValid3x3DeploymentCenter(grid, center) {
+			return nil, errors.New("zone de déploiement invalide")
+		}
+		if !w.is3x3DeploymentAreaClear(grid, center) {
+			forced = true
+		}
+	}
+
+	if forced {
+		w.clear3x3DeploymentArea(grid, center)
+	}
+
+	portal, err := w.SpawnStructure(gridID, "portable_portal", entity.Position{X: center.X, Y: center.Y})
+	if err != nil {
+		return nil, err
+	}
+
+	w.RemovePortablePortal()
+	w.applyPortablePortalLootTax()
+
+	if forced {
+		w.applyDreamBreachPenalty()
+	}
+
+	w.EventBus.PublishImmediate(event.Event{
+		Type:     event.Type("portable_portal_deployed"),
+		SourceID: string(portal.GetID()),
+		Payload: map[string]interface{}{
+			"grid_id":  gridID,
+			"forced":   forced,
+			"position": portal.GetPosition(),
+		},
+	})
+
+	return portal, nil
 }
 
 // GetFlippedTilesCount returns how many tiles have been flipped this turn
@@ -162,36 +516,57 @@ func (w *World) GetFlippedTilesCount() int {
 	return len(w.tilesFlippedThisTurn)
 }
 
+// AddFlippedTile enregistre un tile révélé pendant le tour courant
+func (w *World) AddFlippedTile(pos board.Position) {
+	w.GetFlippedTilesCount() // Sync turn tracking
+	w.tilesFlippedThisTurn = append(w.tilesFlippedThisTurn, pos)
+}
+
 // CanFlipTile checks if another tile can be flipped this turn (max 2 per turn)
 func (w *World) CanFlipTile() bool {
 	w.GetFlippedTilesCount() // Sync turn tracking
 	return len(w.tilesFlippedThisTurn) < 2
 }
 
-// SpawnResource crée une ressource dans le monde sur un grid spécifique
-func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) (*resource.Resource, error) {
+// getPlotForSpawn est une méthode utilitaire interne pour centraliser la récupération d'une parcelle valide pour le spawn
+func (w *World) getPlotForSpawn(gridID string, pos entity.Position) (*board.Grid, *board.Plot, error) {
 	grid, ok := w.Grids[gridID]
 	if !ok {
-		return nil, fmt.Errorf("grid %s introuvable", gridID)
+		return nil, nil, ErrGridNotFound
 	}
 
 	boardPos := board.Position{X: pos.X, Y: pos.Y}
-
 	plot, err := grid.Get(boardPos)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if plot.Modifier.Obstructed {
+		return nil, nil, fmt.Errorf("position %v est obstruée", pos)
+	}
+
+	return grid, plot, nil
+}
+
+// SpawnResource crée une ressource dans le monde sur un grid spécifique
+func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) (*resource.Resource, error) {
+	_, plot, err := w.getPlotForSpawn(gridID, pos)
 	if err != nil {
 		return nil, err
 	}
+
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
 
 	// Uniquement une ressource par parcelle
 	if w.HasResourceAt(gridID, boardPos) {
 		return nil, fmt.Errorf("position %v contient déjà une ressource", pos)
 	}
-	if plot.Modifier.Obstructed {
-		return nil, fmt.Errorf("position %v est obstruée", pos)
-	}
 
 	r := w.ResourceFactory.Create(rtype, entity.Position{X: pos.X, Y: pos.Y})
 	r.SetGridID(gridID)
+
+	grid, _ := w.GetGrid(gridID)
+	grid.InitialMatchableCount++
 
 	idStr := string(r.GetID())
 	w.Entities.Register(r)
@@ -206,25 +581,48 @@ func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) 
 	return r, nil
 }
 
-// SpawnCreature crée une créature dans le monde sur un grid spécifique
-func (w *World) SpawnCreature(gridID string, species string, pos entity.Position) (*creature.Creature, error) {
-	grid, ok := w.Grids[gridID]
-	if !ok {
-		return nil, ErrGridNotFound
+// SpawnResourceLevel crée une resource à un niveau précis de la pile
+func (w *World) SpawnResourceLevel(gridID string, rtype string, pos entity.Position) (*resource.Resource, error) {
+	_, plot, err := w.getPlotForSpawn(gridID, pos)
+	if err != nil {
+		return nil, err
 	}
 
 	boardPos := board.Position{X: pos.X, Y: pos.Y}
 
-	plot, err := grid.Get(boardPos)
+	// Uniquement une ressource par parcelle
+	if w.HasResourceAt(gridID, boardPos) {
+		return nil, fmt.Errorf("position %v contient déjà une ressource", pos)
+	}
+
+	r := w.ResourceFactory.Create(rtype, entity.Position{X: pos.X, Y: pos.Y})
+	r.SetGridID(gridID)
+
+	grid, _ := w.GetGrid(gridID)
+	grid.InitialMatchableCount++
+
+	idStr := string(r.GetID())
+	w.Entities.Register(r)
+	w.Components.Add(idStr, &r.Lifecycle)
+	w.Components.Add(idStr, &r.Value)
+	w.Components.Add(idStr, &r.Matchable)
+	w.Components.Add(idStr, &r.Visual)
+
+	plot.PushEntityToBottom(idStr)
+
+	w.EventBus.Publish(event.NewEntityCreatedEvent(idStr, "resource"))
+	return r, nil
+}
+
+// SpawnCreature crée une créature dans le monde sur un grid spécifique
+func (w *World) SpawnCreature(gridID string, species string, pos entity.Position) (*creature.Creature, error) {
+	_, plot, err := w.getPlotForSpawn(gridID, pos)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(plot.EntitiesID) > 0 {
 		return nil, fmt.Errorf("position %v is already occupied by %d entities", pos, len(plot.EntitiesID))
-	}
-	if plot.Modifier.Obstructed {
-		return nil, fmt.Errorf("position %v is obstructed", pos)
 	}
 
 	c, err := w.CreatureFactory.Create(species, pos)
@@ -233,6 +631,9 @@ func (w *World) SpawnCreature(gridID string, species string, pos entity.Position
 	}
 
 	c.SetGridID(gridID)
+	grid, _ := w.GetGrid(gridID)
+	grid.InitialMatchableCount++
+
 	idStr := string(c.GetID())
 
 	w.Entities.Register(c)
@@ -263,16 +664,66 @@ func (w *World) SpawnTrap(gridID string, pos entity.Position) (entity.Entity, er
 		return nil, fmt.Errorf("position %v déjà occupée", pos)
 	}
 
-	trap := entity.NewBaseEntity(entity.TypeTrap)
-	trap.SetGridID(gridID)
-	trap.SetPosition(pos)
+	// Création explicite d'un pointeur vers une BaseEntity
+	trapPtr := &entity.BaseEntity{
+		ID:       entity.NewID(),
+		EType:    entity.TypeTrap,
+		Pos:      pos,
+		GridID:   gridID,
+		Active:   true,
+		State:    entity.Hidden,
+		Tags:     []string{"trap"},
+		Metadata: make(map[string]interface{}),
+	}
 
-	trapPtr := &trap
 	w.Entities.Register(trapPtr)
+	grid.InitialMatchableCount++
 	plot.PushEntity(string(trapPtr.GetID()))
 
 	w.EventBus.Publish(event.NewEntityCreatedEvent(string(trapPtr.GetID()), "trap"))
 	return trapPtr, nil
+}
+
+// SpawnStructure crée une structure sur un grid spécifique
+func (w *World) SpawnStructure(gridID string, stype string, pos entity.Position) (entity.Entity, error) {
+	grid, ok := w.Grids[gridID]
+	if !ok {
+		return nil, ErrGridNotFound
+	}
+
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
+	plot, err := grid.Get(boardPos)
+	if err != nil {
+		return nil, err
+	}
+
+	// Création explicite d'un pointeur vers une BaseEntity
+	structPtr := &entity.BaseEntity{
+		ID:       entity.NewID(),
+		EType:    entity.TypeStructure,
+		Pos:      pos,
+		GridID:   gridID,
+		Active:   true,
+		State:    entity.Hidden,
+		Tags:     []string{stype},
+		Metadata: make(map[string]interface{}),
+	}
+
+	// Logique de visibilité initiale
+	switch stype {
+	case "commencement_portal":
+		structPtr.SetState(entity.Revealed)
+	case "finish_portal":
+		structPtr.SetState(entity.Hidden)
+	default:
+		structPtr.SetState(entity.Revealed)
+	}
+
+	w.Entities.Register(structPtr)
+	plot.PushEntity(string(structPtr.GetID()))
+
+	w.EventBus.Publish(event.NewEntityCreatedEvent(string(structPtr.GetID()), "structure"))
+	return structPtr, nil
 }
 
 // RevealTile révèle une entité sur une position
@@ -305,7 +756,8 @@ func (w *World) RevealTile(gridID string, pos board.Position) (entity.Entity, er
 	}
 
 	// 5. Mise à jour de l'état
-	if ent.GetState() == entity.Hidden {
+	state := ent.GetState()
+	if state&entity.Hidden != 0 {
 		ent.SetState(entity.Revealed)
 	}
 
@@ -337,11 +789,6 @@ func (w *World) MatchTile(gridID string, pos board.Position) error {
 	}
 
 	ent.SetState(entity.Matched)
-
-	w.EventBus.Publish(event.NewTileMatchedEvent(
-		entity.Position{X: pos.X, Y: pos.Y},
-		string(topID),
-	))
 
 	return nil
 }
@@ -425,6 +872,16 @@ func (s *PropagationSystem) Update(world *World) {
 			continue
 		}
 
+		// Vérifie si la plante a atteint son quota de propagation
+		if lifecycle.MaxPropagations != -1 && lifecycle.PropagationsDone >= lifecycle.MaxPropagations {
+			continue
+		}
+
+		// Vérifie si la condition de propagation est remplie (au MaxStages)
+		if !shouldPropagate(lifecycle) {
+			continue
+		}
+
 		grid, ok := world.Grids[e.GetGridID()]
 		if !ok {
 			continue
@@ -432,48 +889,88 @@ func (s *PropagationSystem) Update(world *World) {
 
 		pos := e.GetPosition()
 		neighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
+		rand.Shuffle(len(neighbors), func(i, j int) { neighbors[i], neighbors[j] = neighbors[j], neighbors[i] })
+
+		maxToPropagate := lifecycle.PropagationCount
+		if maxToPropagate <= 0 {
+			maxToPropagate = 1 // Fallback
+		}
+
+		// --- 1. PHASE DE VÉRIFICATION DES PLACES DISPONIBLES ---
+		var validNeighbors []*board.Plot
 
 		for _, neighbor := range neighbors {
-			// Ne propage pas s'il y a déjà une ressource sur la case cible
+			// Ne retient pas la case s'il y a déjà une ressource dessus
 			if world.HasResourceAt(e.GetGridID(), neighbor.Position) {
 				continue
 			}
 
+			// Ne retient pas la case si elle est obstruée
 			if neighbor.Modifier.Obstructed {
 				continue
 			}
 
-			if shouldPropagate(lifecycle) {
-				spawnPos := entity.Position{
-					X: neighbor.Position.X,
-					Y: neighbor.Position.Y,
-				}
+			validNeighbors = append(validNeighbors, neighbor)
 
-				newRes, err := world.SpawnResource(
-					e.GetGridID(),
-					getResourceType(e),
-					spawnPos,
-				)
-
-				if err != nil {
-					continue
-				}
-
-				world.EventBus.Publish(event.Event{
-					Type:     event.ResourcePropagated,
-					SourceID: string(newRes.GetID()),
-					Payload: map[string]interface{}{
-						"parent_id": entityID,
-						"position":  neighbor.Position,
-					},
-				})
+			// Si on a trouvé assez de places, on peut s'arrêter de chercher
+			if len(validNeighbors) == maxToPropagate {
+				break
 			}
+		}
+
+		// Condition CRITIQUE : Si on n'a pas trouvé EXACTEMENT le nombre requis de cases valides,
+		// la propagation est considérée comme irréalisable. On passe à la plante suivante.
+		if len(validNeighbors) < maxToPropagate {
+			continue
+		}
+
+		// --- 2. PHASE D'EXÉCUTION (Garantie d'avoir le compte) ---
+		propagatedCount := 0
+
+		for _, targetNeighbor := range validNeighbors {
+			spawnPos := entity.Position{
+				X: targetNeighbor.Position.X,
+				Y: targetNeighbor.Position.Y,
+			}
+
+			// Création de la ressource
+			newRes, err := world.SpawnResource(e.GetGridID(), getResourceType(e), spawnPos)
+			if err != nil {
+				// Sécurité si le spawn échoue techniquement (ne devrait pas arriver)
+				continue
+			}
+
+			// Ajustement de la hauteur dans le Plot si nécessaire
+			if lifecycle.PropagationLevel != 0 {
+				grid.RemoveEntity(targetNeighbor.Position, string(newRes.GetID()))
+				grid.PlaceEntityAtBottom(targetNeighbor.Position, string(newRes.GetID()))
+			}
+
+			propagatedCount++
+
+			world.EventBus.Publish(event.Event{
+				Type:     event.ResourcePropagated,
+				SourceID: string(newRes.GetID()),
+				Payload: map[string]interface{}{
+					"parent_id": entityID,
+					"position":  targetNeighbor.Position,
+				},
+			})
+		}
+
+		// Si la propagation complète a eu lieu, on met à jour les compteurs
+		if propagatedCount > 0 {
+			lifecycle.TurnsInStage = 0
+			lifecycle.PropagationsDone++
 		}
 	}
 }
 
 func shouldPropagate(l *component.Lifecycle) bool {
-	return l.CurrentStage >= 2
+	// Propagation uniquement au dernier stade (ex: "gâté")
+	isLastStage := l.CurrentStage == l.MaxStages-1
+	// Condition : avoir passé suffisamment de tours dans ce stade (défini par TurnsToNext)
+	return isLastStage && l.TurnsInStage >= l.TurnsToNext
 }
 
 func getResourceType(e entity.Entity) string {
@@ -597,8 +1094,7 @@ func (s *CreatureMovementSystem) Update(world *World) {
 		profile := c.MovementProfile
 
 		// Vérifie si le déplacement doit se déclencher
-		if !s.shouldTrigger(profile.Trigger, c, world, grid) {
-			profile.Trigger.Reset()
+		if !s.shouldTrigger(profile.Trigger, c) {
 			continue
 		}
 
@@ -621,7 +1117,7 @@ func (s *CreatureMovementSystem) Update(world *World) {
 	}
 }
 
-func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger, c *creature.Creature, world *World, grid *board.Grid) bool {
+func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger, c *creature.Creature) bool {
 	switch trigger.Type {
 	case creature.TriggerPassive:
 		return false
@@ -1139,6 +1635,16 @@ func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
 		return
 	}
 
+	// Pas de prévisualisation dans les zones de commencement et de fin
+	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+	if isPortalZone {
+		if gridID == world.DreamPlane.StartZoneID {
+			// Dans la zone de commencement, on laisse 5 secondes au joueur pour voir le portail
+			s.previewTimers[gridID] = 5 * 60 // 5 secondes
+		}
+		return
+	}
+
 	settings := world.Difficulty
 	if settings.PreviewRatio <= 0 {
 		return
@@ -1162,7 +1668,7 @@ func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
 	} else {
 		// Easy ou Insane
 		for _, e := range allEntities {
-			if e.GetState() == entity.Hidden {
+			if e.GetState()&entity.Hidden != 0 {
 				e.SetState(entity.Revealed)
 				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
@@ -1202,7 +1708,7 @@ func (s *PreviewSystem) revealHalfPairs(world *World, entities []entity.Entity, 
 		countToReveal := int(float64(len(group)) * ratio)
 		for i := 0; i < countToReveal; i++ {
 			e := group[i]
-			if e.GetState() == entity.Hidden {
+			if e.GetState()&entity.Hidden != 0 {
 				e.SetState(entity.Revealed)
 				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
@@ -1221,7 +1727,20 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 		if len(tile.EntitiesID) > 0 {
 			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
-				if e.GetState() == entity.Revealed {
+				// Gestion spécifique des structures
+				if e.GetType() == entity.TypeStructure {
+					if e.HasTag("commencement_portal") {
+						// Portail de commencement : se cache et se bloque de manière permanente
+						e.SetState(entity.Hidden | entity.Blocked)
+						world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+							e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+						continue
+					}
+					// Les autres structures (dolmens, portail de fin) restent révélées
+					continue
+				}
+
+				if e.GetState()&entity.Revealed != 0 {
 					e.SetState(entity.Hidden)
 					world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 						e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
@@ -1231,6 +1750,87 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 	}
 }
 
+// LootSystem gère l'acquisition du loot lors d'un match
+type LootSystem struct {
+	world *World
+}
+
+func NewLootSystem(world *World) *LootSystem {
+	ls := &LootSystem{world: world}
+	// S'abonne aux événements de match
+	world.EventBus.SubscribeFunc(event.TileMatched, ls.onTileMatched)
+	return ls
+}
+
+func (s *LootSystem) Priority() int { return 10 }
+
+func (s *LootSystem) Update(world *World) {
+	// Pas de logique frame-by-frame pour le moment
+}
+
+func (s *LootSystem) onTileMatched(e event.Event) {
+	// Récupère l'entité matchée principale
+	entID := entity.ID(e.SourceID)
+
+	name := "unknown"
+	var eType entity.Type = entity.TypeResource
+
+	// 1. Tente de récupérer depuis le manager si l'entité existe encore
+	if ent, ok := s.world.Entities.Get(entID); ok {
+		name = s.getEntityName(ent)
+		eType = ent.GetType()
+	}
+
+	// 2. Sinon (ou si getEntityName a échoué), tente de récupérer depuis le payload
+	if name == "unknown" || name == "" {
+		if n, exists := e.Payload["name"].(string); exists {
+			name = n
+		}
+		if t, exists := e.Payload["entity_type"].(entity.Type); exists {
+			eType = t
+		}
+	}
+
+	// 3. Cas particulier : pièges ou entités sans butin
+	if name == "unknown" || name == "" || name == "trap" {
+		return
+	}
+
+	// Un match = un loot
+	loot := &player.LootItem{
+		ID:          string(entity.NewID()),
+		Name:        name,
+		Type:        eType,
+		SourceID:    string(entID),
+		IsDeletable: true, // Par défaut, les items de match sont supprimables
+	}
+
+	// Tente d'ajouter à l'inventaire
+	err := s.world.Player.Inventory.AddItem(loot)
+	if err != nil {
+		// Inventaire plein : on détruit le loot
+		fmt.Printf("[LOOT] Inventaire plein ! Le loot %s est perdu.\n", name)
+		s.world.EventBus.PublishImmediate(event.NewInventoryFullEvent())
+		return
+	}
+
+	// Une fois le loot acquis, on peut retirer les entités du board (Optionnel selon gameplay)
+	// Pour v0.2, les tuiles "Matched" restent visibles en taille 1.2x mais sont "récoltées" techniquement
+
+	fmt.Printf("[LOOT] Acquisition : %s (ID: %s)\n", name, entID)
+	s.world.EventBus.PublishImmediate(event.NewLootAcquiredEvent(loot.ID, loot.Name, loot.Type))
+}
+
+func (s *LootSystem) getEntityName(ent entity.Entity) string {
+	if r, ok := ent.(*resource.Resource); ok {
+		return r.ResourceType
+	}
+	if c, ok := ent.(*creature.Creature); ok {
+		return c.Species
+	}
+	return "unknown_loot"
+}
+
 // Engine orchestre tous les systèmes
 type Engine struct {
 	systems        []System
@@ -1238,11 +1838,13 @@ type Engine struct {
 	Running        bool
 	movementSystem *CreatureMovementSystem // Référence directe pour les mises à jour
 	previewSystem  *PreviewSystem          // Référence pour les événements
+	lootSystem     *LootSystem
 }
 
 func NewEngine(world *World) *Engine {
 	moveSys := NewCreatureMovementSystem()
 	prevSys := NewPreviewSystem()
+	lootSys := NewLootSystem(world)
 
 	e := &Engine{
 		world: world,
@@ -1252,10 +1854,12 @@ func NewEngine(world *World) *Engine {
 			&CreatureAISystem{},
 			moveSys,
 			&TriggerSystem{},
+			lootSys,
 		},
 		Running:        false,
 		movementSystem: moveSys,
 		previewSystem:  prevSys,
+		lootSystem:     lootSys,
 	}
 
 	// S'abonne aux entrées de grille
