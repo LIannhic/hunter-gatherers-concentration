@@ -178,3 +178,4 @@ go build -o game ./cmd/game
 | Spawn toutes créatures (debug) | Shift+S |
 | Nettoyer plateau (debug) | C |
 | Retour menu | \ |
+Annulation de la PR #39
