@@ -182,15 +182,17 @@ func (g *LayoutGenerator) SetupPortalArea(grid *Grid, isStart bool) {
 		}
 	}
 
-	// Portail au centre (2,2), (2,3), (3,2), (3,3) - on choisit un point central
-	// Pour un 6x6, le "vrai" centre est entre 2 et 3.
-	// L'issue dit "The original entrance portal is located in the center of these structures."
-	portalPos := Position{2, 2}
-	if plot, err := grid.Get(portalPos); err == nil {
-		if isStart {
-			plot.StructureID = "commencement_portal"
-		} else {
-			plot.StructureID = "finish_portal"
+	// Portail au centre (couvrant 2x2) : positions (2,2), (2,3), (3,2), (3,3)
+	portalPositions := []Position{
+		{2, 2}, {2, 3}, {3, 2}, {3, 3},
+	}
+	for _, portalPos := range portalPositions {
+		if plot, err := grid.Get(portalPos); err == nil {
+			if isStart {
+				plot.StructureID = "commencement_portal"
+			} else {
+				plot.StructureID = "finish_portal"
+			}
 		}
 	}
 }

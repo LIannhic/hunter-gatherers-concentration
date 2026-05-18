@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sort"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/component"
@@ -238,9 +239,235 @@ func (w *World) GetPlayerPosition() entity.Position {
 	return w.playerPosition
 }
 
-// AddFlippedTile adds a flipped tile to the current turn's tracking
-func (w *World) AddFlippedTile(pos board.Position) {
-	w.tilesFlippedThisTurn = append(w.tilesFlippedThisTurn, pos)
+// FindAvailable3x3DeploymentArea cherche une zone 3x3 libre sur un grid
+func (w *World) FindAvailable3x3DeploymentArea(gridID string) (board.Position, bool) {
+	grid, ok := w.GetGrid(gridID)
+	if !ok || grid.Width < 3 || grid.Height < 3 {
+		return board.Position{}, false
+	}
+
+	for y := 0; y <= grid.Height-3; y++ {
+		for x := 0; x <= grid.Width-3; x++ {
+			okArea := true
+			for dy := 0; dy < 3; dy++ {
+				for dx := 0; dx < 3; dx++ {
+					plot, err := grid.Get(board.Position{X: x + dx, Y: y + dy})
+					if err != nil {
+						okArea = false
+						break
+					}
+					if plot.Modifier.Obstructed || len(plot.EntitiesID) > 0 {
+						okArea = false
+						break
+					}
+				}
+				if !okArea {
+					break
+				}
+			}
+			if okArea {
+				return board.Position{X: x + 1, Y: y + 1}, true
+			}
+		}
+	}
+	return board.Position{}, false
+}
+
+func (w *World) findBest3x3DeploymentArea(gridID string) (board.Position, bool) {
+	grid, ok := w.GetGrid(gridID)
+	if !ok || grid.Width < 3 || grid.Height < 3 {
+		return board.Position{}, false
+	}
+
+	bestScore := 1<<31 - 1
+	bestPos := board.Position{}
+	for y := 0; y <= grid.Height-3; y++ {
+		for x := 0; x <= grid.Width-3; x++ {
+			score := 0
+			for dy := 0; dy < 3; dy++ {
+				for dx := 0; dx < 3; dx++ {
+					plot, err := grid.Get(board.Position{X: x + dx, Y: y + dy})
+					if err != nil {
+						score = 1<<31 - 1
+						break
+					}
+					if plot.Modifier.Obstructed {
+						score += 10
+					}
+					if len(plot.EntitiesID) > 0 {
+						score += 1
+					}
+				}
+			}
+			if score < bestScore {
+				bestScore = score
+				bestPos = board.Position{X: x + 1, Y: y + 1}
+			}
+		}
+	}
+	if bestScore == 1<<31-1 {
+		return board.Position{}, false
+	}
+	return bestPos, true
+}
+
+func (w *World) isValid3x3DeploymentCenter(grid *board.Grid, center board.Position) bool {
+	return center.X >= 1 && center.Y >= 1 && center.X <= grid.Width-2 && center.Y <= grid.Height-2
+}
+
+func (w *World) is3x3DeploymentAreaClear(grid *board.Grid, center board.Position) bool {
+	for dy := 0; dy < 3; dy++ {
+		for dx := 0; dx < 3; dx++ {
+			plot, err := grid.Get(board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy})
+			if err != nil {
+				return false
+			}
+			if plot.Modifier.Obstructed || len(plot.EntitiesID) > 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (w *World) clear3x3DeploymentArea(grid *board.Grid, center board.Position) {
+	idsToRemove := make([]string, 0)
+	for dy := 0; dy < 3; dy++ {
+		for dx := 0; dx < 3; dx++ {
+			pos := board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy}
+			plot, err := grid.Get(pos)
+			if err != nil {
+				continue
+			}
+			for _, id := range plot.EntitiesID {
+				idsToRemove = append(idsToRemove, id)
+			}
+			plot.Modifier.Obstructed = false
+			plot.StructureID = ""
+			plot.EntitiesID = []string{}
+		}
+	}
+
+	for _, id := range idsToRemove {
+		w.RemoveEntity(entity.ID(id))
+	}
+}
+
+func (w *World) HasPortablePortal() bool {
+	for _, item := range w.Player.Inventory.Items {
+		if item.SourceID == player.PortablePortalItemSourceID {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *World) RemovePortablePortal() bool {
+	for idx, item := range w.Player.Inventory.Items {
+		if item.SourceID == player.PortablePortalItemSourceID {
+			_ = w.Player.Inventory.RemoveItem(idx)
+			return true
+		}
+	}
+	return false
+}
+
+func (w *World) applyPortablePortalLootTax() {
+	taxAmount := int(float64(len(w.Player.Inventory.Items)) * float64(player.PortablePortalLootTaxPercent) / 100.0)
+	if taxAmount <= 0 {
+		return
+	}
+
+	indices := make([]int, 0, len(w.Player.Inventory.Items))
+	for idx := range w.Player.Inventory.Items {
+		indices = append(indices, idx)
+	}
+
+	rand.Shuffle(len(indices), func(i, j int) {
+		indices[i], indices[j] = indices[j], indices[i]
+	})
+
+	indices = indices[:taxAmount]
+	sort.Sort(sort.Reverse(sort.IntSlice(indices)))
+	for _, idx := range indices {
+		_ = w.Player.Inventory.RemoveItem(idx)
+	}
+}
+
+func (w *World) applyDreamBreachPenalty() {
+	w.Player.TakeDamage(5, "dream_breach")
+	w.Player.ConsumeSanity(0)
+	w.EventBus.PublishImmediate(event.Event{
+		Type:     event.Type("dream_breach"),
+		SourceID: "portable_portal",
+		Payload: map[string]interface{}{
+			"damage": 5,
+			"sanity": 0,
+			"reason": "Forced portable portal deployment",
+		},
+	})
+}
+
+func (w *World) DeployPortablePortal(gridID string) (entity.Entity, error) {
+	return w.DeployPortablePortalAt(gridID, board.Position{X: -1, Y: -1})
+}
+
+func (w *World) DeployPortablePortalAt(gridID string, center board.Position) (entity.Entity, error) {
+	if !w.HasPortablePortal() {
+		return nil, errors.New("aucun portail portable disponible")
+	}
+
+	grid, ok := w.GetGrid(gridID)
+	if !ok {
+		return nil, ErrGridNotFound
+	}
+
+	forced := false
+	if center.X < 0 || center.Y < 0 {
+		center, ok = w.FindAvailable3x3DeploymentArea(gridID)
+		if !ok {
+			forced = true
+			center, ok = w.findBest3x3DeploymentArea(gridID)
+			if !ok {
+				return nil, errors.New("impossible de trouver une zone 3x3 pour le portail portable")
+			}
+		}
+	} else {
+		if !w.isValid3x3DeploymentCenter(grid, center) {
+			return nil, errors.New("zone de déploiement invalide")
+		}
+		if !w.is3x3DeploymentAreaClear(grid, center) {
+			forced = true
+		}
+	}
+
+	if forced {
+		w.clear3x3DeploymentArea(grid, center)
+	}
+
+	portal, err := w.SpawnStructure(gridID, "portable_portal", entity.Position{X: center.X, Y: center.Y})
+	if err != nil {
+		return nil, err
+	}
+
+	w.RemovePortablePortal()
+	w.applyPortablePortalLootTax()
+
+	if forced {
+		w.applyDreamBreachPenalty()
+	}
+
+	w.EventBus.PublishImmediate(event.Event{
+		Type:     event.Type("portable_portal_deployed"),
+		SourceID: string(portal.GetID()),
+		Payload: map[string]interface{}{
+			"grid_id":  gridID,
+			"forced":   forced,
+			"position": portal.GetPosition(),
+		},
+	})
+
+	return portal, nil
 }
 
 // GetFlippedTilesCount returns how many tiles have been flipped this turn
@@ -251,6 +478,12 @@ func (w *World) GetFlippedTilesCount() int {
 		w.lastTurnNumber = w.Turn
 	}
 	return len(w.tilesFlippedThisTurn)
+}
+
+// AddFlippedTile enregistre un tile révélé pendant le tour courant
+func (w *World) AddFlippedTile(pos board.Position) {
+	w.GetFlippedTilesCount() // Sync turn tracking
+	w.tilesFlippedThisTurn = append(w.tilesFlippedThisTurn, pos)
 }
 
 // CanFlipTile checks if another tile can be flipped this turn (max 2 per turn)
@@ -441,11 +674,12 @@ func (w *World) SpawnStructure(gridID string, stype string, pos entity.Position)
 	}
 
 	// Logique de visibilité initiale
-	if stype == "commencement_portal" {
+	switch stype {
+	case "commencement_portal":
 		structPtr.SetState(entity.Revealed)
-	} else if stype == "finish_portal" {
+	case "finish_portal":
 		structPtr.SetState(entity.Hidden)
-	} else {
+	default:
 		structPtr.SetState(entity.Revealed)
 	}
 
@@ -587,113 +821,113 @@ type PropagationSystem struct{}
 func (s *PropagationSystem) Priority() int { return 2 }
 
 func (s *PropagationSystem) Update(world *World) {
-    resources := world.Entities.GetByType(entity.TypeResource)
+	resources := world.Entities.GetByType(entity.TypeResource)
 
-    for _, e := range resources {
-       entityID := string(e.GetID())
+	for _, e := range resources {
+		entityID := string(e.GetID())
 
-       comp, ok := world.Components.Get(entityID, "lifecycle")
-       if !ok {
-          continue
-       }
+		comp, ok := world.Components.Get(entityID, "lifecycle")
+		if !ok {
+			continue
+		}
 
-       lifecycle := comp.(*component.Lifecycle)
-       if !lifecycle.CanPropagate {
-          continue
-       }
+		lifecycle := comp.(*component.Lifecycle)
+		if !lifecycle.CanPropagate {
+			continue
+		}
 
-       // Vérifie si la plante a atteint son quota de propagation
-       if lifecycle.MaxPropagations != -1 && lifecycle.PropagationsDone >= lifecycle.MaxPropagations {
-          continue
-       }
+		// Vérifie si la plante a atteint son quota de propagation
+		if lifecycle.MaxPropagations != -1 && lifecycle.PropagationsDone >= lifecycle.MaxPropagations {
+			continue
+		}
 
-       // Vérifie si la condition de propagation est remplie (au MaxStages)
-       if !shouldPropagate(lifecycle) {
-          continue
-       }
+		// Vérifie si la condition de propagation est remplie (au MaxStages)
+		if !shouldPropagate(lifecycle) {
+			continue
+		}
 
-       grid, ok := world.Grids[e.GetGridID()]
-       if !ok {
-          continue
-       }
+		grid, ok := world.Grids[e.GetGridID()]
+		if !ok {
+			continue
+		}
 
-       pos := e.GetPosition()
-       neighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
-       rand.Shuffle(len(neighbors), func(i, j int) { neighbors[i], neighbors[j] = neighbors[j], neighbors[i] })
+		pos := e.GetPosition()
+		neighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
+		rand.Shuffle(len(neighbors), func(i, j int) { neighbors[i], neighbors[j] = neighbors[j], neighbors[i] })
 
-       maxToPropagate := lifecycle.PropagationCount
-       if maxToPropagate <= 0 {
-          maxToPropagate = 1 // Fallback
-       }
+		maxToPropagate := lifecycle.PropagationCount
+		if maxToPropagate <= 0 {
+			maxToPropagate = 1 // Fallback
+		}
 
-       // --- 1. PHASE DE VÉRIFICATION DES PLACES DISPONIBLES ---
-       var validNeighbors []*board.Plot
+		// --- 1. PHASE DE VÉRIFICATION DES PLACES DISPONIBLES ---
+		var validNeighbors []*board.Plot
 
-       for _, neighbor := range neighbors {
-          // Ne retient pas la case s'il y a déjà une ressource dessus
-          if world.HasResourceAt(e.GetGridID(), neighbor.Position) {
-             continue
-          }
+		for _, neighbor := range neighbors {
+			// Ne retient pas la case s'il y a déjà une ressource dessus
+			if world.HasResourceAt(e.GetGridID(), neighbor.Position) {
+				continue
+			}
 
-          // Ne retient pas la case si elle est obstruée
-          if neighbor.Modifier.Obstructed {
-             continue
-          }
+			// Ne retient pas la case si elle est obstruée
+			if neighbor.Modifier.Obstructed {
+				continue
+			}
 
-          validNeighbors = append(validNeighbors, neighbor)
+			validNeighbors = append(validNeighbors, neighbor)
 
-          // Si on a trouvé assez de places, on peut s'arrêter de chercher
-          if len(validNeighbors) == maxToPropagate {
-             break
-          }
-       }
+			// Si on a trouvé assez de places, on peut s'arrêter de chercher
+			if len(validNeighbors) == maxToPropagate {
+				break
+			}
+		}
 
-       // Condition CRITIQUE : Si on n'a pas trouvé EXACTEMENT le nombre requis de cases valides,
-       // la propagation est considérée comme irréalisable. On passe à la plante suivante.
-       if len(validNeighbors) < maxToPropagate {
-          continue
-       }
+		// Condition CRITIQUE : Si on n'a pas trouvé EXACTEMENT le nombre requis de cases valides,
+		// la propagation est considérée comme irréalisable. On passe à la plante suivante.
+		if len(validNeighbors) < maxToPropagate {
+			continue
+		}
 
-       // --- 2. PHASE D'EXÉCUTION (Garantie d'avoir le compte) ---
-       propagatedCount := 0
+		// --- 2. PHASE D'EXÉCUTION (Garantie d'avoir le compte) ---
+		propagatedCount := 0
 
-       for _, targetNeighbor := range validNeighbors {
-          spawnPos := entity.Position{
-             X: targetNeighbor.Position.X,
-             Y: targetNeighbor.Position.Y,
-          }
+		for _, targetNeighbor := range validNeighbors {
+			spawnPos := entity.Position{
+				X: targetNeighbor.Position.X,
+				Y: targetNeighbor.Position.Y,
+			}
 
-          // Création de la ressource
-          newRes, err := world.SpawnResource(e.GetGridID(), getResourceType(e), spawnPos)
-          if err != nil {
-             // Sécurité si le spawn échoue techniquement (ne devrait pas arriver)
-             continue
-          }
+			// Création de la ressource
+			newRes, err := world.SpawnResource(e.GetGridID(), getResourceType(e), spawnPos)
+			if err != nil {
+				// Sécurité si le spawn échoue techniquement (ne devrait pas arriver)
+				continue
+			}
 
-          // Ajustement de la hauteur dans le Plot si nécessaire
-          if lifecycle.PropagationLevel != 0 {
-             grid.RemoveEntity(targetNeighbor.Position, string(newRes.GetID()))
-             grid.PlaceEntityAtBottom(targetNeighbor.Position, string(newRes.GetID()))
-          }
+			// Ajustement de la hauteur dans le Plot si nécessaire
+			if lifecycle.PropagationLevel != 0 {
+				grid.RemoveEntity(targetNeighbor.Position, string(newRes.GetID()))
+				grid.PlaceEntityAtBottom(targetNeighbor.Position, string(newRes.GetID()))
+			}
 
-          propagatedCount++
+			propagatedCount++
 
-          world.EventBus.Publish(event.Event{
-             Type:     event.ResourcePropagated,
-             SourceID: string(newRes.GetID()),
-             Payload: map[string]interface{}{
-                "parent_id": entityID,
-                "position":  targetNeighbor.Position,
-             },
-          })
-       }
+			world.EventBus.Publish(event.Event{
+				Type:     event.ResourcePropagated,
+				SourceID: string(newRes.GetID()),
+				Payload: map[string]interface{}{
+					"parent_id": entityID,
+					"position":  targetNeighbor.Position,
+				},
+			})
+		}
 
-       // Si la propagation complète a eu lieu, on met à jour les compteurs
-       if propagatedCount > 0 {
-          lifecycle.TurnsInStage = 0
-          lifecycle.PropagationsDone++
-       }
-    }
+		// Si la propagation complète a eu lieu, on met à jour les compteurs
+		if propagatedCount > 0 {
+			lifecycle.TurnsInStage = 0
+			lifecycle.PropagationsDone++
+		}
+	}
 }
 
 func shouldPropagate(l *component.Lifecycle) bool {
@@ -824,8 +1058,7 @@ func (s *CreatureMovementSystem) Update(world *World) {
 		profile := c.MovementProfile
 
 		// Vérifie si le déplacement doit se déclencher
-		if !s.shouldTrigger(profile.Trigger, c, world, grid) {
-			profile.Trigger.Reset()
+		if !s.shouldTrigger(profile.Trigger, c) {
 			continue
 		}
 
@@ -848,7 +1081,7 @@ func (s *CreatureMovementSystem) Update(world *World) {
 	}
 }
 
-func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger, c *creature.Creature, world *World, grid *board.Grid) bool {
+func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger, c *creature.Creature) bool {
 	switch trigger.Type {
 	case creature.TriggerPassive:
 		return false

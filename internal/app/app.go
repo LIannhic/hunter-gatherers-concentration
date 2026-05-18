@@ -78,6 +78,9 @@ func NewApplication() (*Application, error) {
 	// 3. Crée plusieurs grids
 	app.setupGrids()
 
+	// Ajoute le portail portable à l'inventaire initial du joueur
+	_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
+
 	// 4. Infrastructure
 	app.Assets = assets.NewManager()
 
@@ -107,6 +110,21 @@ func NewApplication() (*Application, error) {
 				IsDeletable: true,
 			}
 			_ = app.World.Player.Inventory.AddItem(loot)
+		}
+	}
+
+	app.Input.OnUsePortablePortal = func(gridID string, center board.Position) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+		fmt.Println("[ACTION] Utilisation du portail portable")
+		cmd := &usecase.UsePortablePortalCommand{World: app.World, GridID: gridID, Center: center}
+		if err := cmd.Execute(); err != nil {
+			fmt.Printf("[ERROR] Impossible de déployer le portail portable : %v\n", err)
+		} else {
+			fmt.Println("[SUCCESS] Portail portable déployé.")
+			app.HUD.ClearActiveLootSelection()
+			app.Input.SetPortablePortalMode(false)
 		}
 	}
 
@@ -214,29 +232,6 @@ func (app *Application) FillGridRandomly(gridID string) {
 	if posIdx < totalTiles {
 		fmt.Printf("  - [%s] Spawning lone trap at %v\n", gridID, positions[posIdx])
 		app.World.SpawnTrap(gridID, positions[posIdx])
-	}
-}
-
-func (app *Application) fillGridWithTraps(gridID string) {
-	grid, ok := app.World.GetGrid(gridID)
-	if !ok {
-		return
-	}
-
-	for y := 0; y < grid.Height; y++ {
-		for x := 0; x < grid.Width; x++ {
-			pos := board.Position{X: x, Y: y}
-			plot, err := grid.Get(pos)
-			if err != nil {
-				continue
-			}
-
-			if len(plot.EntitiesID) > 0 || plot.Modifier.Obstructed {
-				continue
-			}
-
-			app.World.SpawnTrap(gridID, entity.Position{X: x, Y: y})
-		}
 	}
 }
 
@@ -616,6 +611,7 @@ func (app *Application) updatePlaying() error {
 	mx, my := ebiten.CursorPosition()
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		if app.HUD.HandleClick(mx, my) {
+			app.Input.SetPortablePortalMode(app.HUD.IsPortablePortalSelected())
 			return nil
 		}
 	}
@@ -664,9 +660,9 @@ func (app *Application) StartGameWithSlot(slotID int) {
 		save.Meta.SessionCount++
 		app.sessionStartTime = time.Now()
 
-		// Injection de l'état sauvegardé dans le World
-		app.World.Hub = save.Hub
-		app.World.Player = save.Player
+		// Chaque expédition démarre avec un nouvel état de joueur et de hub.
+		app.World.Hub = meta.NewHub()
+		app.World.Player = player.New(save.Player.ID)
 
 		// Applique la difficulté sauvegardée
 		if save.Meta.Difficulty != "" {
@@ -697,6 +693,7 @@ func (app *Application) StartGame() {
 
 	// V0.2: L'inventaire est vidé à chaque nouvelle partie
 	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
+	_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
 	app.World.Player.Inventory.ScrollOffset = 0
 
 	// Démarre l'engine (nécessaire pour les mouvements des créatures)

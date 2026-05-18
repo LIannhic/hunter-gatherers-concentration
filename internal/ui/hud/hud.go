@@ -28,8 +28,9 @@ type HUD struct {
 	inventoryOffscreen *ebiten.Image // Buffer pour le clipping de l'inventaire
 
 	// Gestion de la suppression et sélection
-	selectedLoots   map[int]bool // Indices sélectionnés
-	confirmClearAll bool         // vrai si on a cliqué sur X sans sélection
+	selectedLoots    map[int]bool // Indices sélectionnés
+	selectedLootIndex int         // Item currently selected for usage
+	confirmClearAll  bool         // vrai si on a cliqué sur X sans sélection
 }
 
 // NewHUD crée un nouveau HUD
@@ -41,6 +42,7 @@ func NewHUD(world *domain.World) *HUD {
 		fullFeedbackTimer:    0,
 		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 331),
 		selectedLoots:        make(map[int]bool),
+		selectedLootIndex:    -1,
 		confirmClearAll:      false,
 	}
 
@@ -57,6 +59,22 @@ func (h *HUD) Update() {
 	if h.fullFeedbackTimer > 0 {
 		h.fullFeedbackTimer--
 	}
+}
+
+func (h *HUD) GetSelectedLootItem() *player.LootItem {
+	if h.selectedLootIndex < 0 || h.selectedLootIndex >= len(h.world.Player.Inventory.Items) {
+		return nil
+	}
+	return h.world.Player.Inventory.Items[h.selectedLootIndex]
+}
+
+func (h *HUD) IsPortablePortalSelected() bool {
+	item := h.GetSelectedLootItem()
+	return item != nil && item.SourceID == player.PortablePortalItemSourceID
+}
+
+func (h *HUD) ClearActiveLootSelection() {
+	h.selectedLootIndex = -1
 }
 
 // ToggleDetails bascule l'affichage de la fenêtre de détails
@@ -163,6 +181,7 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 		"M: Matcher",
 		"I: Zones",
 		"L: Liste Inv",
+		"P: Portail",
 		"B: Remplir Inv",
 		"ZQSD: Naviguer",
 		"ESPACE: Fin",
@@ -249,17 +268,18 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 		// Slot border
 		slotClr := color.RGBA{50, 50, 50, 255}
 
-		// Highlight if selected or if clear-all-confirmation is on (and item is deletable)
-		highlight := h.selectedLoots[i]
-		if h.confirmClearAll && i < len(items) && items[i].IsDeletable {
-			highlight = true
-		}
+			// Highlight if selected for deletion or if clear-all-confirmation is on (and item is deletable)
+			highlight := h.selectedLoots[i]
+			if h.confirmClearAll && i < len(items) && items[i].IsDeletable {
+				highlight = true
+			}
 
-		if highlight {
-			slotClr = color.RGBA{255, 255, 0, 255} // Yellow highlight
-		}
-
-		vector.StrokeRect(h.inventoryOffscreen, float32(sx), float32(sy), float32(ui.LootSlotSize), float32(ui.LootSlotSize), 1, slotClr, true)
+			if h.selectedLootIndex == i {
+				slotClr = color.RGBA{0, 180, 255, 255} // Blue highlight for active portable portal
+			} else if highlight {
+				slotClr = color.RGBA{255, 100, 100, 255} // Red highlight for deletion
+			}
+			vector.StrokeRect(h.inventoryOffscreen, float32(sx), float32(sy), float32(ui.LootSlotSize), float32(ui.LootSlotSize), 1, slotClr, true)
 
 		if i < len(items) {
 			item := items[i]
@@ -269,6 +289,8 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 				itemClr = color.RGBA{100, 200, 100, 255}
 			case entity.TypeCreature:
 				itemClr = color.RGBA{200, 100, 100, 255}
+			case entity.TypeArtefact:
+				itemClr = color.RGBA{170, 100, 255, 255}
 			}
 			vector.DrawFilledRect(h.inventoryOffscreen, float32(sx+4), float32(sy+4), float32(ui.LootSlotSize-8), float32(ui.LootSlotSize-8), itemClr, true)
 
@@ -305,16 +327,33 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 }
 
 func (h *HUD) renderGauges(screen *ebiten.Image) {
-	// Gauges Holder
-	vector.StrokeRect(screen, ui.GaugesX, ui.GaugesY, ui.GaugesW, ui.GaugesH, 1, color.RGBA{100, 100, 100, 255}, true)
+    // Gauges Holder
+    // Note : vector.StrokeRect prend des float32 et n'a pas de paramètre booléen à la fin.
+    vector.StrokeRect(
+        screen, 
+        float32(ui.GaugesX), 
+        float32(ui.GaugesY), 
+        float32(ui.GaugesW), 
+        float32(ui.GaugesH), 
+        1, 
+        color.RGBA{R: 100, G: 100, B: 100, A: 255}, 
+        false, // ATTENTION: Supprime ce paramètre ou change pour la bonne signature si tu utilises une fonction personnalisée
+    )
 
-	p := h.world.Player
-	// Health gauge
-	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{255, 50, 50, 255})
-	// Mana gauge
-	h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{50, 50, 255, 255})
-	// Sanity gauge
-	h.drawVerticalGauge(screen, ui.GaugesX+ui.SanityGaugeRelativeX, ui.GaugesY+ui.SanityGaugeRelativeY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{50, 255, 50, 255})
+    p := h.world.Player
+    // Si p ou p.Stats peut être nil, assure-toi de le vérifier en amont
+    if p == nil {
+        return
+    }
+
+    // Health gauge
+    h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255})
+    
+    // Mana gauge
+    h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255})
+    
+    // Sanity gauge
+    h.drawVerticalGauge(screen, ui.GaugesX+ui.SanityGaugeRelativeX, ui.GaugesY+ui.SanityGaugeRelativeY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255})
 }
 
 func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string, val, max int, clr color.Color) {
@@ -513,6 +552,18 @@ func (h *HUD) HandleClick(x, y int) bool {
 			if col >= 0 && col < ui.LootSlotsPerRow {
 				idx := row*ui.LootSlotsPerRow + col
 				if idx >= 0 && idx < len(h.world.Player.Inventory.Items) {
+					item := h.world.Player.Inventory.Items[idx]
+					if item.SourceID == player.PortablePortalItemSourceID {
+						if h.selectedLootIndex == idx {
+							h.selectedLootIndex = -1
+						} else {
+							h.selectedLootIndex = idx
+						}
+						h.selectedLoots = make(map[int]bool)
+						h.confirmClearAll = false
+						return true
+					}
+
 					// Toggle sélection
 					if h.selectedLoots[idx] {
 						delete(h.selectedLoots, idx)
@@ -570,6 +621,7 @@ func (h *HUD) HandleClick(x, y int) bool {
 	} else {
 		// Clic en dehors de l'inventaire désélectionne tout
 		h.selectedLoots = make(map[int]bool)
+		h.selectedLootIndex = -1
 		h.confirmClearAll = false
 	}
 
@@ -581,6 +633,7 @@ func (h *HUD) HandleRightClick(x, y int) bool {
 	if float64(x) >= ui.InventoryX && float64(x) <= ui.InventoryX+ui.InventoryW &&
 		float64(y) >= ui.InventoryY && float64(y) <= ui.InventoryY+ui.InventoryH {
 		h.selectedLoots = make(map[int]bool)
+		h.selectedLootIndex = -1
 		h.confirmClearAll = false
 		return true
 	}
