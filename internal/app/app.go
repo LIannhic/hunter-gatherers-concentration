@@ -19,6 +19,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
 	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/hud"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/input"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/renderer"
@@ -94,6 +95,14 @@ func NewApplication() (*Application, error) {
 	app.SaveMenu = renderer.NewSaveMenu()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
+
+	// 5.1 Gestionnaire réactif des boutons d'action
+	btnManager := actionbuttons.NewManager(
+		func() int { return len(app.Input.GetRevealedTiles()) },
+		func() *player.Player { return app.World.Player },
+	)
+	app.Renderer.ActionButtons = btnManager
+	app.Input.SetActionButtonsManager(btnManager)
 
 	// 6. Connecte les composants UI
 	app.Input.SetRenderer(app.Renderer)

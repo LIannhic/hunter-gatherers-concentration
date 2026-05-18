@@ -155,11 +155,12 @@ type Skills struct {
 
 // Player entité joueur
 type Player struct {
-	ID        string
-	Stats     Stats
-	Inventory Inventory
-	Skills    Skills
-	Position  struct{ X, Y int }
+	ID            string
+	Stats         Stats
+	Inventory     Inventory
+	Skills        Skills
+	StatusEffects *StatusEffects
+	Position      struct{ X, Y int }
 }
 
 func New(id string) *Player {
@@ -174,7 +175,8 @@ func New(id string) *Player {
 			MaxSanity: 100,
 			Level:     1,
 		},
-		Inventory: *NewInventory(30),
+		Inventory:     *NewInventory(30),
+		StatusEffects: NewStatusEffects(),
 		Skills: Skills{
 			UnlockedAssociations: []string{"identical"},
 			Resistances:          make(map[string]int),
