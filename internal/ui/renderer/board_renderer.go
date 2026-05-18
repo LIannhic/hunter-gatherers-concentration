@@ -23,14 +23,17 @@ type BoardRenderer struct {
 	tileSize    float64
 	gridOffsetX float64
 	gridOffsetY float64
-	gridSpacing int // Espace entre les grids
-	gridsPerRow int // Nombre de grids par ligne
+	gridSpacing float64 // Espace entre les grids
+	gridsPerRow int     // Nombre de grids par ligne
 
 	// Rotation visuelle globale du plateau (en degrés)
 	boardRotation float64
 
 	// Animations de flip en cours: clé = "gridID:x,y", valeur = état de l'animation
 	flipAnimations map[string]*FlipAnimation
+
+	// Config override for incursion mode
+	singleGridID string
 }
 
 // FlipAnimation représente l'état d'une animation de flip
@@ -41,7 +44,7 @@ type FlipAnimation struct {
 	Progress      float64 // 0.0 à 1.0
 	Speed         float64
 	EntityID      string           // L'entité à afficher à la fin
-	TileState     entity.TileState // État final de la tuile (changé board vers entity)
+	TileState     entity.TileState // État final de la tuile
 }
 
 // IsActive retourne true si l'animation est en cours
@@ -52,8 +55,6 @@ func (a *FlipAnimation) IsActive() bool {
 // GetCurrentRotation retourne les angles de rotation actuels (X, Y) en fonction du progrès
 func (a *FlipAnimation) GetCurrentRotation() (rotateX, rotateY float64) {
 	targetX, targetY := a.FlipDirection.ToRotationAngles()
-	// Interpole entre 0 et l'angle cible basé sur le progrès
-	// Utilise une courbe ease-out pour un effet plus naturel
 	eased := 1 - math.Pow(1-a.Progress, 3)
 	return targetX * eased, targetY * eased
 }
@@ -62,13 +63,29 @@ func (a *FlipAnimation) GetCurrentRotation() (rotateX, rotateY float64) {
 func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 	return &BoardRenderer{
 		assets:         am,
-		tileSize:       ui.TileSize,
-		gridOffsetX:    ui.PlaymatX + ui.BoardRelativeX,
-		gridOffsetY:    ui.PlaymatY + ui.BoardRelativeY,
-		gridSpacing:    0,
-		gridsPerRow:    1,
+		tileSize:       64,
+		gridOffsetX:    50,
+		gridOffsetY:    50,
+		gridSpacing:    30,
+		gridsPerRow:    2,
 		flipAnimations: make(map[string]*FlipAnimation),
 	}
+}
+
+// SetRenderConfig configure le renderer pour un affichage custom (mode incursion)
+func (r *BoardRenderer) SetRenderConfig(offsetX, offsetY, tileSize float64, singleGridID string) {
+	r.gridOffsetX = offsetX
+	r.gridOffsetY = offsetY
+	r.tileSize = tileSize
+	r.singleGridID = singleGridID
+}
+
+// ResetRenderConfig restaure la configuration par défaut
+func (r *BoardRenderer) ResetRenderConfig() {
+	r.gridOffsetX = 50
+	r.gridOffsetY = 50
+	r.tileSize = 64
+	r.singleGridID = ""
 }
 
 // SetGridOffset change la position du plateau à l'écran
@@ -117,121 +134,33 @@ func (r *BoardRenderer) UpdateAnimations() {
 	}
 }
 
-// GetTileSize retourne la taille des tuiles (en int pour compatibilité)
-func (r *BoardRenderer) GetTileSize() int {
-	return int(r.tileSize)
+// GetTileSize retourne la taille des tuiles
+func (r *BoardRenderer) GetTileSize() float64 {
+	return r.tileSize
 }
 
 // GetGridOffset retourne le décalage du plateau
-func (r *BoardRenderer) GetGridOffset() (int, int) {
-	return int(r.gridOffsetX), int(r.gridOffsetY)
+func (r *BoardRenderer) GetGridOffset() (float64, float64) {
+	return r.gridOffsetX, r.gridOffsetY
 }
 
-// Render dessine le plateau complet
-func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
-	// Dessine le Playmat
-	r.renderPlaymat(screen, world)
-
-	// Met à jour les animations
-	r.UpdateAnimations()
-
-	// Dessine seulement le grid actif sur le playmat
-	if world.CurrentGridID != "" {
-		r.renderGrid(screen, world.CurrentGridID, world)
+// getGridLayout calcule la position d'affichage d'un grid
+func (r *BoardRenderer) getGridLayout(gridID string, world *domain.World) (offsetX, offsetY float64, grid *board.Grid) {
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return 0, 0, nil
 	}
 }
 
-func (r *BoardRenderer) renderPlaymat(screen *ebiten.Image, world *domain.World) {
-	// Playmat background
-	vector.StrokeRect(screen, ui.PlaymatX, ui.PlaymatY, ui.PlaymatW, ui.PlaymatH, 1, color.RGBA{100, 100, 100, 255}, true)
-
-	// Action buttons
-	btnCoords := []struct{ x, y float64 }{
-		{ui.ActionBtn1X, ui.ActionBtn1Y},
-		{ui.ActionBtn2X, ui.ActionBtn2Y},
-		{ui.ActionBtn3X, ui.ActionBtn3Y},
-		{ui.ActionBtn4X, ui.ActionBtn4Y},
+	if r.singleGridID != "" && gridID == r.singleGridID {
+		return r.gridOffsetX, r.gridOffsetY, grid
 	}
 
-	for _, c := range btnCoords {
-		bx := ui.PlaymatX + c.x
-		by := ui.PlaymatY + c.y
-
-		// Button background
-		vector.StrokeRect(screen, float32(bx), float32(by), float32(ui.ActionButtonW), float32(ui.ActionButtonH), 1, color.RGBA{150, 150, 150, 255}, true)
-
-		// Button text space
-		text.Draw(screen, "ACTION", basicfont.Face7x13, int(bx+ui.ButtonTextRelativeX), int(by+ui.ButtonTextRelativeY+15), color.White)
-
-		// Button icon space
-		ix := bx + ui.ButtonIconRelativeX
-		iy := by + ui.ButtonIconRelativeY
-		vector.StrokeRect(screen, float32(ix), float32(iy), float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), 1, color.RGBA{200, 200, 200, 255}, true)
-	}
-
-	// Exits
-	r.renderExitTiles(screen, ui.ExitNorthX, ui.ExitNorthY, board.North, world)
-	r.renderExitTiles(screen, ui.ExitEastX, ui.ExitEastY, board.East, world)
-	r.renderExitTiles(screen, ui.ExitSouthX, ui.ExitSouthY, board.South, world)
-	r.renderExitTiles(screen, ui.ExitWestX, ui.ExitWestY, board.West, world)
-}
-
-func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, dir board.Direction, world *domain.World) {
-	ex := ui.PlaymatX + rx
-	ey := ui.PlaymatY + ry
-
-	isOpen := world.IsNavigationOpen(world.CurrentGridID)
-	hasExit := false
-	if world.DreamPlane != nil {
-		_, hasExit = world.DreamPlane.GetConnectedZone(world.CurrentGridID, dir)
-	}
-
-	grid, _ := world.GetGrid(world.CurrentGridID)
-
-	// Nombre de tuiles (2 par sortie selon l'issue)
-	numTiles := 2
-	isVertical := (dir == board.East || dir == board.West)
-
-	for i := 0; i < numTiles; i++ {
-		tx, ty := ex, ey
-		if isVertical {
-			ty += float64(i) * r.tileSize
-		} else {
-			tx += float64(i) * r.tileSize
-		}
-
-		var tileState entity.TileState = entity.Hidden | entity.Blocked
-		if grid != nil {
-			tileState = grid.ExitsState[dir][i]
-		}
-
-		// Mise à jour dynamique du flag Blocked selon isOpen et hasExit
-		if !hasExit || !isOpen {
-			tileState |= entity.Blocked
-		} else {
-			tileState &= ^entity.Blocked
-		}
-
-		var tileImg *ebiten.Image
-		if tileState&entity.Blocked != 0 {
-			if tileState&entity.Revealed != 0 {
-				tileImg = r.assets.GetImage("tile_blocked")
-			} else {
-				tileImg = r.assets.GetImage("tile_sealed")
-			}
-		} else if tileState&entity.Revealed != 0 {
-			tileImg = r.assets.GetImage("tile_revealed")
-		} else {
-			tileImg = r.assets.GetImage("tile_hidden")
-		}
-
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(tx, ty)
-		screen.DrawImage(tileImg, op)
-
-		// Si la sortie est révélée ou appairée, on dessine la flèche
-		if tileState&(entity.Revealed|entity.Matched) != 0 {
-			r.renderHalfArrow(screen, tx, ty, dir, i)
+	idx := -1
+	for i, id := range world.GridOrder {
+		if id == gridID {
+			idx = i
+			break
 		}
 	}
 }
@@ -260,88 +189,28 @@ func (r *BoardRenderer) renderHalfArrow(screen *ebiten.Image, x, y float64, dir 
 		}
 	}
 
-	// L'index 0 est la première tuile, l'index 1 est la seconde
-	switch dir {
-	case board.North:
-		// Flèche vers le haut
-		vector.StrokeLine(screen, centerX, centerY-size*0.2, centerX, centerY+size*0.2, thickness, color, true)
-		if index == 0 { // Gauche -> demi-tête gauche
-			vector.StrokeLine(screen, centerX, centerY-size*0.2, centerX-size*0.15, centerY, thickness, color, true)
-		} else { // Droite -> demi-tête droite
-			vector.StrokeLine(screen, centerX, centerY-size*0.2, centerX+size*0.15, centerY, thickness, color, true)
-		}
-	case board.South:
-		// Flèche vers le bas
-		vector.StrokeLine(screen, centerX, centerY-size*0.2, centerX, centerY+size*0.2, thickness, color, true)
-		if index == 0 { // Gauche
-			vector.StrokeLine(screen, centerX, centerY+size*0.2, centerX-size*0.15, centerY, thickness, color, true)
-		} else { // Droite
-			vector.StrokeLine(screen, centerX, centerY+size*0.2, centerX+size*0.15, centerY, thickness, color, true)
-		}
-	case board.East:
-		// Flèche vers la droite
-		vector.StrokeLine(screen, centerX-size*0.2, centerY, centerX+size*0.2, centerY, thickness, color, true)
-		if index == 0 { // Haut
-			vector.StrokeLine(screen, centerX+size*0.2, centerY, centerX, centerY-size*0.15, thickness, color, true)
-		} else { // Bas
-			vector.StrokeLine(screen, centerX+size*0.2, centerY, centerX, centerY+size*0.15, thickness, color, true)
-		}
-	case board.West:
-		// Flèche vers la gauche
-		vector.StrokeLine(screen, centerX-size*0.2, centerY, centerX+size*0.2, centerY, thickness, color, true)
-		if index == 0 { // Haut
-			vector.StrokeLine(screen, centerX-size*0.2, centerY, centerX, centerY-size*0.15, thickness, color, true)
-		} else { // Bas
-			vector.StrokeLine(screen, centerX-size*0.2, centerY, centerX, centerY+size*0.15, thickness, color, true)
-		}
-	}
-}
+	row := idx / r.gridsPerRow
+	col := idx % r.gridsPerRow
 
-// getGridSpacing calcule l'espacement et les marges pour remplir l'espace de 525x525
-func (r *BoardRenderer) getGridSpacing(gridWidth, gridHeight int) (spacingX, spacingY, padX, padY float64) {
-	// Pour les grilles <= 3x3, on ajoute des marges (padding) aux extrémités
-	if gridWidth <= 3 {
-		spacingX = (ui.BoardW - float64(gridWidth)*r.tileSize) / float64(gridWidth+1)
-		padX = spacingX
-	} else if gridWidth > 1 {
-		// Pour les grilles >= 4x4, on colle aux bords
-		spacingX = (ui.BoardW - float64(gridWidth)*r.tileSize) / float64(gridWidth-1)
-		padX = 0
-	}
+	gridWidth := float64(grid.Width) * r.tileSize
 
-	if gridHeight <= 3 {
-		spacingY = (ui.BoardH - float64(gridHeight)*r.tileSize) / float64(gridHeight+1)
-		padY = spacingY
-	} else if gridHeight > 1 {
-		spacingY = (ui.BoardH - float64(gridHeight)*r.tileSize) / float64(gridHeight-1)
-		padY = 0
-	}
+	offsetX = r.gridOffsetX + float64(col)*(gridWidth+r.gridSpacing)
+	offsetY = r.gridOffsetY + float64(row)*(float64(grid.Height)*r.tileSize+r.gridSpacing+30)
 
 	return spacingX, spacingY, padX, padY
 }
 
-// calculateTileScreenPos calcule la position X,Y à l'écran pour une coordonnée de grille
-func (r *BoardRenderer) calculateTileScreenPos(pos board.Position, grid *board.Grid, isPortalZone bool) (float64, float64) {
-	spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
-	if isPortalZone {
-		spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
+// Render dessine le plateau complet
+func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
+	r.UpdateAnimations()
+
+	if r.singleGridID != "" {
+		r.renderGrid(screen, r.singleGridID, world)
+		return
 	}
 
-	sx := r.gridOffsetX + padX + float64(pos.X)*(r.tileSize+spacingX)
-	sy := r.gridOffsetY + padY + float64(pos.Y)*(r.tileSize+spacingY)
-	return sx, sy
-}
-
-// isPortalPosition vérifie si une coordonnée de grille correspond à une tuile interactive en zone de portail
-func (r *BoardRenderer) isPortalPosition(pos board.Position) bool {
-	portalPositions := []board.Position{
-		{X: 1, Y: 1}, {X: 1, Y: 4}, {X: 4, Y: 1}, {X: 4, Y: 4}, // Structures
-		{X: 2, Y: 2}, {X: 2, Y: 3}, {X: 3, Y: 2}, {X: 3, Y: 3}, // Portail 2x2
-	}
-	for _, p := range portalPositions {
-		if p == pos {
-			return true
-		}
+	for _, gridID := range world.GridOrder {
+		r.renderGrid(screen, gridID, world)
 	}
 	return false
 }
@@ -353,15 +222,22 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 		return
 	}
 
-	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+	// Dessine le titre du grid
+	gridTitle := fmt.Sprintf("Grid: %s", gridID)
+	if gridID == world.CurrentGridID {
+		gridTitle += " [ACTIVE]"
+	}
+	titleColor := color.Color(color.White)
+	if gridID == world.CurrentGridID {
+		titleColor = color.RGBA{255, 255, 0, 255}
+	}
+	text.Draw(screen, gridTitle, basicfont.Face7x13, int(offsetX), int(offsetY)-5, titleColor)
 
-	// Rendu de la grille
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
 			pos := board.Position{X: x, Y: y}
-
-			sx, sy := r.calculateTileScreenPos(pos, grid, isPortalZone)
-
+			sx := offsetX + float64(x)*r.tileSize
+			sy := offsetY + float64(y)*r.tileSize
 			plot, ok := grid.Plots[pos]
 			if !ok {
 				r.renderEmptySquareAt(screen, sx, sy)
@@ -372,10 +248,12 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 	}
 }
 
-// renderEmptySquareAt dessine un carré vide
+// renderEmptySquareAt dessine un carré vide (sol nu)
 func (r *BoardRenderer) renderEmptySquareAt(screen *ebiten.Image, x, y float64) {
 	tileImg := r.assets.GetImage("square_empty")
 	op := &ebiten.DrawImageOptions{}
+	scale := r.tileSize / 64.0
+	op.GeoM.Scale(scale, scale)
 	op.GeoM.Translate(x, y)
 	screen.DrawImage(tileImg, op)
 }
@@ -464,27 +342,28 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 		}
 	}
 
+	scale := r.tileSize / 64.0
+	center := 32.0 // centre de l'image source 64x64
+
 	op := &ebiten.DrawImageOptions{}
-	centerX := r.tileSize / 2
-	centerY := r.tileSize / 2
 
 	if r.boardRotation != 0 {
-		op.GeoM.Translate(-centerX, -centerY)
+		op.GeoM.Translate(-center, -center)
 		op.GeoM.Rotate(r.boardRotation * math.Pi / 180)
-		op.GeoM.Translate(centerX, centerY)
+		op.GeoM.Translate(center, center)
 	}
 
 	if animation != nil && animation.IsActive() {
 		rotateX, rotateY := animation.GetCurrentRotation()
 		if rotateX != 0 {
-			op.GeoM.Translate(0, -centerY)
+			op.GeoM.Translate(0, -center)
 			op.GeoM.Scale(1, math.Abs(math.Cos(rotateX*math.Pi/180)))
-			op.GeoM.Translate(0, centerY)
+			op.GeoM.Translate(0, center)
 		}
 		if rotateY != 0 {
-			op.GeoM.Translate(-centerX, 0)
+			op.GeoM.Translate(-center, 0)
 			op.GeoM.Scale(math.Abs(math.Cos(rotateY*math.Pi/180)), 1)
-			op.GeoM.Translate(centerX, 0)
+			op.GeoM.Translate(center, 0)
 		}
 	} else if visualState&entity.Matched != 0 {
 		// "Raised" effect: matched tiles are 20% larger
@@ -494,10 +373,11 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 		op.GeoM.Translate(centerX, centerY)
 	}
 
+	op.GeoM.Scale(scale, scale)
 	op.GeoM.Translate(x, y)
 	screen.DrawImage(tileImg, op)
 
-	shouldShowContent := visualState&entity.Revealed != 0 || visualState&entity.Matched != 0
+	shouldShowContent := visualState == entity.Revealed || visualState == entity.Matched
 	if animation != nil && animation.IsActive() {
 		if animation.TileState&entity.Hidden != 0 {
 			shouldShowContent = animation.Progress < 0.5
@@ -516,17 +396,26 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 	}
 }
 
+// renderPlot dessine une case individuelle (utilise l'ancien offset - pour compatibilité)
+func (r *BoardRenderer) renderPlot(screen *ebiten.Image, pos board.Position, tile *board.Plot, world *domain.World) {
+	x := r.gridOffsetX + float64(pos.X)*r.tileSize
+	y := r.gridOffsetY + float64(pos.Y)*r.tileSize
+	r.renderTileAt(screen, x, y, "", tile, world)
+}
+
 // renderEntityAt dessine une entité à une position écran spécifique
 func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y float64, e entity.Entity) {
 	centerX := float32(x + r.tileSize/2)
+	scale := r.tileSize / 64.0
+	iconScale := 0.75 * scale
 
 	switch ent := e.(type) {
 	case *domain.Creature:
 		icon := r.assets.GetCreatureIcon(ent.Species)
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-r.tileSize/2, -r.tileSize/2)
-		op.GeoM.Scale(0.75, 0.75)
-		op.GeoM.Translate(x+r.tileSize/2, y+r.tileSize/2)
+		op.GeoM.Translate(-32, -32) // centre de l'image 64x64
+		op.GeoM.Scale(iconScale, iconScale)
+		op.GeoM.Translate(float64(x)+float64(r.tileSize)/2, float64(y)+float64(r.tileSize)/2)
 		screen.DrawImage(icon, op)
 
 		behaviorColor := color.RGBA{200, 200, 200, 255}
@@ -544,36 +433,56 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y float64, e ent
 		stageName := ent.Lifecycle.GetCurrentStageName()
 		icon := r.assets.GetResourceIcon(ent.ResourceType, stageName)
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-r.tileSize/2, -r.tileSize/2)
-		op.GeoM.Scale(0.75, 0.75)
-		op.GeoM.Translate(x+r.tileSize/2, y+r.tileSize/2)
+		op.GeoM.Translate(-32, -32)
+		op.GeoM.Scale(iconScale, iconScale)
+		op.GeoM.Translate(float64(x)+float64(r.tileSize)/2, float64(y)+float64(r.tileSize)/2)
 		screen.DrawImage(icon, op)
 
 		if len(stageName) > 0 {
 			label := string(stageName[0])
-			text.Draw(screen, label, basicfont.Face7x13, int(x+r.tileSize-12), int(y+r.tileSize-5), color.White)
+			text.Draw(screen, label, basicfont.Face7x13, int(x)+int(r.tileSize)-12, int(y)+int(r.tileSize)-5, color.White)
 		}
 	}
 }
 
+// renderEntity dessine une entité sur une tuile (ancienne méthode pour compatibilité)
+func (r *BoardRenderer) renderEntity(screen *ebiten.Image, x, y int, e entity.Entity) {
+	r.renderEntityAt(screen, float64(x), float64(y), e)
+}
+
 // ScreenToGrid convertit les coordonnées écran en coordonnées grille et gridID
 func (r *BoardRenderer) ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool) {
-	gridID := world.CurrentGridID
-	if gridID == "" {
+	if r.singleGridID != "" {
+		grid, ok := world.GetGrid(r.singleGridID)
+		if !ok {
+			return board.Position{}, "", false
+		}
+		x := float64(screenX) - r.gridOffsetX
+		y := float64(screenY) - r.gridOffsetY
+		if x < 0 || y < 0 {
+			return board.Position{}, "", false
+		}
+		gridX := int(x / r.tileSize)
+		gridY := int(y / r.tileSize)
+		if gridX < grid.Width && gridY < grid.Height {
+			return board.Position{X: gridX, Y: gridY}, r.singleGridID, true
+		}
 		return board.Position{}, "", false
 	}
 
-	grid, ok := world.GetGrid(gridID)
-	if !ok {
-		return board.Position{}, "", false
-	}
+	for _, gridID := range world.GridOrder {
+		offsetX, offsetY, grid := r.getGridLayout(gridID, world)
+		if grid == nil {
+			continue
+		}
+
+		x := float64(screenX) - offsetX
+		y := float64(screenY) - offsetY
 
 	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
 
-	// On cherche quelle tuile contient les coordonnées du curseur
-	for y := 0; y < grid.Height; y++ {
-		for x := 0; x < grid.Width; x++ {
-			pos := board.Position{X: x, Y: y}
+		gridX := int(x / r.tileSize)
+		gridY := int(y / r.tileSize)
 
 			// Si on est en zone de portail, on ignore les cases non-interactives
 			if isPortalZone && !r.isPortalPosition(pos) {
@@ -598,12 +507,11 @@ func (r *BoardRenderer) ScreenToLocalTile(screenX, screenY int, world *domain.Wo
 		return 0, 0, "", false
 	}
 
-	grid, _ := world.GetGrid(gID)
-	isPortalZone := world.DreamPlane != nil && (gID == world.DreamPlane.StartZoneID || gID == world.DreamPlane.EndZoneID)
-
-	tileScreenX, tileScreenY := r.calculateTileScreenPos(pos, grid, isPortalZone)
-	lx := float64(screenX) - tileScreenX
-	ly := float64(screenY) - tileScreenY
+	offsetX, offsetY, _ := r.getGridLayout(gID, world)
+	tileScreenX := offsetX + float64(pos.X)*r.tileSize
+	tileScreenY := offsetY + float64(pos.Y)*r.tileSize
+	lx := screenX - int(tileScreenX)
+	ly := screenY - int(tileScreenY)
 
 	return int(lx), int(ly), gID, true
 }
@@ -616,7 +524,8 @@ func (r *BoardRenderer) RenderSelectionHighlight(screen *ebiten.Image, pos board
 	}
 	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
 
-	x, y := r.calculateTileScreenPos(pos, grid, isPortalZone)
+	x := offsetX + float64(pos.X)*r.tileSize
+	y := offsetY + float64(pos.Y)*r.tileSize
 	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, highlightColor, true)
 }
 

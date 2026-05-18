@@ -114,7 +114,7 @@ func TestCalculateFlipDirection(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		result := CalculateFlipDirection(tileSize, tc.localX, tc.localY)
+		result := CalculateFlipDirection(float64(tileSize), tc.localX, tc.localY)
 		if result != tc.expected {
 			t.Errorf("At (%d, %d) expected %s, got %s", tc.localX, tc.localY, tc.expected.String(), result.String())
 		}
