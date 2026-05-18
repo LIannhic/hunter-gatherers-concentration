@@ -18,37 +18,61 @@ type Stats struct {
 	Level      int
 }
 
+// PortablePortal constants
+const (
+	PortablePortalItemSourceID   = "portable_portal"
+	PortablePortalItemName       = "portail portable"
+	PortablePortalLootTaxPercent = 25
+)
+
 // LootItem représente un objet récolté
 type LootItem struct {
-	ID            string
-	Name          string
-	Type          entity.Type
-	SourceID      string
-	IsDeletable   bool // Si faux, l'objet ne peut pas être supprimé par le joueur
+	ID          string
+	Name        string
+	Type        entity.Type
+	SourceID    string
+	IsDeletable bool // Si faux, l'objet ne peut pas être supprimé par le joueur
+}
+
+func NewPortablePortalItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        PortablePortalItemName,
+		Type:        entity.TypeArtefact,
+		SourceID:    PortablePortalItemSourceID,
+		IsDeletable: false,
+	}
 }
 
 // Inventory inventaire du joueur
 type Inventory struct {
-	Items      []*LootItem // Liste ordonnée des objets (slots)
-	MaxSize    int
-	ScrollOffset float64 // Changé en float64 pour défilement fluide
+	Items          []*LootItem    // Liste ordonnée des objets (slots)
+	ResourceCounts map[string]int // Quantités de ressources stockées
+	MaxSize        int
+	ScrollOffset   float64 // Changé en float64 pour défilement fluide
 }
 
 func NewInventory(maxSize int) *Inventory {
 	return &Inventory{
-		Items:   make([]*LootItem, 0, maxSize),
-		MaxSize: maxSize,
-		ScrollOffset: 0,
+		Items:          make([]*LootItem, 0, maxSize),
+		ResourceCounts: make(map[string]int),
+		MaxSize:        maxSize,
+		ScrollOffset:   0,
 	}
 }
 
 // AddItem ajoute un objet à l'inventaire dans le premier slot disponible
 func (inv *Inventory) AddItem(item *LootItem) error {
-	if len(inv.Items) >= inv.MaxSize {
+	if inv.GetTotalItemCount()+itemCountForLoot(item) >= inv.MaxSize {
 		return errors.New("inventaire plein")
 	}
 	inv.Items = append(inv.Items, item)
 	return nil
+}
+
+func itemCountForLoot(_ *LootItem) int {
+	// Les artefacts comptent comme un slot unique
+	return 1
 }
 
 // RemoveItem retire un objet par son index
@@ -60,12 +84,65 @@ func (inv *Inventory) RemoveItem(index int) error {
 	return nil
 }
 
+func (inv *Inventory) AddResource(resourceType string, amount int) error {
+	if amount <= 0 {
+		return errors.New("quantité invalide")
+	}
+
+	if inv.GetTotalItemCount()+amount > inv.MaxSize {
+		return errors.New("inventaire plein")
+	}
+
+	inv.ResourceCounts[resourceType] += amount
+	return nil
+}
+
+func (inv *Inventory) RemoveResource(resourceType string, amount int) error {
+	if amount <= 0 {
+		return errors.New("quantité invalide")
+	}
+
+	current := inv.GetResourceCount(resourceType)
+	if amount > current {
+		return errors.New("quantité insuffisante")
+	}
+
+	newCount := current - amount
+	if newCount == 0 {
+		delete(inv.ResourceCounts, resourceType)
+	} else {
+		inv.ResourceCounts[resourceType] = newCount
+	}
+
+	return nil
+}
+
+func (inv *Inventory) GetResourceCount(resourceType string) int {
+	return inv.ResourceCounts[resourceType]
+}
+
+func (inv *Inventory) HasResource(resourceType string) bool {
+	return inv.GetResourceCount(resourceType) > 0
+}
+
 func (inv *Inventory) GetTotalItems() int {
 	return len(inv.Items)
 }
 
+func (inv *Inventory) GetTotalResourceCount() int {
+	total := 0
+	for _, count := range inv.ResourceCounts {
+		total += count
+	}
+	return total
+}
+
+func (inv *Inventory) GetTotalItemCount() int {
+	return inv.GetTotalItems() + inv.GetTotalResourceCount()
+}
+
 func (inv *Inventory) IsFull() bool {
-	return len(inv.Items) >= inv.MaxSize
+	return inv.GetTotalItemCount() >= inv.MaxSize
 }
 
 // Skills capacités débloquées

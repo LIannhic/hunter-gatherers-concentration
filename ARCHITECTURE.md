@@ -120,6 +120,7 @@ if revealCmd.CanExecute() {
 - `RevealTileCommand` : Révèle une entité (passe son état de Hidden à Revealed)
 - `MatchTilesCommand` : Appaire deux entités (passe leur état à Matched)
 - `SwitchGridCommand` : Change de grille active
+- `UsePortablePortalCommand` : Active un portail portable pour créer une zone de dégagement et extraire le joueur du plan
 
 ### 3. Infrastructure
 
@@ -130,6 +131,48 @@ if revealCmd.CanExecute() {
   - TODO: Remplacer par des assets finaux avant release
   
 - **Loader**: Configuration depuis JSON (avec fallback par défaut)
+
+### Système de Portail Portable
+
+Le portail portable permet au joueur d'extraire rapidement du plan actif. Ce système gère :
+
+#### Recherche de Zone de Dégagement (3x3)
+
+```go
+// Cherche une zone 3x3 libre n'importe où sur la grille
+pos, ok := world.FindAvailable3x3DeploymentArea(gridID)
+
+// Trouve la meilleure zone 3x3 (minimise les obstructions)
+pos, ok := world.findBest3x3DeploymentArea(gridID)
+```
+
+#### Déploiement du Portail
+
+```go
+// Déploie à la meilleure position trouvée automatiquement
+portal, err := world.DeployPortablePortal(gridID)
+
+// Déploie à une position spécifique (centre de la zone 3x3)
+portal, err := world.DeployPortablePortalAt(gridID, center)
+```
+
+#### Activation via Commande
+
+```go
+cmd := &usecase.UsePortablePortalCommand{
+    World:  world,
+    GridID: "forest",
+    Center: board.Position{X: 3, Y: 3}, // Position du centre, ou négatif pour auto
+}
+if cmd.CanExecute() {
+    err := cmd.Execute()
+}
+```
+
+Le système valide que :
+- Une zone 3x3 est disponible (aucune tuile obstruée ou occupée)
+- Le joueur possède un portail portable en inventaire
+- La grille cible existe
 
 ### 4. UI
 

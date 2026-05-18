@@ -170,13 +170,13 @@ func (r *BoardRenderer) renderPlaymat(screen *ebiten.Image, world *domain.World)
 	}
 
 	// Exits
-	r.renderExitTiles(screen, ui.ExitNorthX, ui.ExitNorthY, ui.ExitNorthW, ui.ExitNorthH, board.North, world)
-	r.renderExitTiles(screen, ui.ExitEastX, ui.ExitEastY, ui.ExitEastW, ui.ExitEastH, board.East, world)
-	r.renderExitTiles(screen, ui.ExitSouthX, ui.ExitSouthY, ui.ExitSouthW, ui.ExitSouthH, board.South, world)
-	r.renderExitTiles(screen, ui.ExitWestX, ui.ExitWestY, ui.ExitWestW, ui.ExitWestH, board.West, world)
+	r.renderExitTiles(screen, ui.ExitNorthX, ui.ExitNorthY, board.North, world)
+	r.renderExitTiles(screen, ui.ExitEastX, ui.ExitEastY, board.East, world)
+	r.renderExitTiles(screen, ui.ExitSouthX, ui.ExitSouthY, board.South, world)
+	r.renderExitTiles(screen, ui.ExitWestX, ui.ExitWestY, board.West, world)
 }
 
-func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry, rw, rh float64, dir board.Direction, world *domain.World) {
+func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, dir board.Direction, world *domain.World) {
 	ex := ui.PlaymatX + rx
 	ey := ui.PlaymatY + ry
 
@@ -297,7 +297,6 @@ func (r *BoardRenderer) renderHalfArrow(screen *ebiten.Image, x, y float64, dir 
 	}
 }
 
-
 // getGridSpacing calcule l'espacement et les marges pour remplir l'espace de 525x525
 func (r *BoardRenderer) getGridSpacing(gridWidth, gridHeight int) (spacingX, spacingY, padX, padY float64) {
 	// Pour les grilles <= 3x3, on ajoute des marges (padding) aux extrémités
@@ -337,7 +336,7 @@ func (r *BoardRenderer) calculateTileScreenPos(pos board.Position, grid *board.G
 func (r *BoardRenderer) isPortalPosition(pos board.Position) bool {
 	portalPositions := []board.Position{
 		{X: 1, Y: 1}, {X: 1, Y: 4}, {X: 4, Y: 1}, {X: 4, Y: 4}, // Structures
-		{X: 2, Y: 2}, // Portail
+		{X: 2, Y: 2}, {X: 2, Y: 3}, {X: 3, Y: 2}, {X: 3, Y: 3}, // Portail 2x2
 	}
 	for _, p := range portalPositions {
 		if p == pos {
@@ -435,7 +434,7 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 			if ent.GetType() == entity.TypeTrap {
 				tileImg = r.assets.GetImage("tile_trap")
 			} else if ent.GetType() == entity.TypeStructure {
-				if ent.HasTag("commencement_portal") || ent.HasTag("finish_portal") {
+				if ent.HasTag("commencement_portal") || ent.HasTag("finish_portal") || ent.HasTag("portable_portal") {
 					tileImg = r.assets.GetImage("tile_portal")
 				} else if ent.HasTag("dolmen") {
 					tileImg = r.assets.GetImage("tile_dolmen")
@@ -517,13 +516,6 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 	}
 }
 
-// renderPlot dessine une case individuelle (ancien offset pour compatibilité)
-func (r *BoardRenderer) renderPlot(screen *ebiten.Image, pos board.Position, tile *board.Plot, world *domain.World) {
-	x := r.gridOffsetX + float64(pos.X)*r.tileSize
-	y := r.gridOffsetY + float64(pos.Y)*r.tileSize
-	r.renderTileAt(screen, x, y, "", tile, world)
-}
-
 // renderEntityAt dessine une entité à une position écran spécifique
 func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y float64, e entity.Entity) {
 	centerX := float32(x + r.tileSize/2)
@@ -562,11 +554,6 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y float64, e ent
 			text.Draw(screen, label, basicfont.Face7x13, int(x+r.tileSize-12), int(y+r.tileSize-5), color.White)
 		}
 	}
-}
-
-// renderEntity dessine une entité sur une tuile (ancienne méthode pour compatibilité)
-func (r *BoardRenderer) renderEntity(screen *ebiten.Image, x, y int, e entity.Entity) {
-	r.renderEntityAt(screen, float64(x), float64(y), e)
 }
 
 // ScreenToGrid convertit les coordonnées écran en coordonnées grille et gridID
@@ -631,4 +618,27 @@ func (r *BoardRenderer) RenderSelectionHighlight(screen *ebiten.Image, pos board
 
 	x, y := r.calculateTileScreenPos(pos, grid, isPortalZone)
 	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, highlightColor, true)
+}
+
+func (r *BoardRenderer) RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World) {
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+
+	if center.X < 1 || center.Y < 1 || center.X > grid.Width-2 || center.Y > grid.Height-2 {
+		return
+	}
+
+	spacingX, spacingY, _, _ := r.getGridSpacing(grid.Width, grid.Height)
+	if isPortalZone {
+		spacingX, spacingY, _, _ = r.getGridSpacing(6, 6)
+	}
+
+	topLeft := board.Position{X: center.X - 1, Y: center.Y - 1}
+	x, y := r.calculateTileScreenPos(topLeft, grid, isPortalZone)
+	width := 3*r.tileSize + 2*spacingX
+	height := 3*r.tileSize + 2*spacingY
+	vector.StrokeRect(screen, float32(x), float32(y), float32(width), float32(height), 4, color.RGBA{0, 200, 100, 120}, true)
 }

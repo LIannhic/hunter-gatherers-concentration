@@ -329,6 +329,36 @@ func (c *ClearBoardCommand) Execute() error {
 	return nil
 }
 
+type UsePortablePortalCommand struct {
+	World  *domain.World
+	GridID string
+	Center board.Position
+}
+
+func (c *UsePortablePortalCommand) CanExecute() bool {
+	if c.World == nil {
+		return false
+	}
+	if _, ok := c.World.GetGrid(c.GridID); !ok {
+		return false
+	}
+	return c.World.HasPortablePortal()
+}
+
+func (c *UsePortablePortalCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("cannot deploy portable portal")
+	}
+
+	if c.Center.X < 0 || c.Center.Y < 0 {
+		_, err := c.World.DeployPortablePortal(c.GridID)
+		return err
+	}
+
+	_, err := c.World.DeployPortablePortalAt(c.GridID, c.Center)
+	return err
+}
+
 type ClearAllBoardsCommand struct {
 	World *domain.World
 }

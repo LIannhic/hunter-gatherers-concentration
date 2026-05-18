@@ -20,6 +20,7 @@ type Renderer interface {
 	ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool)
 	ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool)
 	RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, color color.Color, world *domain.World)
+	RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World)
 }
 
 type Handler struct {
@@ -30,23 +31,26 @@ type Handler struct {
 	selectedTile   *board.Position
 	selectedGridID string
 
+	portablePortalMode bool
+
 	OnTurnEnd             func()
 	OnSpawnEntities       func(gridID string)
 	OnSpawnAllCreatures   func(gridID string) // Shift+S: Spawn toutes les créatures
 	OnSpawnRandomCreature func(gridID string) // F9: Spawn créature aléatoire
 	OnClearBoard          func(gridID string)
 	OnSwitchGrid          func(gridID string)
-	OnRotateBoard         func(delta float64) // Callback pour la rotation du plateau
-	OnResetRotation       func()              // Callback pour réinitialiser la rotation
-	OnExitToMenu          func()              // Callback pour retourner au menu
-	OnToggleDetails       func()              // Callback pour afficher les détails
-	OnToggleInvDetails    func()              // Callback pour afficher l'inventaire détaillé
-	OnFillInventory       func()              // Callback pour remplir l'inventaire (debug)
-	OnRevealAll           func(gridID string) // F5: Cheat - révéler tout
-	OnHideAll             func(gridID string) // F6: Cheat - cacher tout
-	OnUnlockNavigation    func(gridID string) // F7: Cheat - désceller sorties
-	OnForceTurn           func()              // F3: Forcer le prochain tour
-	OnToggleAutoMove      func()              // F10: Toggle mouvement auto
+	OnRotateBoard         func(delta float64)                        // Callback pour la rotation du plateau
+	OnResetRotation       func()                                     // Callback pour réinitialiser la rotation
+	OnExitToMenu          func()                                     // Callback pour retourner au menu
+	OnToggleDetails       func()                                     // Callback pour afficher les détails
+	OnToggleInvDetails    func()                                     // Callback pour afficher l'inventaire détaillé
+	OnFillInventory       func()                                     // Callback pour remplir l'inventaire (debug)
+	OnRevealAll           func(gridID string)                        // F5: Cheat - révéler tout
+	OnHideAll             func(gridID string)                        // F6: Cheat - cacher tout
+	OnUnlockNavigation    func(gridID string)                        // F7: Cheat - désceller sorties
+	OnUsePortablePortal   func(gridID string, center board.Position) // P / grid placement: Déployer le portail portable
+	OnForceTurn           func()                                     // F3: Forcer le prochain tour
+	OnToggleAutoMove      func()                                     // F10: Toggle mouvement auto
 
 	// Gestion du tour de jeu memory
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
@@ -208,6 +212,16 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
+	if h.portablePortalMode && h.OnUsePortablePortal != nil {
+		grid, _ := h.world.GetGrid(gridID)
+		if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
+			h.OnUsePortablePortal(gridID, pos)
+			return nil
+		}
+		fmt.Println("[ACTION] Zone de déploiement invalide pour le portail portable")
+		return nil
+	}
+
 	grid, _ := h.world.GetGrid(gridID)
 	plot, err := grid.Get(pos)
 	if err != nil || len(plot.EntitiesID) == 0 {
@@ -235,7 +249,7 @@ func (h *Handler) handleMouse() error {
 		}
 
 		// Calcule la direction de flip basée sur la position du clic dans la tuile
-		flipDir := h.calculateFlipDirection(gridID, pos)
+		flipDir := h.calculateFlipDirection(gridID)
 
 		cmd := &usecase.RevealTileCommand{
 			World:         h.world,
@@ -413,6 +427,16 @@ func (h *Handler) handleKeyboard() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyB) {
 		if h.OnFillInventory != nil {
 			h.OnFillInventory()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		if h.OnUsePortablePortal != nil {
+			center := board.Position{X: -1, Y: -1}
+			if hovered, _, ok := h.getHoveredTile(); ok {
+				center = hovered
+			}
+			h.OnUsePortablePortal(h.GetCurrentGridID(), center)
 		}
 	}
 
@@ -698,7 +722,7 @@ func (h *Handler) checkExitClick(px, py float64) (board.Direction, int, bool) {
 }
 
 // calculateFlipDirection détermine la direction de flip basée sur la position du clic dans la tuile
-func (h *Handler) calculateFlipDirection(gridID string, pos board.Position) domain.FlipDirection {
+func (h *Handler) calculateFlipDirection(gridID string) domain.FlipDirection {
 	if h.renderer == nil {
 		return usecase.DefaultFlipDirection
 	}
@@ -749,6 +773,15 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 		h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
 	}
 
+	if h.portablePortalMode {
+		if hovered, gridID, ok := h.getHoveredTile(); ok {
+			grid, ok := h.world.GetGrid(gridID)
+			if ok && h.isValidPortalPreviewPosition(grid, hovered) {
+				h.renderer.RenderPortalPlacementPreview(screen, hovered, gridID, h.world)
+			}
+		}
+	}
+
 	if h.selectedTile != nil {
 		h.renderer.RenderSelectionHighlight(
 			screen,
@@ -758,6 +791,10 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 			h.world,
 		)
 	}
+}
+
+func (h *Handler) isValidPortalPreviewPosition(grid *board.Grid, center board.Position) bool {
+	return center.X >= 1 && center.Y >= 1 && center.X <= grid.Width-2 && center.Y <= grid.Height-2
 }
 
 func (h *Handler) GetCurrentGridID() string {
@@ -770,6 +807,14 @@ func (h *Handler) GetCurrentGridID() string {
 func (h *Handler) ClearSelection() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
+}
+
+func (h *Handler) SetPortablePortalMode(active bool) {
+	h.portablePortalMode = active
+}
+
+func (h *Handler) IsPortablePortalMode() bool {
+	return h.portablePortalMode
 }
 
 // ResetGameState réinitialise l'état du jeu (pour retour au menu)

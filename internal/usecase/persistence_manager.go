@@ -2,8 +2,9 @@ package usecase
 
 import (
 	"fmt"
-	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/persistence"
+
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 )
 
@@ -57,7 +58,7 @@ func (m *PersistenceManager) LoadLatestGame() (*persistence.SaveData, error) {
 	return m.LoadGame(slotID)
 }
 
-// SaveCurrentGame enregistre l'état actuel et met à jour le temps de jeu
+// SaveCurrentGame met à jour les métadonnées de session sans persister l'état de l'expédition en cours.
 func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, difficulty string, sessionDuration float64) error {
 	if m.currentSlot == 0 {
 		return fmt.Errorf("aucun slot actif")
@@ -68,9 +69,7 @@ func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, di
 		return err
 	}
 
-	// Mise à jour des données
-	save.Hub = hub
-	save.Player = p
+	// On ne conserve pas l'état du monde ni du joueur : chaque expédition est nouvelle.
 	save.Meta.Difficulty = difficulty
 	save.Meta.TotalPlaytime += sessionDuration
 
