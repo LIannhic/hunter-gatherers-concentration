@@ -38,9 +38,10 @@ type Application struct {
 
 	// UI
 	Renderer    *renderer.BoardRenderer
-	TitleScreen *renderer.TitleScreen
-	Input       *input.Handler
-	HUD         *hud.HUD
+	TitleScreen     *renderer.TitleScreen
+	IncursionScreen *renderer.IncursionScreen
+	Input           *input.Handler
+	HUD             *hud.HUD
 
 	// Game State
 	State domain.GameState
@@ -74,6 +75,7 @@ func NewApplication() (*Application, error) {
 	// 5. UI
 	app.Renderer = renderer.NewBoardRenderer(app.Assets)
 	app.TitleScreen = renderer.NewTitleScreen()
+	app.IncursionScreen = renderer.NewIncursionScreen()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
 
@@ -489,6 +491,10 @@ func (app *Application) updatePlaying() error {
 		app.State = domain.StateGameOver
 	}
 
+	// Configure le renderer pour le mode incursion (avant input)
+	app.Renderer.SetRenderConfig(377.5, 97.5, 87.5, app.World.CurrentGridID)
+	defer app.Renderer.ResetRenderConfig()
+
 	// Gère les entrées
 	return app.Input.Update()
 }
@@ -585,18 +591,15 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 	// Fond noir
 	screen.Fill(color.Black)
 
-	// Calcule la position de la barre latérale
-	width, _ := app.Layout(0, 0)
-	hudX := width - 280 // Largeur fixe pour la barre latérale
+	// Configure le renderer pour le mode incursion
+	app.Renderer.SetRenderConfig(377.5, 97.5, 87.5, app.World.CurrentGridID)
+	defer app.Renderer.ResetRenderConfig()
 
-	// Dessine le plateau
-	app.Renderer.Render(screen, app.World)
+	// Dessine l'UI d'incursion (plateau inclus via BoardRenderer)
+	app.IncursionScreen.Render(screen, app.World, app.Renderer)
 
 	// Dessine les surbrillances de sélection
 	app.Input.Draw(screen)
-
-	// Dessine le HUD dans la barre latérale
-	app.HUD.Render(screen, hudX)
 
 	// Message si aucune entité
 	if app.World.Entities.Count() == 0 {
@@ -647,34 +650,5 @@ func (app *Application) Layout(outsideWidth, outsideHeight int) (int, int) {
 		return app.TitleScreen.Layout()
 	}
 
-	// Calcule la taille nécessaire pour afficher tous les grids
-	numGrids := len(app.World.Grids)
-	if numGrids == 0 {
-		return 1100, 600
-	}
-
-	// Prend le premier grid comme référence de taille
-	var gridWidth, gridHeight int
-	if len(app.World.GridOrder) > 0 {
-		if firstGrid, ok := app.World.GetGrid(app.World.GridOrder[0]); ok {
-			gridWidth = firstGrid.Width * 64
-			gridHeight = firstGrid.Height * 64
-		}
-	}
-
-	gridsPerRow := 2
-	numRows := (numGrids + gridsPerRow - 1) / gridsPerRow
-
-	// Largeur suffisante pour la grille (avec espacement) + la barre latérale du HUD (300px)
-	width := gridWidth*gridsPerRow + 50*(gridsPerRow+1) + 300
-	height := gridHeight*numRows + 100*(numRows+1)
-
-	if width < 1100 {
-		width = 1100
-	}
-	if height < 600 {
-		height = 600
-	}
-
-	return width, height
+	return 1280, 720
 }

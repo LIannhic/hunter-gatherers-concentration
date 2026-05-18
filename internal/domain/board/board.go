@@ -185,12 +185,12 @@ func (f FlipDirection) ToRotationAngles() (rotateX, rotateY float64) {
 // CalculateFlipDirection détermine la direction de flip basée sur la position
 // du clic dans une tuile. tileSize est la taille de la tuile, localX et localY
 // sont les coordonnées du clic relatives à la tuile (0,0 = coin supérieur gauche)
-func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
+func CalculateFlipDirection(tileSize float64, localX, localY int) FlipDirection {
 	// Définit les zones (en pourcentage de la taille de la tuile)
 	// Centre : 40% au milieu
 	// Bords : 30% de chaque côté
-	centerStart := tileSize * 35 / 100
-	centerEnd := tileSize * 65 / 100
+	centerStart := int(tileSize * 0.35)
+	centerEnd := int(tileSize * 0.65)
 
 	// Détermine la zone verticale
 	var vertical int // 0 = top, 1 = center, 2 = bottom
