@@ -300,7 +300,7 @@ func (w *World) findBest3x3DeploymentArea(gridID string) (board.Position, bool) 
 				for dx := 0; dx < 3; dx++ {
 					plot, err := grid.Get(board.Position{X: x + dx, Y: y + dy})
 					if err != nil {
-						score = 1<<31 - 1
+						hasStructure = true
 						break
 					}
 					if plot.Modifier.Obstructed {
@@ -314,13 +314,19 @@ func (w *World) findBest3x3DeploymentArea(gridID string) (board.Position, bool) 
 							}
 						}
 					}
-					if !hasStructure && len(plot.EntitiesID) > 0 {
+					if hasStructure {
+						break
+					}
+					if len(plot.EntitiesID) > 0 {
 						score += 1
 					}
 				}
+				if hasStructure {
+					break
+				}
 			}
 			if hasStructure {
-				score = 1<<31 - 1
+				continue
 			}
 			if score < bestScore {
 				bestScore = score
