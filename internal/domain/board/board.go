@@ -3,6 +3,8 @@ package board
 import (
 	"errors"
 	"fmt"
+
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
 // Bearing représente l'orientation de la Grille (Cardinaux)
@@ -297,6 +299,11 @@ type Grid struct {
 	GlobalStage    SuccessionStage
 	MainBearing    Bearing
 	Plots          map[Position]*Plot
+
+	// V0.2: Navigation
+	InitialMatchableCount int
+	ExitsState            map[Direction][2]entity.TileState
+	NavigationForcedOpen  bool
 }
 
 func NewGrid(id string, width, height int, biome BiomeType) *Grid {
@@ -308,6 +315,11 @@ func NewGrid(id string, width, height int, biome BiomeType) *Grid {
 		CurrentSeason: SeasonAwakening,
 		GlobalStage:   StagePreliminary,
 		Plots:         make(map[Position]*Plot),
+		ExitsState:    make(map[Direction][2]entity.TileState),
+	}
+
+	for d := Direction(0); d <= West; d++ {
+		g.ExitsState[d] = [2]entity.TileState{entity.Hidden | entity.Blocked, entity.Hidden | entity.Blocked}
 	}
 
 	for y := 0; y < height; y++ {

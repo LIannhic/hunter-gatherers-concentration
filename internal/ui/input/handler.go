@@ -8,6 +8,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/usecase"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -43,6 +44,7 @@ type Handler struct {
 	OnFillInventory       func()              // Callback pour remplir l'inventaire (debug)
 	OnRevealAll           func(gridID string) // F5: Cheat - révéler tout
 	OnHideAll             func(gridID string) // F6: Cheat - cacher tout
+	OnUnlockNavigation    func(gridID string) // F7: Cheat - désceller sorties
 	OnForceTurn           func()              // F3: Forcer le prochain tour
 	OnToggleAutoMove      func()              // F10: Toggle mouvement auto
 
@@ -50,6 +52,9 @@ type Handler struct {
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
 	isProcessing  bool             // Évite les clics pendant l'animation
 	matchTimer    int              // Compteur de frames pour le délai de matching
+
+	isTransitioning bool // Bloque les entrées pendant le changement de zone
+	transitionTimer int  // Frames restantes pour le blocage
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
@@ -64,6 +69,14 @@ func (h *Handler) SetRenderer(r Renderer) {
 }
 
 func (h *Handler) Update() error {
+	if h.isTransitioning {
+		h.transitionTimer--
+		if h.transitionTimer <= 0 {
+			h.isTransitioning = false
+		}
+		return nil
+	}
+
 	if err := h.handleMouse(); err != nil {
 		return err
 	}
@@ -123,6 +136,73 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
+	// Gestion des clics sur les sorties (navigation zone par zone)
+	if dir, index, ok := h.getClickedExit(); ok {
+		// Vérifie si la sortie existe
+		if _, hasExit := h.world.DreamPlane.GetConnectedZone(h.world.CurrentGridID, dir); !hasExit {
+			return nil
+		}
+
+		// Vérifie si la navigation est ouverte
+		if !h.world.IsNavigationOpen(h.world.CurrentGridID) {
+			fmt.Println("[NAVIGATION] Sortie scellée. Trouvez plus de paires !")
+			return nil
+		}
+
+		grid, _ := h.world.GetGrid(h.world.CurrentGridID)
+
+		// État actuel des tuiles de cette sortie
+		states := grid.ExitsState[dir]
+		currentState := states[index]
+
+		// 1. Si la sortie est déjà appairée, on change de zone
+		if currentState&entity.Matched != 0 {
+			cmd := &usecase.SwitchZoneCommand{World: h.world, Direction: dir}
+			if err := cmd.Execute(); err == nil {
+				fmt.Printf("[NAVIGATION] Passage vers le %v -> %s\n", dir, h.world.CurrentGridID)
+				h.ClearSelection()
+				h.isTransitioning = true
+				h.transitionTimer = 30
+			}
+			return nil
+		}
+
+		// 2. Sinon, on révèle la tuile si elle est cachée
+		if currentState&entity.Hidden != 0 {
+			// Révélation de la première moitié
+			states[index] = (currentState & ^entity.Hidden) | entity.Revealed
+			fmt.Printf("[NAVIGATION] Tuile de sortie %v #%d révélée\n", dir, index)
+			grid.ExitsState[dir] = states
+
+			// 3. Vérification de l'association via le DOMAINE
+			otherIndex := 1 - index
+			if states[otherIndex]&entity.Revealed != 0 {
+				dirName := "north"
+				switch dir {
+				case board.South:
+					dirName = "south"
+				case board.East:
+					dirName = "east"
+				case board.West:
+					dirName = "west"
+				}
+
+				// On crée des wrappers Matchable pour le moteur d'association
+				m1 := &exitMatchable{id: fmt.Sprintf("exit_%s_%d", dirName, index)}
+				m2 := &exitMatchable{id: fmt.Sprintf("exit_%s_%d", dirName, otherIndex)}
+
+				result, err := h.assocEngine.TryAssociate(m1, m2)
+				if err == nil && result.Success {
+					states[0] |= entity.Matched
+					states[1] |= entity.Matched
+					grid.ExitsState[dir] = states
+					fmt.Printf("[NAVIGATION] %s (Moteur Domaine)\n", result.Message)
+				}
+			}
+		}
+		return nil
+	}
+
 	pos, gridID, ok := h.getHoveredTile()
 	if !ok {
 		return nil
@@ -140,11 +220,17 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
-	switch ent.GetState() {
-	case entity.Hidden:
+	state := ent.GetState()
+	if state&entity.Hidden != 0 {
 		// Vérifie si on a déjà révélé 2 tuiles ce tour
 		if len(h.revealedTiles) >= 2 {
 			fmt.Println("[INPUT] Déjà 2 tuiles révélées ce tour. Veuillez attendre la fin du traitement.")
+			return nil
+		}
+
+		// Ne permet pas de révéler une tuile bloquée
+		if state&entity.Blocked != 0 {
+			fmt.Println("[INPUT] Cette tuile est scellée ou bloquée.")
 			return nil
 		}
 
@@ -177,7 +263,7 @@ func (h *Handler) handleMouse() error {
 			fmt.Println("[MATCH] Délai de 800ms avant résolution...")
 		}
 
-	case entity.Revealed:
+	} else if state&entity.Revealed != 0 {
 		if ent.GetType() == entity.TypeTrap {
 			fmt.Printf("[ACTION] Suppression du piège en %v\n", pos)
 			h.world.RemoveEntity(ent.GetID())
@@ -391,6 +477,13 @@ func (h *Handler) handleKeyboard() {
 		}
 	}
 
+	// F7: Cheat - désceller les sorties
+	if inpututil.IsKeyJustPressed(ebiten.KeyF7) {
+		if h.OnUnlockNavigation != nil {
+			h.OnUnlockNavigation(h.GetCurrentGridID())
+		}
+	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeyC) {
 		fmt.Println("[KEY] C : Nettoyage du plateau")
 		if h.OnClearBoard != nil {
@@ -471,6 +564,8 @@ func (h *Handler) handleNavigationKeys() {
 		if err := cmd.Execute(); err == nil {
 			fmt.Printf("[NAVIGATION] Passage à la zone: %s\n", h.world.CurrentGridID)
 			h.ClearSelection()
+			h.isTransitioning = true
+			h.transitionTimer = 30
 		}
 	}
 }
@@ -561,6 +656,47 @@ func (h *Handler) getHoveredTile() (board.Position, string, bool) {
 	return h.renderer.ScreenToGrid(x, y, h.world)
 }
 
+func (h *Handler) getClickedExit() (board.Direction, int, bool) {
+	x, y := ebiten.CursorPosition()
+	// Coordonnées relatives au Playmat
+	px := float64(x) - ui.PlaymatX
+	py := float64(y) - ui.PlaymatY
+
+	return h.checkExitClick(px, py)
+}
+
+func (h *Handler) checkExitClick(px, py float64) (board.Direction, int, bool) {
+	if px >= ui.ExitNorthX && px < ui.ExitNorthX+ui.ExitNorthW && py >= ui.ExitNorthY && py < ui.ExitNorthY+ui.ExitNorthH {
+		index := 0
+		if px >= ui.ExitNorthX+ui.TileSize {
+			index = 1
+		}
+		return board.North, index, true
+	}
+	if px >= ui.ExitEastX && px < ui.ExitEastX+ui.ExitEastW && py >= ui.ExitEastY && py < ui.ExitEastY+ui.ExitEastH {
+		index := 0
+		if py >= ui.ExitEastY+ui.TileSize {
+			index = 1
+		}
+		return board.East, index, true
+	}
+	if px >= ui.ExitSouthX && px < ui.ExitSouthX+ui.ExitSouthW && py >= ui.ExitSouthY && py < ui.ExitSouthY+ui.ExitSouthH {
+		index := 0
+		if px >= ui.ExitSouthX+ui.TileSize {
+			index = 1
+		}
+		return board.South, index, true
+	}
+	if px >= ui.ExitWestX && px < ui.ExitWestX+ui.ExitWestW && py >= ui.ExitWestY && py < ui.ExitWestY+ui.ExitWestH {
+		index := 0
+		if py >= ui.ExitWestY+ui.TileSize {
+			index = 1
+		}
+		return board.West, index, true
+	}
+	return 0, 0, false
+}
+
 // calculateFlipDirection détermine la direction de flip basée sur la position du clic dans la tuile
 func (h *Handler) calculateFlipDirection(gridID string, pos board.Position) domain.FlipDirection {
 	if h.renderer == nil {
@@ -601,12 +737,12 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 		}
 
 		var highlightColor color.Color
-		switch ent.GetState() {
-		case entity.Hidden:
+		state := ent.GetState()
+		if state&entity.Hidden != 0 {
 			highlightColor = color.RGBA{255, 255, 0, 100}
-		case entity.Revealed:
+		} else if state&entity.Revealed != 0 {
 			highlightColor = color.RGBA{0, 255, 255, 100}
-		default:
+		} else {
 			highlightColor = color.RGBA{255, 255, 255, 50}
 		}
 
@@ -644,3 +780,14 @@ func (h *Handler) ResetGameState() {
 	h.isProcessing = false
 	h.matchTimer = 0
 }
+
+// exitMatchable est un wrapper pour soumettre les sorties au moteur d'association
+type exitMatchable struct {
+	id string
+}
+
+func (m *exitMatchable) GetMatchID() string      { return m.id }
+func (m *exitMatchable) GetLogicKey() string     { return "" }
+func (m *exitMatchable) GetElement() string      { return "" }
+func (m *exitMatchable) GetNarrativeTag() string { return "" }
+func (m *exitMatchable) GetMatchTypes() []string { return []string{"orientation"} }

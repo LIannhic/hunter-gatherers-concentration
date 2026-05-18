@@ -105,11 +105,14 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 	switch rtype {
 	case "dreamberry":
 		r.SetLifecycle(component.Lifecycle{
-			CurrentStage: 0,
-			MaxStages:    4,
-			StageNames:   []string{"bourgeon", "fleur", "fruit", "gâté"},
-			TurnsToNext:  3,
-			CanPropagate: true,
+			CurrentStage:     0,
+			MaxStages:        4,
+			StageNames:       []string{"bourgeon", "fleur", "fruit", "gâté"},
+			TurnsToNext:      3,
+			CanPropagate:     true,
+			PropagationCount: 2,
+			MaxPropagations:  2,
+			PropagationLevel: 0,
 		})
 		r.SetValue(component.Value{
 			BaseValue:    100,
@@ -124,11 +127,14 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 
 	case "moonstone":
 		r.SetLifecycle(component.Lifecycle{
-			CurrentStage: 1,
-			MaxStages:    3,
-			StageNames:   []string{"brute", "taillée", "polie"},
-			TurnsToNext:  -1, // Ne change pas seul
-			CanPropagate: false,
+			CurrentStage:     1,
+			MaxStages:        3,
+			StageNames:       []string{"brute", "taillée", "polie"},
+			TurnsToNext:      -1, // Ne change pas seul
+			CanPropagate:     false,
+			PropagationCount: 0,
+			MaxPropagations:  0,
+			PropagationLevel: 0,
 		})
 		r.SetValue(component.Value{
 			BaseValue:    200,
@@ -143,11 +149,14 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 
 	case "whispering_herb":
 		r.SetLifecycle(component.Lifecycle{
-			CurrentStage: 0,
-			MaxStages:    3,
-			StageNames:   []string{"graine", "pousse", "mature"},
-			TurnsToNext:  2,
-			CanPropagate: false,
+			CurrentStage:     0,
+			MaxStages:        3,
+			StageNames:       []string{"graine", "pousse", "mature"},
+			TurnsToNext:      2,
+			CanPropagate:     false,
+			PropagationCount: 0,
+			MaxPropagations:  0,
+			PropagationLevel: 0,
 		})
 		r.SetValue(component.Value{
 			BaseValue:    50,
@@ -163,11 +172,14 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 
 	case "crystal_shard":
 		r.SetLifecycle(component.Lifecycle{
-			CurrentStage: 0,
-			MaxStages:    2,
-			StageNames:   []string{"brut", "purifié"},
-			TurnsToNext:  -1,
-			CanPropagate: false,
+			CurrentStage:     0,
+			MaxStages:        2,
+			StageNames:       []string{"brut", "purifié"},
+			TurnsToNext:      -1,
+			CanPropagate:     false,
+			PropagationCount: 0,
+			MaxPropagations:  0,
+			PropagationLevel: 0,
 		})
 		r.SetValue(component.Value{
 			BaseValue:    150,

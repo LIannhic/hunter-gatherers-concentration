@@ -204,6 +204,31 @@ func generateTileTrap(size int, theme TileTheme) *ebiten.Image {
 	return generateTileHidden(size, lighterTheme)
 }
 
+// generateTileSealed crée une tuile scellée (Hidden + Cadenas)
+func generateTileSealed(size int, theme TileTheme) *ebiten.Image {
+	img := generateTileHidden(size, theme)
+
+	centerX := float32(size) / 2
+	centerY := float32(size) / 2
+	padlockColor := color.RGBA{220, 200, 100, 255} // Doré pour le cadenas
+
+	// Corps du cadenas
+	bodyW := float32(size) * 0.3
+	bodyH := float32(size) * 0.25
+	vector.DrawFilledRect(img, centerX-bodyW/2, centerY-2, bodyW, bodyH, padlockColor, true)
+
+	// Anse du cadenas
+	shackleRadius := float32(size) * 0.12
+	vector.StrokeCircle(img, centerX, centerY-2, shackleRadius, 4, padlockColor, true)
+	// On efface le bas du cercle
+	vector.DrawFilledRect(img, centerX-shackleRadius-2, centerY-2, (shackleRadius+2)*2, 6, theme.HiddenBg, true)
+
+	// Trou de serrure
+	vector.DrawFilledCircle(img, centerX, centerY+bodyH/2-2, 3, color.RGBA{40, 40, 40, 255}, true)
+
+	return img
+}
+
 // lighten augmente la luminosité d'une couleur
 func lighten(c color.Color, amount int) color.Color {
 	r, g, b, a := c.RGBA()
