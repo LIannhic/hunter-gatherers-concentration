@@ -43,10 +43,10 @@ type Application struct {
 
 	// UI
 	Renderer    *renderer.BoardRenderer
-	TitleScreen     *renderer.TitleScreen
-	IncursionScreen *renderer.IncursionScreen
-	Input           *input.Handler
-	HUD             *hud.HUD
+	TitleScreen *renderer.TitleScreen
+	SaveMenu    *renderer.SaveMenu
+	Input       *input.Handler
+	HUD         *hud.HUD
 
 	// Game State
 	State domain.GameState
@@ -91,7 +91,6 @@ func NewApplication() (*Application, error) {
 	// 5. UI
 	app.Renderer = renderer.NewBoardRenderer(app.Assets)
 	app.TitleScreen = renderer.NewTitleScreen()
-	app.IncursionScreen = renderer.NewIncursionScreen()
 	app.SaveMenu = renderer.NewSaveMenu()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
@@ -608,9 +607,6 @@ func (app *Application) updatePlaying() error {
 		app.State = domain.StateGameOver
 	}
 
-	// Configure le renderer pour le mode incursion (avant input)
-	app.Renderer.SetRenderConfig(377.5, 97.5, 87.5, app.World.CurrentGridID)
-	defer app.Renderer.ResetRenderConfig()
 	// Gère les entrées HUD (ex: fermer fenêtre détails)
 	mx, my := ebiten.CursorPosition()
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
@@ -787,15 +783,14 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 	// Fond noir
 	screen.Fill(color.Black)
 
-	// Configure le renderer pour le mode incursion
-	app.Renderer.SetRenderConfig(377.5, 97.5, 87.5, app.World.CurrentGridID)
-	defer app.Renderer.ResetRenderConfig()
-
-	// Dessine l'UI d'incursion (plateau inclus via BoardRenderer)
-	app.IncursionScreen.Render(screen, app.World, app.Renderer)
+	// Dessine le plateau
+	app.Renderer.Render(screen, app.World)
 
 	// Dessine les surbrillances de sélection
 	app.Input.Draw(screen)
+
+	// Dessine le HUD
+	app.HUD.Render(screen)
 
 	// Message si aucune entité
 	if app.World.Entities.Count() == 0 {
@@ -846,5 +841,10 @@ func (app *Application) Layout(outsideWidth, outsideHeight int) (int, int) {
 		return app.TitleScreen.Layout()
 	}
 
-	return 1280, 720
+	// En jeu, utilise la taille fixe définie dans l'issue
+	if app.State == domain.StatePlaying {
+		return ui.ScreenWidth, ui.ScreenHeight
+	}
+
+	return 1100, 600
 }

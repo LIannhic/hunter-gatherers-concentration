@@ -15,8 +15,8 @@ import (
 )
 
 type Renderer interface {
-	GetTileSize() float64
-	GetGridOffset() (float64, float64)
+	GetTileSize() int
+	GetGridOffset() (int, int)
 	ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool)
 	ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool)
 	RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, color color.Color, world *domain.World)
