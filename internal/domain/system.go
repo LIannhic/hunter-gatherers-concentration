@@ -256,8 +256,19 @@ func (w *World) FindAvailable3x3DeploymentArea(gridID string) (board.Position, b
 						okArea = false
 						break
 					}
-					if plot.Modifier.Obstructed || len(plot.EntitiesID) > 0 {
+					if plot.Modifier.Obstructed {
 						okArea = false
+						break
+					}
+					for _, entityID := range plot.EntitiesID {
+						if e, ok := w.Entities.Get(entity.ID(entityID)); ok {
+							if e.GetType() == entity.TypeStructure {
+								okArea = false
+								break
+							}
+						}
+					}
+					if !okArea {
 						break
 					}
 				}
@@ -284,6 +295,7 @@ func (w *World) findBest3x3DeploymentArea(gridID string) (board.Position, bool) 
 	for y := 0; y <= grid.Height-3; y++ {
 		for x := 0; x <= grid.Width-3; x++ {
 			score := 0
+			hasStructure := false
 			for dy := 0; dy < 3; dy++ {
 				for dx := 0; dx < 3; dx++ {
 					plot, err := grid.Get(board.Position{X: x + dx, Y: y + dy})
@@ -294,10 +306,21 @@ func (w *World) findBest3x3DeploymentArea(gridID string) (board.Position, bool) 
 					if plot.Modifier.Obstructed {
 						score += 10
 					}
-					if len(plot.EntitiesID) > 0 {
+					for _, entityID := range plot.EntitiesID {
+						if e, ok := w.Entities.Get(entity.ID(entityID)); ok {
+							if e.GetType() == entity.TypeStructure {
+								hasStructure = true
+								break
+							}
+						}
+					}
+					if !hasStructure && len(plot.EntitiesID) > 0 {
 						score += 1
 					}
 				}
+			}
+			if hasStructure {
+				score = 1<<31 - 1
 			}
 			if score < bestScore {
 				bestScore = score
@@ -322,8 +345,15 @@ func (w *World) is3x3DeploymentAreaClear(grid *board.Grid, center board.Position
 			if err != nil {
 				return false
 			}
-			if plot.Modifier.Obstructed || len(plot.EntitiesID) > 0 {
+			if plot.Modifier.Obstructed {
 				return false
+			}
+			for _, entityID := range plot.EntitiesID {
+				if e, ok := w.Entities.Get(entity.ID(entityID)); ok {
+					if e.GetType() == entity.TypeStructure {
+						return false
+					}
+				}
 			}
 		}
 	}
