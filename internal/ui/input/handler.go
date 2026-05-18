@@ -9,6 +9,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/usecase"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -52,10 +53,12 @@ type Handler struct {
 	OnForceTurn           func()                                     // F3: Forcer le prochain tour
 	OnToggleAutoMove      func()                                     // F10: Toggle mouvement auto
 
+	// Gestionnaire réactif des boutons d'action
+	actionButtons *actionbuttons.Manager
+
 	// Gestion du tour de jeu memory
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
-	isProcessing  bool             // Évite les clics pendant l'animation
-	matchTimer    int              // Compteur de frames pour le délai de matching
+	isProcessing  bool             // Évite les clics pendant l'animation / verrouille la grille quand 2 tuiles sont retournées
 
 	isTransitioning bool // Bloque les entrées pendant le changement de zone
 	transitionTimer int  // Frames restantes pour le blocage
@@ -72,6 +75,10 @@ func (h *Handler) SetRenderer(r Renderer) {
 	h.renderer = r
 }
 
+func (h *Handler) SetActionButtonsManager(m *actionbuttons.Manager) {
+	h.actionButtons = m
+}
+
 func (h *Handler) Update() error {
 	if h.isTransitioning {
 		h.transitionTimer--
@@ -85,18 +92,7 @@ func (h *Handler) Update() error {
 		return err
 	}
 	h.handleKeyboard()
-	h.updateMatchTimer()
 	return nil
-}
-
-// updateMatchTimer gère le délai avant le matching automatique
-func (h *Handler) updateMatchTimer() {
-	if h.matchTimer > 0 {
-		h.matchTimer--
-		if h.matchTimer == 0 {
-			h.processMatchAttempt()
-		}
-	}
 }
 
 func (h *Handler) Draw(screen *ebiten.Image) {
@@ -133,6 +129,16 @@ func (h *Handler) handleMouse() error {
 
 	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		return nil
+	}
+
+	// Priorité : gestion des clics sur les boutons d'action (même si isProcessing)
+	if h.actionButtons != nil {
+		states := h.actionButtons.ComputeStates()
+		x, y := ebiten.CursorPosition()
+		if btnID, ok := h.actionButtons.HitTest(x, y, states); ok {
+			h.handleActionButtonClick(btnID)
+			return nil
+		}
 	}
 
 	if h.isProcessing {
@@ -270,11 +276,10 @@ func (h *Handler) handleMouse() error {
 		// On sélectionne la tuile pour le match
 		h.selectedTile = &pos
 
-		// Si on a révélé 2 tuiles, démarre le timer pour le match automatique
+		// Si on a révélé 2 tuiles, verrouille la grille et active les boutons Match/Skip
 		if len(h.revealedTiles) == 2 {
 			h.isProcessing = true
-			h.matchTimer = 48 // 48 frames = 800ms à 60fps
-			fmt.Println("[MATCH] Délai de 800ms avant résolution...")
+			fmt.Println("[MATCH] 2 tuiles révélées. Grille verrouillée. Choisissez Match ou Skip.")
 		}
 
 	} else if state&entity.Revealed != 0 {
@@ -301,6 +306,73 @@ func (h *Handler) handleMouse() error {
 		}
 	}
 	return nil
+}
+
+// handleActionButtonClick traite les clics sur les boutons d'action du Playmat.
+func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
+	switch btnID {
+	case actionbuttons.BtnMatch:
+		fmt.Println("[ACTION] Bouton Match activé")
+		h.processMatchAttempt()
+	case actionbuttons.BtnSkip:
+		fmt.Println("[ACTION] Bouton Skip activé")
+		h.processSkip()
+	case actionbuttons.BtnEndTurn:
+		fmt.Println("[ACTION] Bouton End Turn activé")
+		// Si des tuiles sont révélées mais non matchées, on les recache d'abord
+		if len(h.revealedTiles) > 0 {
+			h.hideRevealedTiles()
+		}
+		if h.OnTurnEnd != nil {
+			h.OnTurnEnd()
+		}
+	case actionbuttons.BtnMenu:
+		fmt.Println("[ACTION] Bouton Menu activé")
+		if h.OnExitToMenu != nil {
+			h.OnExitToMenu()
+		}
+	}
+}
+
+// processSkip recache les tuiles révélées et termine le tour.
+func (h *Handler) processSkip() {
+	if len(h.revealedTiles) == 0 {
+		h.isProcessing = false
+		return
+	}
+
+	h.hideRevealedTiles()
+	h.isProcessing = false
+	h.ClearSelection()
+
+	if h.OnTurnEnd != nil {
+		h.OnTurnEnd()
+	}
+}
+
+// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles.
+func (h *Handler) hideRevealedTiles() {
+	gridID := h.selectedGridID
+	if gridID == "" {
+		gridID = h.world.CurrentGridID
+	}
+	grid, ok := h.world.GetGrid(gridID)
+	if !ok {
+		h.revealedTiles = nil
+		return
+	}
+
+	for _, pos := range h.revealedTiles {
+		plot, err := grid.Get(pos)
+		if err != nil || len(plot.EntitiesID) == 0 {
+			continue
+		}
+		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+		if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
+			ent.SetState(entity.Hidden)
+		}
+	}
+	h.revealedTiles = nil
 }
 
 // processMatchAttempt tente d'associer les 2 tuiles révélées
@@ -441,11 +513,19 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
-		h.tryMatchSelected()
+		if len(h.revealedTiles) == 2 {
+			fmt.Println("[ACTION] Raccourci clavier : Match")
+			h.processMatchAttempt()
+		} else {
+			h.tryMatchSelected()
+		}
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		if h.OnTurnEnd != nil {
+		if len(h.revealedTiles) == 2 {
+			fmt.Println("[ACTION] Raccourci clavier : Skip")
+			h.processSkip()
+		} else if h.OnTurnEnd != nil {
 			fmt.Println("[TOUR] Passage au tour suivant")
 			h.OnTurnEnd()
 		}
@@ -804,6 +884,12 @@ func (h *Handler) GetCurrentGridID() string {
 	return h.world.CurrentGridID
 }
 
+// GetRevealedTiles retourne les tuiles révélées pendant le tour courant.
+// Utilisé par le gestionnaire de boutons d'action pour le calcul réactif.
+func (h *Handler) GetRevealedTiles() []board.Position {
+	return h.revealedTiles
+}
+
 func (h *Handler) ClearSelection() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
@@ -823,7 +909,6 @@ func (h *Handler) ResetGameState() {
 	h.selectedGridID = ""
 	h.revealedTiles = nil
 	h.isProcessing = false
-	h.matchTimer = 0
 }
 
 // exitMatchable est un wrapper pour soumettre les sorties au moteur d'association

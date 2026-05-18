@@ -11,6 +11,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -31,6 +32,9 @@ type BoardRenderer struct {
 
 	// Animations de flip en cours: clé = "gridID:x,y", valeur = état de l'animation
 	flipAnimations map[string]*FlipAnimation
+
+	// Gestionnaire réactif des boutons d'action
+	ActionButtons *actionbuttons.Manager
 }
 
 // FlipAnimation représente l'état d'une animation de flip
@@ -145,35 +149,73 @@ func (r *BoardRenderer) renderPlaymat(screen *ebiten.Image, world *domain.World)
 	// Playmat background
 	vector.StrokeRect(screen, ui.PlaymatX, ui.PlaymatY, ui.PlaymatW, ui.PlaymatH, 1, color.RGBA{100, 100, 100, 255}, true)
 
-	// Action buttons
-	btnCoords := []struct{ x, y float64 }{
-		{ui.ActionBtn1X, ui.ActionBtn1Y},
-		{ui.ActionBtn2X, ui.ActionBtn2Y},
-		{ui.ActionBtn3X, ui.ActionBtn3Y},
-		{ui.ActionBtn4X, ui.ActionBtn4Y},
-	}
-
-	for _, c := range btnCoords {
-		bx := ui.PlaymatX + c.x
-		by := ui.PlaymatY + c.y
-
-		// Button background
-		vector.StrokeRect(screen, float32(bx), float32(by), float32(ui.ActionButtonW), float32(ui.ActionButtonH), 1, color.RGBA{150, 150, 150, 255}, true)
-
-		// Button text space
-		text.Draw(screen, "ACTION", basicfont.Face7x13, int(bx+ui.ButtonTextRelativeX), int(by+ui.ButtonTextRelativeY+15), color.White)
-
-		// Button icon space
-		ix := bx + ui.ButtonIconRelativeX
-		iy := by + ui.ButtonIconRelativeY
-		vector.StrokeRect(screen, float32(ix), float32(iy), float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), 1, color.RGBA{200, 200, 200, 255}, true)
-	}
+	// Action buttons (réactif)
+	r.renderActionButtons(screen)
 
 	// Exits
 	r.renderExitTiles(screen, ui.ExitNorthX, ui.ExitNorthY, board.North, world)
 	r.renderExitTiles(screen, ui.ExitEastX, ui.ExitEastY, board.East, world)
 	r.renderExitTiles(screen, ui.ExitSouthX, ui.ExitSouthY, board.South, world)
 	r.renderExitTiles(screen, ui.ExitWestX, ui.ExitWestY, board.West, world)
+}
+
+// renderActionButtons dessine les 4 boutons d'action selon leur état réactif courant.
+func (r *BoardRenderer) renderActionButtons(screen *ebiten.Image) {
+	if r.ActionButtons == nil {
+		return
+	}
+
+	states := r.ActionButtons.ComputeStates()
+	for i := 0; i < 4; i++ {
+		s := states[i]
+		r.renderSingleButton(screen, s)
+	}
+}
+
+func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons.ButtonState) {
+	// Couleur de fond selon l'état actif / inactif / brouillé
+	var bgColor color.Color
+	if s.Scrambled {
+		bgColor = color.RGBA{120, 80, 80, 255} // Teinte altérée par trouble cognitif
+	} else if s.Active {
+		bgColor = color.RGBA{60, 60, 80, 255} // Fond plus visible si actif
+	} else {
+		bgColor = color.RGBA{40, 40, 40, 255} // Fond terne si inactif
+	}
+
+	vector.DrawFilledRect(screen, float32(s.X), float32(s.Y), float32(s.Width), float32(s.Height), bgColor, true)
+
+	// Bordure
+	var borderColor color.Color
+	if s.Active && !s.Scrambled {
+		borderColor = color.RGBA{200, 200, 255, 255}
+	} else if s.Active && s.Scrambled {
+		borderColor = color.RGBA{255, 100, 100, 255}
+	} else {
+		borderColor = color.RGBA{80, 80, 80, 255}
+	}
+	vector.StrokeRect(screen, float32(s.X), float32(s.Y), float32(s.Width), float32(s.Height), 1, borderColor, true)
+
+	// Label
+	var labelColor color.Color = color.White
+	if !s.Active {
+		labelColor = color.RGBA{120, 120, 120, 255}
+	} else if s.Scrambled {
+		labelColor = color.RGBA{255, 200, 200, 255}
+	}
+
+	text.Draw(screen, s.Label, basicfont.Face7x13, int(s.X+ui.ButtonTextRelativeX), int(s.Y+ui.ButtonTextRelativeY+15), labelColor)
+
+	// Petit indicateur visuel (coin droit)
+	if s.Active {
+		ix := s.X + ui.ButtonIconRelativeX
+		iy := s.Y + ui.ButtonIconRelativeY
+		indicatorColor := color.RGBA{100, 255, 100, 200}
+		if s.Scrambled {
+			indicatorColor = color.RGBA{255, 100, 100, 200}
+		}
+		vector.DrawFilledRect(screen, float32(ix), float32(iy), float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), indicatorColor, true)
+	}
 }
 
 func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, dir board.Direction, world *domain.World) {
