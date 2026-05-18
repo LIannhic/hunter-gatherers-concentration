@@ -260,10 +260,11 @@ go test ./internal/domain/... -v
 | Action | Touche |
 |--------|--------|
 | Révéler tuile | Click souris |
-| Matcher | M |
+| Matcher (valider paire) | M |
+| Skip (quand 2 tuiles retournées) | Espace |
 | Naviguer zones | ZQSD / Flèches |
 | Statistiques zones | I |
-| Fin de tour | Espace |
+| Fin de tour | Espace (hors match en cours) |
 | Menu / Abandon | Échap |
 | Changer de grille | 1-9 |
 | Difficulté | F1 à F4 |
