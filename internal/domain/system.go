@@ -95,6 +95,50 @@ func (w *World) CreateGrid(id string, width, height int, biome board.BiomeType) 
 	return grid
 }
 
+func (w *World) GetCompletionRatio(gridID string) float64 {
+	grid, ok := w.GetGrid(gridID)
+	if !ok || grid.InitialMatchableCount == 0 {
+		return 1.0 // Toujours ouvert si pas de contenu matchable
+	}
+
+	// Compte les entités matchables restantes
+	currentMatchable := 0
+	for _, e := range w.Entities.GetAllActive() {
+		// On compte ressources, créatures et pièges comme éléments à appairer
+		if e.GetGridID() == gridID && (e.GetType() == entity.TypeResource ||
+			e.GetType() == entity.TypeCreature ||
+			e.GetType() == entity.TypeTrap) {
+			currentMatchable++
+		}
+	}
+
+	matched := grid.InitialMatchableCount - currentMatchable
+	if matched < 0 {
+		matched = 0
+	}
+	return float64(matched) / float64(grid.InitialMatchableCount)
+}
+
+func (w *World) IsNavigationOpen(gridID string) bool {
+	grid, ok := w.GetGrid(gridID)
+	if !ok {
+		return false
+	}
+
+	// Cheat flag
+	if grid.NavigationForcedOpen {
+		return true
+	}
+
+	// V0.2: Les zones de portail (Départ/Arrivée) sont toujours ouvertes à la navigation
+	if w.DreamPlane != nil && (gridID == w.DreamPlane.StartZoneID || gridID == w.DreamPlane.EndZoneID) {
+		return true
+	}
+
+	ratio := w.GetCompletionRatio(gridID)
+	return ratio >= w.Difficulty.NavThreshold
+}
+
 // GetGrid retourne un grid par son ID
 func (w *World) GetGrid(id string) (*board.Grid, bool) {
 	grid, ok := w.Grids[id]
@@ -252,6 +296,9 @@ func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) 
 	r := w.ResourceFactory.Create(rtype, entity.Position{X: pos.X, Y: pos.Y})
 	r.SetGridID(gridID)
 
+	grid, _ := w.GetGrid(gridID)
+	grid.InitialMatchableCount++
+
 	idStr := string(r.GetID())
 	w.Entities.Register(r)
 	w.Components.Add(idStr, &r.Lifecycle)
@@ -260,6 +307,39 @@ func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) 
 	w.Components.Add(idStr, &r.Visual)
 
 	plot.PushEntity(idStr)
+
+	w.EventBus.Publish(event.NewEntityCreatedEvent(idStr, "resource"))
+	return r, nil
+}
+
+// SpawnResourceLevel crée une resource à un niveau précis de la pile
+func (w *World) SpawnResourceLevel(gridID string, rtype string, pos entity.Position) (*resource.Resource, error) {
+	_, plot, err := w.getPlotForSpawn(gridID, pos)
+	if err != nil {
+		return nil, err
+	}
+
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
+
+	// Uniquement une ressource par parcelle
+	if w.HasResourceAt(gridID, boardPos) {
+		return nil, fmt.Errorf("position %v contient déjà une ressource", pos)
+	}
+
+	r := w.ResourceFactory.Create(rtype, entity.Position{X: pos.X, Y: pos.Y})
+	r.SetGridID(gridID)
+
+	grid, _ := w.GetGrid(gridID)
+	grid.InitialMatchableCount++
+
+	idStr := string(r.GetID())
+	w.Entities.Register(r)
+	w.Components.Add(idStr, &r.Lifecycle)
+	w.Components.Add(idStr, &r.Value)
+	w.Components.Add(idStr, &r.Matchable)
+	w.Components.Add(idStr, &r.Visual)
+
+	plot.PushEntityToBottom(idStr)
 
 	w.EventBus.Publish(event.NewEntityCreatedEvent(idStr, "resource"))
 	return r, nil
@@ -282,6 +362,9 @@ func (w *World) SpawnCreature(gridID string, species string, pos entity.Position
 	}
 
 	c.SetGridID(gridID)
+	grid, _ := w.GetGrid(gridID)
+	grid.InitialMatchableCount++
+
 	idStr := string(c.GetID())
 
 	w.Entities.Register(c)
@@ -325,6 +408,7 @@ func (w *World) SpawnTrap(gridID string, pos entity.Position) (entity.Entity, er
 	}
 
 	w.Entities.Register(trapPtr)
+	grid.InitialMatchableCount++
 	plot.PushEntity(string(trapPtr.GetID()))
 
 	w.EventBus.Publish(event.NewEntityCreatedEvent(string(trapPtr.GetID()), "trap"))
@@ -402,7 +486,8 @@ func (w *World) RevealTile(gridID string, pos board.Position) (entity.Entity, er
 	}
 
 	// 5. Mise à jour de l'état
-	if ent.GetState() == entity.Hidden {
+	state := ent.GetState()
+	if state&entity.Hidden != 0 {
 		ent.SetState(entity.Revealed)
 	}
 
@@ -502,70 +587,120 @@ type PropagationSystem struct{}
 func (s *PropagationSystem) Priority() int { return 2 }
 
 func (s *PropagationSystem) Update(world *World) {
-	resources := world.Entities.GetByType(entity.TypeResource)
+    resources := world.Entities.GetByType(entity.TypeResource)
 
-	for _, e := range resources {
-		entityID := string(e.GetID())
+    for _, e := range resources {
+       entityID := string(e.GetID())
 
-		comp, ok := world.Components.Get(entityID, "lifecycle")
-		if !ok {
-			continue
-		}
+       comp, ok := world.Components.Get(entityID, "lifecycle")
+       if !ok {
+          continue
+       }
 
-		lifecycle := comp.(*component.Lifecycle)
-		if !lifecycle.CanPropagate {
-			continue
-		}
+       lifecycle := comp.(*component.Lifecycle)
+       if !lifecycle.CanPropagate {
+          continue
+       }
 
-		grid, ok := world.Grids[e.GetGridID()]
-		if !ok {
-			continue
-		}
+       // Vérifie si la plante a atteint son quota de propagation
+       if lifecycle.MaxPropagations != -1 && lifecycle.PropagationsDone >= lifecycle.MaxPropagations {
+          continue
+       }
 
-		pos := e.GetPosition()
-		neighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
+       // Vérifie si la condition de propagation est remplie (au MaxStages)
+       if !shouldPropagate(lifecycle) {
+          continue
+       }
 
-		for _, neighbor := range neighbors {
-			// Ne propage pas s'il y a déjà une ressource sur la case cible
-			if world.HasResourceAt(e.GetGridID(), neighbor.Position) {
-				continue
-			}
+       grid, ok := world.Grids[e.GetGridID()]
+       if !ok {
+          continue
+       }
 
-			if neighbor.Modifier.Obstructed {
-				continue
-			}
+       pos := e.GetPosition()
+       neighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
+       rand.Shuffle(len(neighbors), func(i, j int) { neighbors[i], neighbors[j] = neighbors[j], neighbors[i] })
 
-			if shouldPropagate(lifecycle) {
-				spawnPos := entity.Position{
-					X: neighbor.Position.X,
-					Y: neighbor.Position.Y,
-				}
+       maxToPropagate := lifecycle.PropagationCount
+       if maxToPropagate <= 0 {
+          maxToPropagate = 1 // Fallback
+       }
 
-				newRes, err := world.SpawnResource(
-					e.GetGridID(),
-					getResourceType(e),
-					spawnPos,
-				)
+       // --- 1. PHASE DE VÉRIFICATION DES PLACES DISPONIBLES ---
+       var validNeighbors []*board.Plot
 
-				if err != nil {
-					continue
-				}
+       for _, neighbor := range neighbors {
+          // Ne retient pas la case s'il y a déjà une ressource dessus
+          if world.HasResourceAt(e.GetGridID(), neighbor.Position) {
+             continue
+          }
 
-				world.EventBus.Publish(event.Event{
-					Type:     event.ResourcePropagated,
-					SourceID: string(newRes.GetID()),
-					Payload: map[string]interface{}{
-						"parent_id": entityID,
-						"position":  neighbor.Position,
-					},
-				})
-			}
-		}
-	}
+          // Ne retient pas la case si elle est obstruée
+          if neighbor.Modifier.Obstructed {
+             continue
+          }
+
+          validNeighbors = append(validNeighbors, neighbor)
+
+          // Si on a trouvé assez de places, on peut s'arrêter de chercher
+          if len(validNeighbors) == maxToPropagate {
+             break
+          }
+       }
+
+       // Condition CRITIQUE : Si on n'a pas trouvé EXACTEMENT le nombre requis de cases valides,
+       // la propagation est considérée comme irréalisable. On passe à la plante suivante.
+       if len(validNeighbors) < maxToPropagate {
+          continue
+       }
+
+       // --- 2. PHASE D'EXÉCUTION (Garantie d'avoir le compte) ---
+       propagatedCount := 0
+
+       for _, targetNeighbor := range validNeighbors {
+          spawnPos := entity.Position{
+             X: targetNeighbor.Position.X,
+             Y: targetNeighbor.Position.Y,
+          }
+
+          // Création de la ressource
+          newRes, err := world.SpawnResource(e.GetGridID(), getResourceType(e), spawnPos)
+          if err != nil {
+             // Sécurité si le spawn échoue techniquement (ne devrait pas arriver)
+             continue
+          }
+
+          // Ajustement de la hauteur dans le Plot si nécessaire
+          if lifecycle.PropagationLevel != 0 {
+             grid.RemoveEntity(targetNeighbor.Position, string(newRes.GetID()))
+             grid.PlaceEntityAtBottom(targetNeighbor.Position, string(newRes.GetID()))
+          }
+
+          propagatedCount++
+
+          world.EventBus.Publish(event.Event{
+             Type:     event.ResourcePropagated,
+             SourceID: string(newRes.GetID()),
+             Payload: map[string]interface{}{
+                "parent_id": entityID,
+                "position":  targetNeighbor.Position,
+             },
+          })
+       }
+
+       // Si la propagation complète a eu lieu, on met à jour les compteurs
+       if propagatedCount > 0 {
+          lifecycle.TurnsInStage = 0
+          lifecycle.PropagationsDone++
+       }
+    }
 }
 
 func shouldPropagate(l *component.Lifecycle) bool {
-	return l.CurrentStage >= 2
+	// Propagation uniquement au dernier stade (ex: "gâté")
+	isLastStage := l.CurrentStage == l.MaxStages-1
+	// Condition : avoir passé suffisamment de tours dans ce stade (défini par TurnsToNext)
+	return isLastStage && l.TurnsInStage >= l.TurnsToNext
 }
 
 func getResourceType(e entity.Entity) string {
@@ -1264,7 +1399,7 @@ func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
 	} else {
 		// Easy ou Insane
 		for _, e := range allEntities {
-			if e.GetState() == entity.Hidden {
+			if e.GetState()&entity.Hidden != 0 {
 				e.SetState(entity.Revealed)
 				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
@@ -1304,7 +1439,7 @@ func (s *PreviewSystem) revealHalfPairs(world *World, entities []entity.Entity, 
 		countToReveal := int(float64(len(group)) * ratio)
 		for i := 0; i < countToReveal; i++ {
 			e := group[i]
-			if e.GetState() == entity.Hidden {
+			if e.GetState()&entity.Hidden != 0 {
 				e.SetState(entity.Revealed)
 				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
@@ -1326,8 +1461,8 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 				// Gestion spécifique des structures
 				if e.GetType() == entity.TypeStructure {
 					if e.HasTag("commencement_portal") {
-						// Portail de commencement : se cache de manière permanente
-						e.SetState(entity.Blocked)
+						// Portail de commencement : se cache et se bloque de manière permanente
+						e.SetState(entity.Hidden | entity.Blocked)
 						world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 							e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
 						continue
@@ -1336,7 +1471,7 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 					continue
 				}
 
-				if e.GetState() == entity.Revealed {
+				if e.GetState()&entity.Revealed != 0 {
 					e.SetState(entity.Hidden)
 					world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 						e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))

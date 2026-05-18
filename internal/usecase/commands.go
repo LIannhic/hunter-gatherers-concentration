@@ -49,7 +49,7 @@ func (c *RevealTileCommand) CanExecute() bool {
 
 	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 	ent, ok := c.World.Entities.Get(entity.ID(topID))
-	if !ok || ent.GetState() != entity.Hidden {
+	if !ok || ent.GetState()&entity.Hidden == 0 {
 		return false
 	}
 
@@ -139,7 +139,7 @@ func (c *MatchTilesCommand) CanExecute() bool {
 	}
 
 	// Vérifie que les entités sont bien révélées
-	if e1.GetState() != entity.Revealed || e2.GetState() != entity.Revealed {
+	if e1.GetState()&entity.Revealed == 0 || e2.GetState()&entity.Revealed == 0 {
 		return false
 	}
 
@@ -312,7 +312,8 @@ func (c *ClearBoardCommand) CanExecute() bool {
 }
 
 func (c *ClearBoardCommand) Execute() error {
-	if _, ok := c.World.GetGrid(c.GridID); !ok {
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
 		return errors.New("grid not found")
 	}
 
@@ -322,6 +323,8 @@ func (c *ClearBoardCommand) Execute() error {
 			c.World.RemoveEntity(e.GetID())
 		}
 	}
+
+	grid.InitialMatchableCount = 0
 
 	return nil
 }
@@ -367,6 +370,27 @@ func (c *SwitchGridCommand) Execute() error {
 	return nil
 }
 
+type UnlockNavigationCommand struct {
+	World  *domain.World
+	GridID string
+}
+
+func (c *UnlockNavigationCommand) CanExecute() bool {
+	_, ok := c.World.GetGrid(c.GridID)
+	return ok
+}
+
+func (c *UnlockNavigationCommand) Execute() error {
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
+		return errors.New("grid not found")
+	}
+
+	grid.NavigationForcedOpen = true
+	fmt.Printf("[DEBUG] Navigation forcée pour la zone %s\n", c.GridID)
+	return nil
+}
+
 type SwitchZoneCommand struct {
 	World     *domain.World
 	Direction board.Direction
@@ -377,12 +401,25 @@ func (c *SwitchZoneCommand) CanExecute() bool {
 		return false
 	}
 	_, ok := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)
-	return ok
+	if !ok {
+		return false
+	}
+
+	// La navigation n'est possible que si le seuil de complétion est atteint
+	return c.World.IsNavigationOpen(c.World.CurrentGridID)
 }
 
 func (c *SwitchZoneCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("aucune zone connectée dans cette direction")
+		return errors.New("aucune zone connectée dans cette direction ou conditions non remplies")
+	}
+
+	// Marque les sorties comme révélées et appairées lors de la transition (pour cohérence visuelle)
+	if grid, ok := c.World.GetGrid(c.World.CurrentGridID); ok {
+		grid.ExitsState[c.Direction] = [2]entity.TileState{
+			entity.Revealed | entity.Matched,
+			entity.Revealed | entity.Matched,
+		}
 	}
 
 	targetID, _ := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)

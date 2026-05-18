@@ -18,24 +18,30 @@ func NewID() ID {
 type TileState int
 
 const (
-	Hidden TileState = iota
-	Revealed
-	Matched
-	Blocked
+	Hidden   TileState = 1 << iota // 1
+	Revealed                       // 2
+	Matched                        // 4
+	Blocked                        // 8
 )
 
 func (s TileState) String() string {
-	switch s {
-	case Hidden:
-		return "hidden"
-	case Revealed:
-		return "revealed"
-	case Matched:
-		return "matched"
-	case Blocked:
-		return "blocked"
+	res := ""
+	if s&Hidden != 0 {
+		res += "hidden "
 	}
-	return "unknown"
+	if s&Revealed != 0 {
+		res += "revealed "
+	}
+	if s&Matched != 0 {
+		res += "matched "
+	}
+	if s&Blocked != 0 {
+		res += "blocked "
+	}
+	if res == "" {
+		return "unknown"
+	}
+	return res[:len(res)-1]
 }
 
 // Type d'entité

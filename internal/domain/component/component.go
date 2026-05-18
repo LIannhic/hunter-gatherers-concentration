@@ -75,12 +75,16 @@ func (s *Store) RemoveEntity(entityID string) {
 
 // Lifecycle gère les stades de maturation/dégradation
 type Lifecycle struct {
-	CurrentStage int
-	MaxStages    int
-	StageNames   []string // ex: ["bourgeon", "fruit", "gâté"]
-	TurnsInStage int
-	TurnsToNext  int // -1 pour infini
-	CanPropagate bool
+	CurrentStage     int
+	MaxStages        int
+	StageNames       []string // ex: ["bourgeon", "fruit", "gâté"]
+	TurnsInStage     int
+	TurnsToNext      int // -1 pour infini
+	CanPropagate     bool
+	PropagationCount int  // Nombre de nouvelles entités créées lors de la propagation par cycle
+	MaxPropagations  int  // Nombre total de cycles de propagation possibles (-1 pour infini)
+	PropagationsDone int  // Nombre de cycles déjà effectués
+	PropagationLevel int // 0 pour au plus bas
 }
 
 func (l Lifecycle) Type() string { return "lifecycle" }

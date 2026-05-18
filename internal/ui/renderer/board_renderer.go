@@ -130,7 +130,7 @@ func (r *BoardRenderer) GetGridOffset() (int, int) {
 // Render dessine le plateau complet
 func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 	// Dessine le Playmat
-	r.renderPlaymat(screen)
+	r.renderPlaymat(screen, world)
 
 	// Met à jour les animations
 	r.UpdateAnimations()
@@ -141,7 +141,7 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 	}
 }
 
-func (r *BoardRenderer) renderPlaymat(screen *ebiten.Image) {
+func (r *BoardRenderer) renderPlaymat(screen *ebiten.Image, world *domain.World) {
 	// Playmat background
 	vector.StrokeRect(screen, ui.PlaymatX, ui.PlaymatY, ui.PlaymatW, ui.PlaymatH, 1, color.RGBA{100, 100, 100, 255}, true)
 
@@ -170,17 +170,133 @@ func (r *BoardRenderer) renderPlaymat(screen *ebiten.Image) {
 	}
 
 	// Exits
-	r.renderExit(screen, ui.ExitNorthX, ui.ExitNorthY, ui.ExitNorthW, ui.ExitNorthH, "NORTH")
-	r.renderExit(screen, ui.ExitEastX, ui.ExitEastY, ui.ExitEastW, ui.ExitEastH, "EAST")
-	r.renderExit(screen, ui.ExitSouthX, ui.ExitSouthY, ui.ExitSouthW, ui.ExitSouthH, "SOUTH")
-	r.renderExit(screen, ui.ExitWestX, ui.ExitWestY, ui.ExitWestW, ui.ExitWestH, "WEST")
+	r.renderExitTiles(screen, ui.ExitNorthX, ui.ExitNorthY, ui.ExitNorthW, ui.ExitNorthH, board.North, world)
+	r.renderExitTiles(screen, ui.ExitEastX, ui.ExitEastY, ui.ExitEastW, ui.ExitEastH, board.East, world)
+	r.renderExitTiles(screen, ui.ExitSouthX, ui.ExitSouthY, ui.ExitSouthW, ui.ExitSouthH, board.South, world)
+	r.renderExitTiles(screen, ui.ExitWestX, ui.ExitWestY, ui.ExitWestW, ui.ExitWestH, board.West, world)
 }
 
-func (r *BoardRenderer) renderExit(screen *ebiten.Image, rx, ry, rw, rh float64, label string) {
+func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry, rw, rh float64, dir board.Direction, world *domain.World) {
 	ex := ui.PlaymatX + rx
 	ey := ui.PlaymatY + ry
-	vector.StrokeRect(screen, float32(ex), float32(ey), float32(rw), float32(rh), 1, color.RGBA{100, 100, 255, 255}, true)
+
+	isOpen := world.IsNavigationOpen(world.CurrentGridID)
+	hasExit := false
+	if world.DreamPlane != nil {
+		_, hasExit = world.DreamPlane.GetConnectedZone(world.CurrentGridID, dir)
+	}
+
+	grid, _ := world.GetGrid(world.CurrentGridID)
+
+	// Nombre de tuiles (2 par sortie selon l'issue)
+	numTiles := 2
+	isVertical := (dir == board.East || dir == board.West)
+
+	for i := 0; i < numTiles; i++ {
+		tx, ty := ex, ey
+		if isVertical {
+			ty += float64(i) * r.tileSize
+		} else {
+			tx += float64(i) * r.tileSize
+		}
+
+		var tileState entity.TileState = entity.Hidden | entity.Blocked
+		if grid != nil {
+			tileState = grid.ExitsState[dir][i]
+		}
+
+		// Mise à jour dynamique du flag Blocked selon isOpen et hasExit
+		if !hasExit || !isOpen {
+			tileState |= entity.Blocked
+		} else {
+			tileState &= ^entity.Blocked
+		}
+
+		var tileImg *ebiten.Image
+		if tileState&entity.Blocked != 0 {
+			if tileState&entity.Revealed != 0 {
+				tileImg = r.assets.GetImage("tile_blocked")
+			} else {
+				tileImg = r.assets.GetImage("tile_sealed")
+			}
+		} else if tileState&entity.Revealed != 0 {
+			tileImg = r.assets.GetImage("tile_revealed")
+		} else {
+			tileImg = r.assets.GetImage("tile_hidden")
+		}
+
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(tx, ty)
+		screen.DrawImage(tileImg, op)
+
+		// Si la sortie est révélée ou appairée, on dessine la flèche
+		if tileState&(entity.Revealed|entity.Matched) != 0 {
+			r.renderHalfArrow(screen, tx, ty, dir, i)
+		}
+	}
 }
+
+func (r *BoardRenderer) renderHalfArrow(screen *ebiten.Image, x, y float64, dir board.Direction, index int) {
+	centerX := float32(x + r.tileSize/2)
+	centerY := float32(y + r.tileSize/2)
+	size := float32(r.tileSize)
+	color := color.RGBA{200, 200, 255, 200}
+	thickness := float32(4)
+
+	// Rapprochement vers la "couture" entre les deux tuiles (plus proche l'une de l'autre sans se toucher)
+	seamOffset := size * 0.35
+	switch dir {
+	case board.North, board.South:
+		if index == 0 { // Gauche
+			centerX += seamOffset
+		} else { // Droite
+			centerX -= seamOffset
+		}
+	case board.East, board.West:
+		if index == 0 { // Haut
+			centerY += seamOffset
+		} else { // Bas
+			centerY -= seamOffset
+		}
+	}
+
+	// L'index 0 est la première tuile, l'index 1 est la seconde
+	switch dir {
+	case board.North:
+		// Flèche vers le haut
+		vector.StrokeLine(screen, centerX, centerY-size*0.2, centerX, centerY+size*0.2, thickness, color, true)
+		if index == 0 { // Gauche -> demi-tête gauche
+			vector.StrokeLine(screen, centerX, centerY-size*0.2, centerX-size*0.15, centerY, thickness, color, true)
+		} else { // Droite -> demi-tête droite
+			vector.StrokeLine(screen, centerX, centerY-size*0.2, centerX+size*0.15, centerY, thickness, color, true)
+		}
+	case board.South:
+		// Flèche vers le bas
+		vector.StrokeLine(screen, centerX, centerY-size*0.2, centerX, centerY+size*0.2, thickness, color, true)
+		if index == 0 { // Gauche
+			vector.StrokeLine(screen, centerX, centerY+size*0.2, centerX-size*0.15, centerY, thickness, color, true)
+		} else { // Droite
+			vector.StrokeLine(screen, centerX, centerY+size*0.2, centerX+size*0.15, centerY, thickness, color, true)
+		}
+	case board.East:
+		// Flèche vers la droite
+		vector.StrokeLine(screen, centerX-size*0.2, centerY, centerX+size*0.2, centerY, thickness, color, true)
+		if index == 0 { // Haut
+			vector.StrokeLine(screen, centerX+size*0.2, centerY, centerX, centerY-size*0.15, thickness, color, true)
+		} else { // Bas
+			vector.StrokeLine(screen, centerX+size*0.2, centerY, centerX, centerY+size*0.15, thickness, color, true)
+		}
+	case board.West:
+		// Flèche vers la gauche
+		vector.StrokeLine(screen, centerX-size*0.2, centerY, centerX+size*0.2, centerY, thickness, color, true)
+		if index == 0 { // Haut
+			vector.StrokeLine(screen, centerX-size*0.2, centerY, centerX, centerY-size*0.15, thickness, color, true)
+		} else { // Bas
+			vector.StrokeLine(screen, centerX-size*0.2, centerY, centerX, centerY+size*0.15, thickness, color, true)
+		}
+	}
+}
+
 
 // getGridSpacing calcule l'espacement et les marges pour remplir l'espace de 525x525
 func (r *BoardRenderer) getGridSpacing(gridWidth, gridHeight int) (spacingX, spacingY, padX, padY float64) {
@@ -294,7 +410,7 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 	isFlipping := animation != nil && animation.IsActive()
 	showRevealedSide := false
 	if isFlipping {
-		if animation.TileState == entity.Hidden {
+		if animation.TileState&entity.Hidden != 0 {
 			showRevealedSide = animation.Progress < 0.5
 		} else {
 			showRevealedSide = animation.Progress > 0.5
@@ -312,10 +428,10 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 			tileImg = r.assets.GetImage("tile_hidden")
 		}
 	} else {
-		switch visualState {
-		case entity.Hidden:
-			tileImg = r.assets.GetImage("tile_hidden")
-		case entity.Revealed:
+		// Gestion des états prioritaires
+		if visualState&entity.Matched != 0 {
+			tileImg = r.assets.GetImage("tile_matched")
+		} else if visualState&entity.Revealed != 0 {
 			if ent.GetType() == entity.TypeTrap {
 				tileImg = r.assets.GetImage("tile_trap")
 			} else if ent.GetType() == entity.TypeStructure {
@@ -326,23 +442,26 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 				} else if ent.HasTag("obelisk") {
 					tileImg = r.assets.GetImage("tile_obelisk")
 				} else {
-					// Par défaut pour les dolmens et autres
 					tileImg = r.assets.GetImage("tile_structure")
 				}
 			} else {
 				tileImg = r.assets.GetImage("tile_revealed")
 			}
-		case entity.Matched:
-			tileImg = r.assets.GetImage("tile_matched")
-		case entity.Blocked:
-			// Cas spécial : les portails bloqués affichent leur dos (cachés)
-			if ent.GetType() == entity.TypeStructure && (ent.HasTag("commencement_portal") || ent.HasTag("finish_portal")) {
-				tileImg = r.assets.GetImage("tile_hidden")
-			} else {
+		} else {
+			// Par défaut ou Hidden
+			tileImg = r.assets.GetImage("tile_hidden")
+		}
+
+		// Superposition du cadenas si Blocked
+		if visualState&entity.Blocked != 0 {
+			// Si c'est bloqué, on peut soit changer d'image soit superposer plus tard.
+			// Pour l'instant, on utilise l'image 'tile_sealed' si c'est caché et bloqué,
+			// ou 'tile_blocked' (croix rouge) si c'est révélé et bloqué.
+			if visualState&entity.Revealed != 0 {
 				tileImg = r.assets.GetImage("tile_blocked")
+			} else {
+				tileImg = r.assets.GetImage("tile_sealed")
 			}
-		default:
-			tileImg = r.assets.GetImage("square_empty")
 		}
 	}
 
@@ -368,7 +487,7 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 			op.GeoM.Scale(math.Abs(math.Cos(rotateY*math.Pi/180)), 1)
 			op.GeoM.Translate(centerX, 0)
 		}
-	} else if visualState == entity.Matched {
+	} else if visualState&entity.Matched != 0 {
 		// "Raised" effect: matched tiles are 20% larger
 		scale := 1.2
 		op.GeoM.Translate(-centerX, -centerY)
@@ -379,9 +498,9 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 	op.GeoM.Translate(x, y)
 	screen.DrawImage(tileImg, op)
 
-	shouldShowContent := visualState == entity.Revealed || visualState == entity.Matched
+	shouldShowContent := visualState&entity.Revealed != 0 || visualState&entity.Matched != 0
 	if animation != nil && animation.IsActive() {
-		if animation.TileState == entity.Hidden {
+		if animation.TileState&entity.Hidden != 0 {
 			shouldShowContent = animation.Progress < 0.5
 		} else {
 			shouldShowContent = animation.Progress > 0.5

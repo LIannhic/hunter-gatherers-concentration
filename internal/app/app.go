@@ -433,6 +433,20 @@ func (app *Application) setupDebugCallbacks() {
 		}
 	}
 
+	// F7: Désceller les sorties (cheat)
+	app.Input.OnUnlockNavigation = func(gridID string) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+		cmd := &usecase.UnlockNavigationCommand{
+			World:  app.World,
+			GridID: gridID,
+		}
+		if err := cmd.Execute(); err == nil {
+			fmt.Println("[CHEAT] Sorties déscellées pour la zone actuelle")
+		}
+	}
+
 	// F10: Toggle mouvement automatique
 	app.Input.OnToggleAutoMove = func() {
 		app.Engine.Running = !app.Engine.Running

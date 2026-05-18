@@ -108,6 +108,10 @@ func (m *Manager) generateAllAssets() {
 		blockedImg := generateTileBlocked(size, theme)
 		m.images["tile_blocked_"+themeName] = blockedImg
 
+		// Tuile scellée
+		sealedImg := generateTileSealed(size, theme)
+		m.images["tile_sealed_"+themeName] = sealedImg
+
 		// Tuile piège (trap)
 		trapTileImg := generateTileTrap(size, theme)
 		m.images["tile_trap_"+themeName] = trapTileImg
@@ -136,6 +140,7 @@ func (m *Manager) generateAllAssets() {
 	m.images["tile_revealed"] = m.images["tile_revealed_default"]
 	m.images["tile_matched"] = m.images["tile_matched_default"]
 	m.images["tile_blocked"] = m.images["tile_blocked_default"]
+	m.images["tile_sealed"] = m.images["tile_sealed_default"]
 	m.images["tile_trap"] = m.images["tile_trap_default"]
 	m.images["tile_structure"] = m.images["tile_structure_default"]
 	m.images["tile_dolmen"] = m.images["tile_dolmen_default"]
