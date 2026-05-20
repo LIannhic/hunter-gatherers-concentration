@@ -359,6 +359,114 @@ func (c *UsePortablePortalCommand) Execute() error {
 	return err
 }
 
+type UseScannerItemCommand struct {
+    World     *domain.World
+    GridID    string
+    ItemIndex int // L'index de l'objet dans la liste d'inventaire du joueur
+}
+
+func (c *UseScannerItemCommand) CanExecute() bool {
+    if c.World == nil || c.World.Player == nil {
+       return false
+    }
+
+    // 1. Vérifie si l'index est valide dans l'inventaire
+    inv := &c.World.Player.Inventory
+    if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
+       return false
+    }
+
+    // 2. Récupère l'objet sans le supprimer pour vérification
+    item, err := inv.GetItem(c.ItemIndex)
+    if err != nil {
+       return false
+    }
+
+    if item.Name != "echo_hound" || !item.IsUsable {
+       return false
+    }
+
+    return true
+}
+
+func (c *UseScannerItemCommand) Execute() error {
+    if !c.CanExecute() {
+       return errors.New("impossible d'utiliser le scanner (item invalide ou inutilisable)")
+    }
+
+    // 4. 🛠️ AJUSTEMENT : Utilise c.GridID s'il est fourni, sinon replie-toi sur c.World.CurrentGridID
+    targetGrid := c.GridID
+    if targetGrid == "" {
+        targetGrid = c.World.CurrentGridID
+    }
+
+    // Déclenche l'effet de scan dans le monde
+    err := c.World.TriggerScannerEffect(targetGrid)
+    if err != nil {
+       return fmt.Errorf("échec de l'effet de scan : %w", err)
+    }
+
+    // Si le scan a fonctionné, on consomme l'objet en le retirant de l'inventaire
+    inv := &c.World.Player.Inventory
+    err = inv.RemoveItem(c.ItemIndex)
+    if err != nil {
+       return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
+    }
+
+    fmt.Printf("[ITEM] Le joueur a utilisé le cri de l'Echo Hound depuis l'emplacement %d\n", c.ItemIndex)
+
+    return nil
+}
+
+// --- COMMANDE DÉDIÉE À LA DREAMBERRY ---
+type UseDreamberryItemCommand struct {
+    World     *domain.World
+    ItemIndex int // L'index de l'objet dans l'inventaire
+}
+
+func (c *UseDreamberryItemCommand) CanExecute() bool {
+    if c.World == nil || c.World.Player == nil {
+       return false
+    }
+
+    inv := &c.World.Player.Inventory
+    if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
+       return false
+    }
+
+    item, err := inv.GetItem(c.ItemIndex)
+    if err != nil {
+       return false
+    }
+
+    // La commande ne s'occupe QUE de la dreamberry utilisable
+    if item.Name != "dreamberry" || !item.IsUsable {
+       return false
+    }
+
+    return true
+}
+
+func (c *UseDreamberryItemCommand) Execute() error {
+    if !c.CanExecute() {
+       return errors.New("impossible d'utiliser la dreamberry (item invalide ou inutilisable)")
+    }
+
+    // 1. Applique l'effet de restauration de mana
+    const manaRestorationAmount = 5 // À ajuster selon l'équilibrage
+    c.World.Player.RestoreMana(manaRestorationAmount)
+
+    // 2. Consomme l'objet en le retirant de l'inventaire
+    inv := &c.World.Player.Inventory
+    err := inv.RemoveItem(c.ItemIndex)
+    if err != nil {
+       return fmt.Errorf("erreur lors de la suppression de la dreamberry : %w", err)
+    }
+
+    fmt.Printf("[ITEM] Le joueur a consommé une Dreamberry (Mana +%d) depuis l'emplacement %d\n", manaRestorationAmount, c.ItemIndex)
+    return nil
+}
+
 type ClearAllBoardsCommand struct {
 	World *domain.World
 }

@@ -81,9 +81,23 @@ func (h *HUD) GetSelectedLootItem() *player.LootItem {
 	return h.world.Player.Inventory.Items[h.selectedLootIndex]
 }
 
+func (h *HUD) GetSelectedLootIndex() int {
+	return h.selectedLootIndex
+}
+
 func (h *HUD) IsPortablePortalSelected() bool {
 	item := h.GetSelectedLootItem()
 	return item != nil && item.SourceID == player.PortablePortalItemSourceID
+}
+
+func (h *HUD) IsEchoHoundSelected() bool {
+	item := h.GetSelectedLootItem()
+	return item != nil && item.SourceID == player.EchoHoundItemSourceID
+}
+
+func (h *HUD) IsDreamberrySelected() bool {
+    item := h.GetSelectedLootItem()
+    return item != nil && item.SourceID == player.DreamberryItemSourceID
 }
 
 func (h *HUD) ClearActiveLootSelection() {
@@ -589,24 +603,8 @@ func (h *HUD) HandleClick(x, y int) bool {
 			if col >= 0 && col < ui.LootSlotsPerRow {
 				idx := row*ui.LootSlotsPerRow + col
 				if idx >= 0 && idx < len(h.world.Player.Inventory.Items) {
-					item := h.world.Player.Inventory.Items[idx]
-					if item.SourceID == player.PortablePortalItemSourceID {
-						if h.selectedLootIndex == idx {
-							h.selectedLootIndex = -1
-						} else {
-							h.selectedLootIndex = idx
-						}
-						h.selectedLoots = make(map[int]bool)
-						h.confirmClearAll = false
-						return true
-					}
-
-					// Toggle sélection
-					if h.selectedLoots[idx] {
-						delete(h.selectedLoots, idx)
-					} else {
-						h.selectedLoots[idx] = true
-					}
+					// Clic Gauche = Sélection pour USAGE (Bordure bleue)
+					h.selectedLootIndex = idx
 					h.confirmClearAll = false
 					return true
 				}
@@ -665,10 +663,37 @@ func (h *HUD) HandleClick(x, y int) bool {
 	return false
 }
 
-// HandleRightClick gère les clics droits (désélection)
+// HandleRightClick gère les clics droits (Sélection pour suppression)
 func (h *HUD) HandleRightClick(x, y int) bool {
 	if float64(x) >= ui.InventoryX && float64(x) <= ui.InventoryX+ui.InventoryW &&
 		float64(y) >= ui.InventoryY && float64(y) <= ui.InventoryY+ui.InventoryH {
+
+		// Détection clic sur les slots pour la suppression (Rouge)
+		slotZoneY := float64(ui.InventoryY + 40)
+		if float64(y) >= slotZoneY && float64(y) <= slotZoneY+331 {
+			localY := float64(y) - slotZoneY + h.world.Player.Inventory.ScrollOffset
+			localX := float64(x) - float64(ui.InventoryX) - 5
+
+			rowH := ui.LootSlotSize + ui.LootSlotPadding
+			row := int(localY / rowH)
+			col := int(localX / rowH)
+
+			if col >= 0 && col < ui.LootSlotsPerRow {
+				idx := row*ui.LootSlotsPerRow + col
+				if idx >= 0 && idx < len(h.world.Player.Inventory.Items) {
+					// Clic Droit = Toggle sélection pour SUPPRESSION (Bordure rouge)
+					if h.selectedLoots[idx] {
+						delete(h.selectedLoots, idx)
+					} else {
+						h.selectedLoots[idx] = true
+					}
+					h.confirmClearAll = false
+					return true
+				}
+			}
+		}
+
+		// Clic droit ailleurs dans l'inventaire = Tout désélectionner
 		h.selectedLoots = make(map[int]bool)
 		h.selectedLootIndex = -1
 		h.confirmClearAll = false

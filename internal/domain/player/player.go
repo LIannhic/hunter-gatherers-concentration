@@ -25,12 +25,25 @@ const (
 	PortablePortalLootTaxPercent = 25
 )
 
+// EchoHound constants
+const (
+	EchoHoundItemSourceID = "echo_hound_source"
+	EchoHoundItemName     = "echo_hound"
+)
+
+// Dreamberry constants
+const (
+    DreamberryItemSourceID = "dreamberry_source"
+    DreamberryItemName     = "dreamberry"
+)
+
 // LootItem représente un objet récolté
 type LootItem struct {
 	ID          string
 	Name        string
 	Type        entity.Type
 	SourceID    string
+	IsUsable    bool
 	IsDeletable bool // Si faux, l'objet ne peut pas être supprimé par le joueur
 }
 
@@ -40,7 +53,30 @@ func NewPortablePortalItem() *LootItem {
 		Name:        PortablePortalItemName,
 		Type:        entity.TypeArtefact,
 		SourceID:    PortablePortalItemSourceID,
+		IsUsable:    true,
 		IsDeletable: false,
+	}
+}
+
+func NewEchoHoundItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        EchoHoundItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    EchoHoundItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewDreamberryItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        DreamberryItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    DreamberryItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
 	}
 }
 
@@ -63,7 +99,7 @@ func NewInventory(maxSize int) *Inventory {
 
 // AddItem ajoute un objet à l'inventaire dans le premier slot disponible
 func (inv *Inventory) AddItem(item *LootItem) error {
-	if inv.GetTotalItemCount()+itemCountForLoot(item) >= inv.MaxSize {
+	if inv.GetTotalItemCount()+itemCountForLoot(item) > inv.MaxSize {
 		return errors.New("inventaire plein")
 	}
 	inv.Items = append(inv.Items, item)
@@ -123,6 +159,14 @@ func (inv *Inventory) GetResourceCount(resourceType string) int {
 
 func (inv *Inventory) HasResource(resourceType string) bool {
 	return inv.GetResourceCount(resourceType) > 0
+}
+
+// GetItem renvoie un objet sans le supprimer
+func (inv *Inventory) GetItem(index int) (*LootItem, error) {
+    if index < 0 || index >= len(inv.Items) {
+       return nil, errors.New("index invalide")
+    }
+    return inv.Items[index], nil
 }
 
 func (inv *Inventory) GetTotalItems() int {

@@ -79,9 +79,6 @@ func NewApplication() (*Application, error) {
 	// 3. Crée plusieurs grids
 	app.setupGrids()
 
-	// Ajoute le portail portable à l'inventaire initial du joueur
-	_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
-
 	// 4. Infrastructure
 	app.Assets = assets.NewManager()
 
@@ -95,6 +92,9 @@ func NewApplication() (*Application, error) {
 	app.SaveMenu = renderer.NewSaveMenu()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
+
+	// Subscribe renderer to scanner events
+	app.Renderer.SubscribeToEvents(app.World)
 
 	// 5.1 Gestionnaire réactif des boutons d'action
 	btnManager := actionbuttons.NewManager(
@@ -137,16 +137,18 @@ func NewApplication() (*Application, error) {
 	app.Input.OnToggleDetails = app.HUD.ToggleDetails
 	app.Input.OnToggleInvDetails = app.HUD.ToggleInventoryDetails
 	app.Input.OnFillInventory = func() {
-		fmt.Println("[DEBUG] Remplissage de l'inventaire avec des Bulles de Savon")
-		for i := 0; i < 30; i++ {
-			loot := &player.LootItem{
-				ID:          string(entity.NewID()),
-				Name:        "bulle de savon",
-				Type:        entity.TypeResource,
-				SourceID:    "debug",
-				IsDeletable: true,
-			}
-			_ = app.World.Player.Inventory.AddItem(loot)
+		fmt.Println("[DEBUG] Remplissage de l'inventaire avec des dreamberries et des limiers écho")
+		for i := 0; i < 15; i++ {
+// 			loot := &player.LootItem{
+// 				ID:          string(entity.NewID()),
+// 				Name:        "bulle de savon",
+// 				Type:        entity.TypeResource,
+// 				SourceID:    "debug",
+// 				IsDeletable: true,
+// 			}
+// 			_ = app.World.Player.Inventory.AddItem(loot)
+        _ = app.World.Player.Inventory.AddItem(player.NewDreamberryItem())
+        _ = app.World.Player.Inventory.AddItem(player.NewEchoHoundItem())
 		}
 	}
 
@@ -657,12 +659,63 @@ func (app *Application) updatePlaying() error {
 
 	// Gère les entrées HUD (ex: fermer fenêtre détails)
 	mx, my := ebiten.CursorPosition()
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		if app.HUD.HandleClick(mx, my) {
-			app.Input.SetPortablePortalMode(app.HUD.IsPortablePortalSelected())
-			return nil
-		}
-	}
+if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+    // On mémorise l'index sélectionné AVANT le clic pour détecter le double-clic (usage)
+    prevSelectedIdx := app.HUD.GetSelectedLootIndex()
+
+    if app.HUD.HandleClick(mx, my) {
+       newSelectedIdx := app.HUD.GetSelectedLootIndex()
+
+       app.Input.SetPortablePortalMode(app.HUD.IsPortablePortalSelected())
+
+       // Si on a un double-clic valide sur un objet de l'inventaire
+       if prevSelectedIdx == newSelectedIdx && newSelectedIdx != -1 {
+          selectedItem := app.HUD.GetSelectedLootItem()
+
+          if selectedItem != nil {
+             // 1. FACTORISATION : On cherche l'index réel dans l'inventaire une seule fois
+             inventoryIdx := -1
+             for i, item := range app.World.Player.Inventory.Items {
+                if item.ID == selectedItem.ID {
+                   inventoryIdx = i
+                   break
+                }
+             }
+
+             // 2. DISPATCHER DE COMMANDES
+             if inventoryIdx >= 0 {
+                var cmd interface{ Execute() error } // Interface temporaire pour lier nos commandes
+
+                switch selectedItem.Name {
+                case "echo_hound":
+                   cmd = &usecase.UseScannerItemCommand{
+                      World:     app.World,
+                      GridID:    app.World.CurrentGridID,
+                      ItemIndex: inventoryIdx,
+                   }
+
+                case "dreamberry":
+                   cmd = &usecase.UseDreamberryItemCommand{
+                      World:     app.World,
+                      ItemIndex: inventoryIdx,
+                   }
+                }
+
+                // 3. EXÉCUTION DE LA COMMANDE
+                if cmd != nil {
+                   if err := cmd.Execute(); err != nil {
+                      fmt.Printf("[ERROR] Échec de l'utilisation de %s : %v\n", selectedItem.Name, err)
+                   } else {
+                      fmt.Printf("[SUCCESS] %s utilisé avec succès.\n", selectedItem.Name)
+                      app.HUD.ClearActiveLootSelection()
+                   }
+                }
+             }
+          }
+       }
+       return nil
+    }
+}
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		if app.HUD.HandleRightClick(mx, my) {
 			return nil

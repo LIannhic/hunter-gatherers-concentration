@@ -1,0 +1,56 @@
+//kage:unit pixels
+package main
+
+var WaveProgress float
+var WaveErase float
+var WaveThickness float
+var RevealColor vec4
+
+func rand(co vec2) float {
+	return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+func Fragment(dstPos vec4, srcPos vec2, srcColor vec4) vec4 {
+	pixelX := dstPos.x 
+
+	// 1. Coupe avant : invisible tant que le front n'est pas passé
+	if pixelX > WaveProgress {
+		return vec4(0.0)
+	}
+
+	// 2. Coupe arrière : effacement total si la ligne de fin est passée
+	if pixelX < WaveErase {
+		return vec4(0.0)
+	}
+
+	currentPixel := imageSrc0At(srcPos)
+	if currentPixel.a <= 0.01 { 
+		return vec4(0.0)
+	}
+
+	distToLine := abs(pixelX - WaveProgress)
+	halfThickness := WaveThickness * 0.5
+	
+	inWave := 1.0 - smoothstep(0.0, halfThickness, distToLine)
+	trail := exp(-distToLine * 0.04)
+
+	// Fondu de fin progressif à l'approche de la ligne de balayage arrière
+	// pour éviter une coupure trop nette et hachée de la traînée
+	distToErase := pixelX - WaveErase
+	fadeOut := smoothstep(0.0, WaveThickness * 2.0, distToErase)
+
+	// On augmente la luminosité de base des pixels révélés pour mieux voir les illustrations
+	// Passé de 0.25 à 0.8 pour une visibilité quasi-totale sous le scanner
+	baseColor := currentPixel * 0.8
+
+	noise := rand(vec2(dstPos.y, WaveProgress * 0.05))
+	styleTrail := trail * (0.85 + noise * 0.15)
+
+	// On booste l'opacité de la lueur (glow)
+	glowColor := vec4(RevealColor.r, RevealColor.g, 1.0, styleTrail * 1.5 + inWave * 0.8)
+	
+	finalGlow := glowColor * styleTrail
+	
+	// Rendu final plus punchy
+	return (baseColor + finalGlow * 1.2) * currentPixel.a * fadeOut
+}

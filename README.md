@@ -63,7 +63,7 @@ Pour le joueur :Pendant les parties (Actions directes)
 * Dévoiler : Révéler le contenu d’une tuile face cachée (consomme du temps ou du mana).
 * Prendre : Collecter des éléments ou capturer des créatures simples via l’identification d’une paire identique.
 * Associer : Créer un lien logique entre deux tuiles complémentaires (ex: Clé + Serrure) pour synthétiser des ressources ou capturer des entités complexes.
-* Utiliser : Activer un outil, une ressource consommable ou une capacité de créature pour modifier le plateau ou protéger ses statistiques.
+* Utiliser : Activer un outil, une ressource consommable ou une capacité de créature (ex: cri de l'Echo Hound) pour modifier le plateau ou protéger ses statistiques. Nécessite une confirmation par un second clic sur l'objet sélectionné.
 * Déployer portail : Activer un portail portable pour créer une zone de dégagement 3x3 et initier l’extraction du plan.
 * S’extraire : Initier la fin de l’incursion pour sécuriser le butin avant l’épuisement des ressources de survie.
 
@@ -194,8 +194,10 @@ go build -o game ./cmd/game
 | Révéler tuile | Click gauche |
 | Matcher (ou valider paire) | M |
 | Skip (ou passer quand 2 tuiles) | Espace |
-| Sélection Butin | Click gauche (Inv) |
-| Désélectionner | Click droit |
+| Sélection Butin (Usage) | Click gauche (Inv) |
+| Utiliser Butin sélectionné | Re-click gauche (Inv) |
+| Sélection Suppression | Click droit (Inv) |
+| Désélectionner tout | Click droit (vide) |
 | Naviguer zones | ZQSD / Flèches |
 | Statistiques zones | I |
 | Liste Inventaire | L |
