@@ -107,7 +107,9 @@ type Entity interface {
 	Deactivate()
 	GetState() TileState
 	SetState(TileState)
+	AddTag(string)
 	HasTag(string) bool
+	RemoveTag(string)
 }
 
 // BaseEntity implémentation commune
@@ -263,10 +265,8 @@ func (m *Manager) GetAllActive() []Entity {
 func (m *Manager) QueryByTag(tag string) []Entity {
 	result := make([]Entity, 0)
 	for _, e := range m.entities {
-		if be, ok := e.(*BaseEntity); ok {
-			if be.HasTag(tag) && e.IsActive() {
-				result = append(result, e)
-			}
+		if e.HasTag(tag) && e.IsActive() {
+			result = append(result, e)
 		}
 	}
 	return result
