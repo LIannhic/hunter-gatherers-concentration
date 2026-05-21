@@ -40,7 +40,16 @@ type Entity interface {
     GetID() ID
     GetType() Type
     GetPosition() Position
-    // ...
+    SetPosition(Position)
+    GetGridID() string
+    SetGridID(string)
+    IsActive() bool
+    Deactivate()
+    GetState() TileState
+    SetState(TileState)
+    AddTag(string)
+    HasTag(string) bool
+    RemoveTag(string)
 }
 
 // Component - Données pures, pas de logique
@@ -63,16 +72,17 @@ func (s *LifecycleSystem) Update(world *World) {
   - `TileState` : Hidden, Revealed, Matched, Blocked
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
   - `Manager` : Stockage et accès rapide aux entités
-  - `HasTag(string)` : Méthode permettant de vérifier les propriétés spécifiques d'une entité (ex: "commencement_portal", "dolmen").
+  - `AddTag(string)`, `HasTag(string)`, `RemoveTag(string)` : Méthodes permettant de gérer les propriétés dynamiques ou visuelles des entités (ex: "moss_lure", "flying").
 - **`component/`** : Stockage et définition des composants (`Store`)
 - **`system.go`** : Systèmes qui traitent les données
   - `CreatureAISystem` : Gère les comportements de base des créatures
   - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes
   - `LifecycleSystem` : Gère la maturation des ressources
   - `PropagationSystem` : Gère l'expansion organique des ressources
-  - `TriggerSystem` : Gère les structures interactives (terriers, etc.)
+  - `TriggerSystem` : Gère les structures interactives (terriers, etc.) et les dégâts de révélation (ex: Singe Mousse)
   - `PreviewSystem` : Gère la révélation temporaire des tuiles à l'entrée d'une zone
   - `LootSystem` : Gère la transformation des associations réussies en butin d'inventaire
+  - `ActionSystem` : Gère les actions spécifiques des créatures (ex: `spawn_trap` du Singe Mousse)
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)
@@ -196,7 +206,9 @@ eventBus.ProcessQueue()
 
 ```go
 CreatureMoved      // Déplacement
+CreatureFled       // Fuite (ex: Singe Mousse)
 ResourceMatured    // Changement de stade
+ResourcePropagated // Expansion (directions cardinales uniquement)
 AssociationMade    // Paire trouvée
 PlayerDamaged      // Dégâts subis
 TurnEnded          // Fin de tour

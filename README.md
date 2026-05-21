@@ -126,13 +126,13 @@ Les créatures disposent d'un système de mouvement configurable avec les param�
 | **Burrower** | Vue | Errance | Under | Phase (terre) | Créature fouisseuse qui se cache sous terre |
 | **Specter** | Echo | Errance | Shadow | Phase (murs) | Fantôme qui traverse les murs |
 | **Stonewarden** | Passif | Patrouille | Bento | Stop | Gardien immobile qui patrouille si révélé |
-| **Echo Hound** | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations |
-| **Fleeing Sprite** | Proximité (3) | Répulsion joueur | Shadow | Glisse | Esprit qui fuit le joueur |
+| **Echo Hound** | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations. |
+| **Moss Monkey** | Proximité (4) | Target Empty | Bento | Glisse | Saboteur qui rebouche les cases vides avec des leurres. Fuit si le plateau est saturé de pièges. |
 
 Pour les ressources :
 
 * Mûrir / Maturer : Évoluer d'un stade initial (ex: bourgeon) vers un stade optimal (ex: fruit mûr) puis vers un stade dégradé (ex: fruit gâté), changeant ainsi sa valeur et ses propriétés d'association.
-* Se propager : S'étendre aux tuiles adjacentes si certaines conditions sont remplies (ex: une plante qui colonise une tuile de terre libre).
+* Se propager : S'étendre aux tuiles adjacentes (uniquement directions cardinales) si certaines conditions sont remplies. Une faible probabilité (5%) de stérilité peut freiner cette expansion.
 * Réagir : Modifier son état au contact d'un autre élément ou d'une créature (ex: une ressource qui "éclot" si une créature pollinisatrice passe dessus).
 * Se dégrader : Perdre en qualité ou disparaître si elle n'est pas récoltée à temps ou si le plan devient instable.
 * Rayonner : Laisser filtrer des indices visuels sur l'arrière-plan ou le verso de la tuile (ex: une ressource luminescente qui "brille" légèrement à travers la carte face cachée).
