@@ -28,6 +28,7 @@ const (
 	EntityRemoved      Type = "entity_removed"
 	DifficultyChanged  Type = "difficulty_changed"
 	GridEntered        Type = "grid_entered"
+	CreatureFled       Type = "creature_fled"
 )
 
 // Event structure de base
@@ -267,6 +268,19 @@ func NewGridEnteredEvent(gridID string) Event {
 		SourceID: "player",
 		Payload: map[string]interface{}{
 			"grid_id": gridID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewCreatureFledEvent(creatureID string, species string, gridID string, position entity.Position) Event {
+	return Event{
+		Type:     CreatureFled,
+		SourceID: creatureID,
+		Payload: map[string]interface{}{
+			"species":  species,
+			"grid_id":  gridID,
+			"position": position,
 		},
 		Timestamp: time.Now(),
 	}
