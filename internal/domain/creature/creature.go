@@ -15,7 +15,7 @@ type Creature struct {
 	Behavior        component.Behavior
 	Mobility        component.Mobility
 	Visual          component.Visual
-	MovementProfile *MovementProfile // Nouveau: configuration complète du mouvement
+	MovementProfile *MovementProfile // configuration complète du mouvement
 }
 
 func New(species string, pos entity.Position) *Creature {
@@ -57,7 +57,7 @@ func (c *Creature) GetComponent(name string) interface{} {
 
 // Action représente une intention de la créature
 type Action struct {
-	Type      string          // "move", "attack", "transform", "flee", "hide"
+	Type      string          // "move", "attack", "transform", "flee", "idle"
 	Direction entity.Position // Pour move
 	TargetID  string
 	Metadata  map[string]interface{}
@@ -75,6 +75,10 @@ type WorldState interface {
 	GetResources(pos entity.Position, radius int) []string
 	IsValidMove(pos entity.Position) bool
 	GetTileState(pos entity.Position) string
+	GetEmptyPlots() []entity.Position // Retourne les positions des cases strictement vides
+	GetGridTotalPlots() int          // Nombre total de cases dans la grille
+	IsGridSaturatedWithTraps() bool  // Vérifie si plus aucune ressource n'est présente
+	HasActivityNearby(pos entity.Position, radius int) bool // Détecte mouvement/révélation
 }
 
 // SimpleAI implémentation basique
@@ -87,6 +91,70 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 
 	// Logique simple basée sur l'état
 	switch c.Behavior.State {
+	case "spreading_moss":
+		currentPos := c.GetPosition()
+		emptyPlots := world.GetEmptyPlots()
+		totalPlots := world.GetGridTotalPlots()
+
+		// 1. DÉPÔT PRIORITAIRE : Si on est seul sur une case vide, on pose d'abord la mousse
+		if world.GetTileState(currentPos) == "alone" {
+			return Action{Type: "spawn_trap", Metadata: map[string]interface{}{"trap_type": "moss_lure"}}
+		}
+
+		// 2. RÉACTIVITÉ : S'il n'y a aucune activité dans le rayon de 4 cases, on reste immobile
+		if !world.HasActivityNearby(currentPos, 4) {
+			return Action{Type: "idle"}
+		}
+
+		// 3. FUITE : S'il n'y a plus aucun vide ET que la grille est saturée de pièges
+		if len(emptyPlots) == 0 && world.IsGridSaturatedWithTraps() {
+			return Action{Type: "flee"}
+		}
+
+		// AGRESSIVITÉ : Max (100) quand la moitié des cases sont vides
+		if totalPlots > 0 {
+			c.Behavior.Aggression = (len(emptyPlots) * 200) / totalPlots
+			if c.Behavior.Aggression > 100 {
+				c.Behavior.Aggression = 100
+			}
+		}
+
+		// 4. NAVIGATION DÉTERMINISTE (Anticipation joueur)
+		if len(emptyPlots) > 0 {
+			fmt.Printf("[MOSS MONKEY] %s à %v voit %d cases vides\n", c.GetID(), currentPos, len(emptyPlots))
+
+			var nearest entity.Position
+			minDist := 9999
+			for _, p := range emptyPlots {
+				d := abs(p.X-currentPos.X) + abs(p.Y-currentPos.Y)
+				if d < minDist {
+					minDist = d
+					nearest = p
+				} else if d == minDist {
+					// Priorité déterministe : Haut puis Gauche pour la prévisibilité
+					if p.Y < nearest.Y || (p.Y == nearest.Y && p.X < nearest.X) {
+						nearest = p
+					}
+				}
+			}
+
+			fmt.Printf("[MOSS MONKEY] Cible choisie : %v (distance: %d)\n", nearest, minDist)
+
+			// Déplacement d'une case vers la cible
+			dx, dy := nearest.X-currentPos.X, nearest.Y-currentPos.Y
+			var move entity.Position
+			if abs(dx) > abs(dy) {
+				move.X = sign(dx)
+			} else {
+				move.Y = sign(dy)
+			}
+
+			if world.IsValidMove(entity.Position{X: currentPos.X + move.X, Y: currentPos.Y + move.Y}) {
+				return Action{Type: "move", Direction: move}
+			}
+		}
+		return Action{Type: "idle"}
+
 	case "fleeing":
 		// S'éloigne du joueur
 		playerPos := world.GetPlayerPosition()
@@ -385,6 +453,42 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMovementProfile(FleeingProfile())
 		c.AddTag("passive")
 		c.AddTag("elusive")
+
+	case "moss_monkey":
+		c.SetBehavior(component.Behavior{
+			State:       "spreading_moss",
+			Territorial: true,
+		})
+		c.SetMobility(component.Mobility{
+			CanMove: true,
+			Speed:   1,
+		})
+		c.SetMovementProfile(&MovementProfile{
+			Trigger: MovementTrigger{
+				Type:   TriggerProximity,
+				Radius: 4,
+			},
+			Navigation: NavigationLogic{
+				Type:   NavAttraction,
+				Target: TargetEmpty,
+			},
+			Mode: MovementMode{
+				Type: ModeBento,
+			},
+			Frequency: MovementFrequency{
+				Type:  FreqDelay,
+				Delay: 1,
+			},
+			Orientation: Orientation{
+				Direction: DirSouth,
+			},
+			Collision: CollisionHandler{
+				Type: CollideSlide,
+			},
+		})
+		c.AddTag("territorial")
+		c.AddTag("dangerous_on_reveal")
+		c.AddTag("climb") // Permet de passer par-dessus les autres tuiles
 
 	default:
 		return nil, fmt.Errorf("espèce inconnue: %s", species)

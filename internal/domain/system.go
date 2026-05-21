@@ -64,6 +64,9 @@ type World struct {
 
 	// Real-time turn pressure timer
 	TurnTimer *TurnTimer
+
+	// Référence vers l'engine (pour la communication entre systèmes)
+	Engine *Engine
 }
 
 func NewWorld() *World {
@@ -664,10 +667,6 @@ func (w *World) SpawnTrap(gridID string, pos entity.Position) (entity.Entity, er
 		return nil, err
 	}
 
-	if len(plot.EntitiesID) > 0 {
-		return nil, fmt.Errorf("position %v déjà occupée", pos)
-	}
-
 	// Création explicite d'un pointeur vers une BaseEntity
 	trapPtr := &entity.BaseEntity{
 		ID:       entity.NewID(),
@@ -806,9 +805,16 @@ func (w *World) RemoveEntity(id entity.ID) {
 		return
 	}
 
-	grid, ok := w.Grids[e.GetGridID()]
+	pos := e.GetPosition()
+	gridID := e.GetGridID()
+
+	// Enregistre l'activité pour les déclencheurs de créatures
+	if w.Engine != nil {
+		w.Engine.TrackTileReveal(board.Position{X: pos.X, Y: pos.Y})
+	}
+
+	grid, ok := w.Grids[gridID]
 	if ok {
-		pos := e.GetPosition()
 		_, err := grid.RemoveEntity(board.Position{X: pos.X, Y: pos.Y}, idStr)
 		if err != nil {
 			fmt.Printf("Erreur lors du retrait du board: %v\n", err)
@@ -892,7 +898,17 @@ func (s *PropagationSystem) Update(world *World) {
 		}
 
 		pos := e.GetPosition()
-		neighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
+		allNeighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
+
+		// Filtre pour ne garder que les voisins cardinaux (Haut, Bas, Gauche, Droite)
+		var neighbors []*board.Plot
+		for _, n := range allNeighbors {
+			// Distance de Manhattan == 1 signifie que c'est un voisin direct (pas une diagonale)
+			if abs(n.Position.X-pos.X)+abs(n.Position.Y-pos.Y) == 1 {
+				neighbors = append(neighbors, n)
+			}
+		}
+
 		rand.Shuffle(len(neighbors), func(i, j int) { neighbors[i], neighbors[j] = neighbors[j], neighbors[i] })
 
 		maxToPropagate := lifecycle.PropagationCount
@@ -940,8 +956,17 @@ func (s *PropagationSystem) Update(world *World) {
 			// Création de la ressource
 			newRes, err := world.SpawnResource(e.GetGridID(), getResourceType(e), spawnPos)
 			if err != nil {
-				// Sécurité si le spawn échoue techniquement (ne devrait pas arriver)
 				continue
+			}
+
+			// NOUVEAU : 5% de chance que la nouvelle ressource soit stérile
+			if rand.Float32() < 0.99 {
+				if comp, ok := world.Components.Get(string(newRes.GetID()), "lifecycle"); ok {
+					if lc, ok := comp.(*component.Lifecycle); ok {
+						lc.CanPropagate = false
+						fmt.Printf("[PROPA] Une nouvelle %s est née stérile à %v\n", getResourceType(e), spawnPos)
+					}
+				}
 			}
 
 			// Ajustement de la hauteur dans le Plot si nécessaire
@@ -993,9 +1018,22 @@ func (s *CreatureAISystem) Update(world *World) {
 	creatures := world.Entities.GetByType(entity.TypeCreature)
 	ai := world.CreatureFactory.GetAI()
 
+// 	// Log des cases vides pour debug
+// 	if grid, ok := world.GetCurrentGrid(); ok {
+// 		empty := []board.Position{}
+// 		for pos, plot := range grid.Plots {
+// 			if len(plot.EntitiesID) == 0 {
+// 				empty = append(empty, pos)
+// 			}
+// 		}
+// 		if len(empty) > 0 {
+// 			fmt.Printf("[DEBUG] Cases vides sur %s : %v\n", grid.ID, empty)
+// 		}
+// 	}
+
 	for _, e := range creatures {
 		c, ok := e.(*creature.Creature)
-		if !ok || c.MovementProfile != nil {
+		if !ok {
 			continue
 		}
 
@@ -1008,6 +1046,12 @@ func (s *CreatureAISystem) Update(world *World) {
 
 		switch action.Type {
 		case "move":
+			// Si la créature a un profil de mouvement, on délègue le déplacement
+			// au CreatureMovementSystem pour profiter des triggers et animations.
+			if c.MovementProfile != nil {
+				continue
+			}
+
 			oldPos := c.GetPosition()
 			newPos := entity.Position{
 				X: oldPos.X + action.Direction.X,
@@ -1017,6 +1061,10 @@ func (s *CreatureAISystem) Update(world *World) {
 			if !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
 				continue
 			}
+
+			// NOUVEAU : Enregistre le mouvement pour le trigger de proximité
+			world.Engine.TrackTileReveal(board.Position{X: oldPos.X, Y: oldPos.Y})
+			world.Engine.TrackTileReveal(board.Position{X: newPos.X, Y: newPos.Y})
 
 			newPlot, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
 
@@ -1044,6 +1092,35 @@ func (s *CreatureAISystem) Update(world *World) {
 				oldPos,
 				newPos,
 			))
+
+		case "spawn_trap":
+			// Le singe dépose un leurre (piège qui ressemble à une tuile cachée)
+			trap, err := world.SpawnTrap(c.GetGridID(), c.GetPosition())
+			if err == nil {
+				if ent, ok := world.Entities.Get(trap.GetID()); ok {
+					ent.AddTag("moss_lure") // Utilisé par le renderer pour dessiner un dos de tuile
+					ent.SetState(entity.Hidden)
+				}
+
+				// Place le piège SOUS le singe dans la pile
+				if grid, ok := world.GetGrid(c.GetGridID()); ok {
+					pos := board.Position(c.GetPosition())
+					grid.RemoveEntity(pos, string(trap.GetID()))
+					grid.PlaceEntityAtBottom(pos, string(trap.GetID()))
+				}
+				fmt.Printf("[ACTION] %s a posé un leurre à %v\n", c.Species, c.GetPosition())
+			}
+
+		case "flee":
+			fmt.Printf("[ACTION] %s fuit la zone car le plateau est plein !\n", c.Species)
+			// Publie l'événement de fuite avant de retirer l'entité
+			world.EventBus.Publish(event.NewCreatureFledEvent(
+				string(c.GetID()),
+				c.Species,
+				c.GetGridID(),
+				c.GetPosition(),
+			))
+			world.RemoveEntity(c.GetID())
 
 		case "transform":
 			// Logique de transformation (pollinisation, etc.)
@@ -1213,8 +1290,43 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 		return c.MovementProfile.Orientation.ToVector()
 
 	case creature.NavAttraction:
-		playerPos := world.playerPosition
 		current := c.GetPosition()
+
+		// Cas spécial : Singe Mousse qui cherche le vide
+		if nav.Target == creature.TargetEmpty {
+			emptyPlots := []board.Position{}
+			for pos, plot := range grid.Plots {
+				if len(plot.EntitiesID) == 0 {
+					emptyPlots = append(emptyPlots, pos)
+				}
+			}
+
+			if len(emptyPlots) == 0 {
+				return entity.Position{X: 0, Y: 0}
+			}
+
+			// Recherche déterministe (Haut-Gauche) de la case la plus proche
+			var nearest board.Position
+			minDist := 9999
+			for _, p := range emptyPlots {
+				d := abs(p.X-current.X) + abs(p.Y-current.Y)
+				if d < minDist {
+					minDist = d
+					nearest = p
+				} else if d == minDist {
+					if p.Y < nearest.Y || (p.Y == nearest.Y && p.X < nearest.X) {
+						nearest = p
+					}
+				}
+			}
+			return entity.Position{
+				X: sign(nearest.X - current.X),
+				Y: sign(nearest.Y - current.Y),
+			}
+		}
+
+		// Défaut : Attraction vers le joueur
+		playerPos := world.playerPosition
 		return entity.Position{
 			X: sign(playerPos.X - current.X),
 			Y: sign(playerPos.Y - current.Y),
@@ -1244,6 +1356,11 @@ func (s *CreatureMovementSystem) isWalkable(c *creature.Creature, pos entity.Pos
 
 	// Mode Phase (spectres) : traverse tout dans les limites
 	if c.MovementProfile != nil && c.MovementProfile.Collision.Type == creature.CollidePhase {
+		return true
+	}
+
+	// Capacité "Grimpe" : permet de passer par-dessus les autres entités
+	if c.HasTag("climb") {
 		return true
 	}
 
@@ -1469,6 +1586,35 @@ func (wa *worldAdapter) GetResources(pos entity.Position, radius int) []string {
 	return result
 }
 
+func (wa *worldAdapter) GetEmptyPlots() []entity.Position {
+	var empty []entity.Position
+	for pos, plot := range wa.grid.Plots {
+		if len(plot.EntitiesID) == 0 {
+			empty = append(empty, entity.Position{X: pos.X, Y: pos.Y})
+		}
+	}
+	return empty
+}
+
+func (wa *worldAdapter) GetGridTotalPlots() int {
+	return wa.grid.Width * wa.grid.Height
+}
+
+func (wa *worldAdapter) HasActivityNearby(pos entity.Position, radius int) bool {
+	// Vérifie si une révélation ou un mouvement a eu lieu dans le rayon
+	if wa.world.Engine.movementSystem == nil {
+		return false
+	}
+
+	for _, activityPos := range wa.world.Engine.movementSystem.recentReveals {
+		dist := abs(activityPos.X-pos.X) + abs(activityPos.Y-pos.Y)
+		if dist <= radius {
+			return true
+		}
+	}
+	return false
+}
+
 func (wa *worldAdapter) IsValidMove(pos entity.Position) bool {
 	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
 	if err != nil {
@@ -1496,15 +1642,42 @@ func (wa *worldAdapter) GetTileState(pos entity.Position) string {
 		return "invalid"
 	}
 
-	if len(tile.EntitiesID) == 0 {
+	count := len(tile.EntitiesID)
+	if count == 0 {
 		return "empty"
 	}
 
-	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
-		return ent.GetState().String()
+	// CAS SPÉCIAL : Si la case ne contient qu'une seule entité, l'IA vérifie si c'est elle-même
+	// (Puisque GetTileState est appelé par une créature, si count == 1, c'est forcément elle)
+	if count == 1 {
+		return "alone"
 	}
-	return "unknown"
+
+	return "occupied"
+}
+
+func (wa *worldAdapter) IsGridSaturatedWithTraps() bool {
+	// On considère la grille saturée s'il ne reste plus aucune ressource à matcher
+	// et aucune créature à saboter (autre que les singes mousses eux-mêmes)
+	for _, plot := range wa.grid.Plots {
+		for _, id := range plot.EntitiesID {
+			if ent, ok := wa.world.Entities.Get(entity.ID(id)); ok {
+				eType := ent.GetType()
+				// S'il reste une ressource ou une créature (autre que moss_monkey), la grille n'est pas saturée
+				if eType == entity.TypeResource {
+					return false
+				}
+				if eType == entity.TypeCreature {
+					if c, ok := ent.(*creature.Creature); ok {
+						if c.Species != "moss_monkey" {
+							return false
+						}
+					}
+				}
+			}
+		}
+	}
+	return true
 }
 
 func abs(x int) int {
@@ -1906,6 +2079,9 @@ func NewEngine(world *World) *Engine {
 		lootSystem:     lootSys,
 	}
 
+	// Lie l'engine au monde pour permettre aux systèmes de communiquer
+	world.Engine = e
+
 	// S'abonne aux entrées de grille
 	world.EventBus.SubscribeFunc(event.GridEntered, func(ev event.Event) {
 		gridID := ev.Payload["grid_id"].(string)
@@ -1936,13 +2112,13 @@ func (e *Engine) Update() {
 		}
 	}
 
-	if e.movementSystem != nil {
-		e.movementSystem.TrackReveal(board.Position{}) // Utilisation factice pour correspondre à l'ancienne signature si nécessaire
-		e.movementSystem.ClearReveals()
-	}
-
 	for _, sys := range e.systems {
 		sys.Update(e.world)
+	}
+
+	// Nettoie les révélations après le traitement des systèmes
+	if e.movementSystem != nil {
+		e.movementSystem.ClearReveals()
 	}
 
 	e.world.EventBus.ProcessQueue()
