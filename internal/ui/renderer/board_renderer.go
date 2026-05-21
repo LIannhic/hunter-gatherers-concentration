@@ -9,6 +9,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
@@ -35,6 +36,12 @@ type BoardRenderer struct {
 
 	// Gestionnaire réactif des boutons d'action
 	ActionButtons *actionbuttons.Manager
+
+	// Effet renderer pour les shaders
+	effectRenderer *EffectRenderer
+
+	// Effets de scanner en cours: clé = gridID
+	activeScannerEffects map[string]*ScannerEffect
 }
 
 // FlipAnimation représente l'état d'une animation de flip
@@ -46,6 +53,14 @@ type FlipAnimation struct {
 	Speed         float64
 	EntityID      string           // L'entité à afficher à la fin
 	TileState     entity.TileState // État final de la tuile (changé board vers entity)
+}
+
+// ScannerEffect représente l'état d'un effet de scanner
+type ScannerEffect struct {
+	GridID   string
+	Progress float64 // 0.0 à 1.0
+	Duration float64 // Durée totale en secondes
+	Elapsed  float64 // Temps écoulé en secondes
 }
 
 // IsActive retourne true si l'animation est en cours
@@ -64,14 +79,22 @@ func (a *FlipAnimation) GetCurrentRotation() (rotateX, rotateY float64) {
 
 // NewBoardRenderer crée un nouveau renderer
 func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
+	effectRenderer, err := NewEffectRenderer()
+	if err != nil {
+		fmt.Printf("[ERROR] Failed to initialize effect renderer: %v\n", err)
+		effectRenderer = nil
+	}
+
 	return &BoardRenderer{
-		assets:         am,
-		tileSize:       ui.TileSize,
-		gridOffsetX:    ui.PlaymatX + ui.BoardRelativeX,
-		gridOffsetY:    ui.PlaymatY + ui.BoardRelativeY,
-		gridSpacing:    0,
-		gridsPerRow:    1,
-		flipAnimations: make(map[string]*FlipAnimation),
+		assets:               am,
+		tileSize:             ui.TileSize,
+		gridOffsetX:          ui.PlaymatX + ui.BoardRelativeX,
+		gridOffsetY:          ui.PlaymatY + ui.BoardRelativeY,
+		gridSpacing:          0,
+		gridsPerRow:          1,
+		flipAnimations:       make(map[string]*FlipAnimation),
+		effectRenderer:       effectRenderer,
+		activeScannerEffects: make(map[string]*ScannerEffect),
 	}
 }
 
@@ -121,6 +144,32 @@ func (r *BoardRenderer) UpdateAnimations() {
 	}
 }
 
+// UpdateEffects met à jour tous les effets actifs
+func (r *BoardRenderer) UpdateEffects(deltaTime float64) {
+	for gridID, effect := range r.activeScannerEffects {
+		effect.Elapsed += deltaTime
+		effect.Progress = effect.Elapsed / effect.Duration
+		if effect.Progress >= 1.0 {
+			effect.Progress = 1.0
+			delete(r.activeScannerEffects, gridID)
+		}
+	}
+}
+
+// SubscribeToEvents inscrit le renderer aux événements du monde
+func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
+	world.EventBus.SubscribeFunc(event.Type("scanner_triggered"), func(e event.Event) {
+		if gridID, ok := e.Payload["grid_id"].(string); ok {
+			r.activeScannerEffects[gridID] = &ScannerEffect{
+				GridID:   gridID,
+				Progress: 0.0,
+				Duration: 2.0,
+				Elapsed:  0.0,
+			}
+		}
+	})
+}
+
 // GetTileSize retourne la taille des tuiles (en int pour compatibilité)
 func (r *BoardRenderer) GetTileSize() int {
 	return int(r.tileSize)
@@ -133,30 +182,34 @@ func (r *BoardRenderer) GetGridOffset() (int, int) {
 
 // Render dessine le plateau complet
 func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
-	// Dessine le Playmat
+	// 1. On dessine le fond du Playmat et les sorties
 	r.renderPlaymat(screen, world)
 
-	// Met à jour les animations
 	r.UpdateAnimations()
+	r.UpdateEffects(1.0 / 60.0)
 
-	// Dessine seulement le grid actif sur le playmat
 	if world.CurrentGridID != "" {
-		r.renderGrid(screen, world.CurrentGridID, world)
+		// 2. On dessine la grille normalement (cachée)
+		r.renderGrid(screen, world.CurrentGridID, world, false, false)
+
+		// 3. On dessine l'effet de scanner (Shader)
+		r.renderScannerEffects(screen, world.CurrentGridID, world)
 	}
+
+	// 4. On dessine les boutons d'action en DERNIER
+	// Pour qu'ils soient au-dessus de tout (grille + scanner)
+	r.renderActionButtons(screen)
 }
 
 func (r *BoardRenderer) renderPlaymat(screen *ebiten.Image, world *domain.World) {
 	// Playmat background
 	vector.StrokeRect(screen, ui.PlaymatX, ui.PlaymatY, ui.PlaymatW, ui.PlaymatH, 1, color.RGBA{100, 100, 100, 255}, true)
 
-	// Action buttons (réactif)
-	r.renderActionButtons(screen)
-
 	// Exits
-	r.renderExitTiles(screen, ui.ExitNorthX, ui.ExitNorthY, board.North, world)
-	r.renderExitTiles(screen, ui.ExitEastX, ui.ExitEastY, board.East, world)
-	r.renderExitTiles(screen, ui.ExitSouthX, ui.ExitSouthY, board.South, world)
-	r.renderExitTiles(screen, ui.ExitWestX, ui.ExitWestY, board.West, world)
+	r.renderExitTiles(screen, ui.ExitNorthX, ui.ExitNorthY, board.North, world, false, false)
+	r.renderExitTiles(screen, ui.ExitEastX, ui.ExitEastY, board.East, world, false, false)
+	r.renderExitTiles(screen, ui.ExitSouthX, ui.ExitSouthY, board.South, world, false, false)
+	r.renderExitTiles(screen, ui.ExitWestX, ui.ExitWestY, board.West, world, false, false)
 }
 
 // renderActionButtons dessine les 4 boutons d'action selon leur état réactif courant.
@@ -230,9 +283,15 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 	}
 }
 
-func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, dir board.Direction, world *domain.World) {
-	ex := ui.PlaymatX + rx
-	ey := ui.PlaymatY + ry
+func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, dir board.Direction, world *domain.World, forceReveal bool, isLocalToPlaymat bool) {
+	var ex, ey float64
+	if isLocalToPlaymat {
+		ex = rx
+		ey = ry
+	} else {
+		ex = ui.PlaymatX + rx
+		ey = ui.PlaymatY + ry
+	}
 
 	isOpen := world.IsNavigationOpen(world.CurrentGridID)
 	hasExit := false
@@ -257,6 +316,12 @@ func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, di
 		var tileState entity.TileState = entity.Hidden | entity.Blocked
 		if grid != nil {
 			tileState = grid.ExitsState[dir][i]
+		}
+
+		// Révélation forcée par le scanner
+		if forceReveal {
+			tileState |= entity.Revealed
+			tileState &= ^entity.Hidden
 		}
 
 		// Mise à jour dynamique du flag Blocked selon isOpen et hasExit
@@ -401,7 +466,7 @@ func (r *BoardRenderer) isPortalPosition(pos board.Position) bool {
 }
 
 // renderGrid dessine un grid spécifique
-func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *domain.World) {
+func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *domain.World, forceReveal bool, isLocalToPlaymat bool) {
 	grid, ok := world.GetGrid(gridID)
 	if !ok {
 		return
@@ -409,19 +474,26 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 
 	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
 
-	// Rendu de la grille
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
 			pos := board.Position{X: x, Y: y}
 
-			sx, sy := r.calculateTileScreenPos(pos, grid, isPortalZone)
+			var sx, sy float64
+			if isLocalToPlaymat {
+				// Position relative au Playmat (pour le shader)
+				absX, absY := r.calculateTileScreenPos(pos, grid, isPortalZone)
+				sx = absX - ui.PlaymatX
+				sy = absY - ui.PlaymatY
+			} else {
+				sx, sy = r.calculateTileScreenPos(pos, grid, isPortalZone)
+			}
 
 			plot, ok := grid.Plots[pos]
 			if !ok {
 				r.renderEmptySquareAt(screen, sx, sy)
 				continue
 			}
-			r.renderTileAt(screen, sx, sy, gridID, plot, world)
+			r.renderTileAt(screen, sx, sy, gridID, plot, world, forceReveal)
 		}
 	}
 }
@@ -435,7 +507,8 @@ func (r *BoardRenderer) renderEmptySquareAt(screen *ebiten.Image, x, y float64) 
 }
 
 // renderTileAt dessine une tuile à une position écran spécifique
-func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID string, plot *board.Plot, world *domain.World) {
+// renderTileAt dessine une tuile à une position écran spécifique
+func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID string, plot *board.Plot, world *domain.World, forceReveal bool) {
 	if len(plot.EntitiesID) == 0 {
 		r.renderEmptySquareAt(screen, x, y)
 		return
@@ -444,13 +517,18 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
 	ent, ok := world.Entities.Get(entity.ID(topID))
 	if !ok {
-		// Ce cas arrive si l'entité est absente du manager mais présente sur la grille (desync)
-		// fmt.Printf("[RENDER ERR] Entity %s not found in manager at %v\n", topID, plot.Position)
 		r.renderEmptySquareAt(screen, x, y)
 		return
 	}
 
 	visualState := ent.GetState()
+	// Si on force la révélation (pour le scanner), on modifie l'état visuel localement
+	if forceReveal {
+		visualState |= entity.Revealed
+		visualState &= ^entity.Hidden
+	}
+
+	// --- RÉINTRODUCTION DE LA VARIABLE ANIMATION ---
 	var animation *FlipAnimation
 	for _, anim := range r.flipAnimations {
 		if anim.Position == plot.Position && (gridID == "" || anim.GridID == gridID) {
@@ -460,7 +538,8 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 	}
 
 	var tileImg *ebiten.Image
-	isFlipping := animation != nil && animation.IsActive()
+	// Pour le scanner (forceReveal), on ignore l'animation de flip pour montrer le contenu fixe
+	isFlipping := animation != nil && animation.IsActive() && !forceReveal
 	showRevealedSide := false
 	if isFlipping {
 		if animation.TileState&entity.Hidden != 0 {
@@ -481,7 +560,7 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 			tileImg = r.assets.GetImage("tile_hidden")
 		}
 	} else {
-		// Gestion des états prioritaires
+		// Gestion des états prioritaires (utilisé aussi par forceReveal)
 		if visualState&entity.Matched != 0 {
 			tileImg = r.assets.GetImage("tile_matched")
 		} else if visualState&entity.Revealed != 0 {
@@ -507,9 +586,6 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 
 		// Superposition du cadenas si Blocked
 		if visualState&entity.Blocked != 0 {
-			// Si c'est bloqué, on peut soit changer d'image soit superposer plus tard.
-			// Pour l'instant, on utilise l'image 'tile_sealed' si c'est caché et bloqué,
-			// ou 'tile_blocked' (croix rouge) si c'est révélé et bloqué.
 			if visualState&entity.Revealed != 0 {
 				tileImg = r.assets.GetImage("tile_blocked")
 			} else {
@@ -528,7 +604,7 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 		op.GeoM.Translate(centerX, centerY)
 	}
 
-	if animation != nil && animation.IsActive() {
+	if isFlipping {
 		rotateX, rotateY := animation.GetCurrentRotation()
 		if rotateX != 0 {
 			op.GeoM.Translate(0, -centerY)
@@ -552,17 +628,12 @@ func (r *BoardRenderer) renderTileAt(screen *ebiten.Image, x, y float64, gridID 
 	screen.DrawImage(tileImg, op)
 
 	shouldShowContent := visualState&entity.Revealed != 0 || visualState&entity.Matched != 0
-	if animation != nil && animation.IsActive() {
+	if isFlipping {
 		if animation.TileState&entity.Hidden != 0 {
 			shouldShowContent = animation.Progress < 0.5
 		} else {
 			shouldShowContent = animation.Progress > 0.5
 		}
-	}
-
-	if ent.GetType() == entity.TypeStructure {
-		// print pour débugger l'affichage des structures si nécessaire
-		// fmt.Printf("[RENDER] Structure %s (tags: %v) at %v state %s\n", ent.GetID(), ent.HasTag("commencement_portal"), plot.Position, visualState)
 	}
 
 	if shouldShowContent && ent.GetType() != entity.TypeTrap {
@@ -695,4 +766,43 @@ func (r *BoardRenderer) RenderPortalPlacementPreview(screen *ebiten.Image, cente
 	width := 3*r.tileSize + 2*spacingX
 	height := 3*r.tileSize + 2*spacingY
 	vector.StrokeRect(screen, float32(x), float32(y), float32(width), float32(height), 4, color.RGBA{0, 200, 100, 120}, true)
+}
+
+func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string, world *domain.World) {
+	effect, ok := r.activeScannerEffects[gridID]
+	if !ok || r.effectRenderer == nil {
+		return
+	}
+
+	// Dimensions fixes du Playmat (700x700)
+	playmatW, playmatH := ui.PlaymatW, ui.PlaymatH
+	playmatX, playmatY := ui.PlaymatX, ui.PlaymatY
+
+	// On crée l'image source qui contiendra la version RÉVÉLÉE de tout le Playmat
+	srcImg := ebiten.NewImage(int(playmatW), int(playmatH))
+
+	// NOUVEAU : On remplit le fond avec une couleur sombre mais non-transparente
+	// Cela permet au shader d'afficher la ligne bleue même là où il n'y a pas de tuiles.
+	srcImg.Fill(color.RGBA{15, 15, 20, 255})
+
+	// 1. On dessine les sorties RÉVÉLÉES
+	r.renderExitTiles(srcImg, ui.ExitNorthX, ui.ExitNorthY, board.North, world, true, true)
+	r.renderExitTiles(srcImg, ui.ExitEastX, ui.ExitEastY, board.East, world, true, true)
+	r.renderExitTiles(srcImg, ui.ExitSouthX, ui.ExitSouthY, board.South, world, true, true)
+	r.renderExitTiles(srcImg, ui.ExitWestX, ui.ExitWestY, board.West, world, true, true)
+
+	// 2. On dessine la grille en mode "forceReveal"
+	// forceReveal=true, isLocalToPlaymat=true
+	r.renderGrid(srcImg, gridID, world, true, true)
+
+	// Animation calquée sur la largeur totale du Playmat
+	waveProgress := float32(playmatX) + (float32(playmatW) * float32(effect.Progress))
+	waveErase := waveProgress - 200.0 // Traînée plus longue (200px)
+	waveThickness := float32(40.0)    // Ligne plus épaisse
+	revealColor := color.RGBA{0, 200, 255, 255} // Bleu plus saturé
+
+	// Rendu final via le shader
+	r.effectRenderer.DrawScannerEffect(screen, srcImg, int(playmatX), int(playmatY), waveProgress, waveErase, waveThickness, revealColor)
+
+	srcImg.Dispose()
 }

@@ -1800,14 +1800,23 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		return
 	}
 
-	// Un match = un loot
-	loot := &player.LootItem{
-		ID:          string(entity.NewID()),
-		Name:        name,
-		Type:        eType,
-		SourceID:    string(entID),
-		IsDeletable: true, // Par défaut, les items de match sont supprimables
-	}
+    sourceID := string(entID)
+    // Si c'est un EchoHound OU un Dreamberry, on applique le SourceID spécifique
+    if name == player.EchoHoundItemName {
+        sourceID = player.EchoHoundItemSourceID
+    } else if name == player.DreamberryItemName {
+        sourceID = player.DreamberryItemSourceID
+    }
+
+    // Un match = un loot
+    loot := &player.LootItem{
+        ID:          string(entity.NewID()),
+        Name:        name,
+        Type:        eType,
+        SourceID:    sourceID,
+        IsUsable:    name == player.EchoHoundItemName || name == player.DreamberryItemName,
+        IsDeletable: true,
+    }
 
 	// Tente d'ajouter à l'inventaire
 	err := s.world.Player.Inventory.AddItem(loot)
@@ -1818,9 +1827,7 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		return
 	}
 
-	// Une fois le loot acquis, on peut retirer les entités du board (Optionnel selon gameplay)
-	// Pour v0.2, les tuiles "Matched" restent visibles en taille 1.2x mais sont "récoltées" techniquement
-
+	// Une fois le loot acquis, on peut retirer les entités du board
 	fmt.Printf("[LOOT] Acquisition : %s (ID: %s)\n", name, entID)
 	s.world.EventBus.PublishImmediate(event.NewLootAcquiredEvent(loot.ID, loot.Name, loot.Type))
 }
@@ -1833,6 +1840,39 @@ func (s *LootSystem) getEntityName(ent entity.Entity) string {
 		return c.Species
 	}
 	return "unknown_loot"
+}
+
+//
+func (w *World) TriggerScannerEffect(gridID string) error {
+    _, ok := w.GetGrid(gridID)
+    if !ok {
+        return errors.New("grille introuvable")
+    }
+
+    fmt.Printf("[WORLD] L'Echo Hound hurle sur la zone %s !\n", gridID)
+
+    // 1. On crée une liste des positions des entités cachées
+    scannedPositions := make([]board.Position, 0)
+
+    for _, e := range w.Entities.GetAllActive() {
+        if e.GetGridID() == gridID && e.GetState()&entity.Hidden != 0 {
+            pos := e.GetPosition()
+            scannedPositions = append(scannedPositions, board.Position{X: pos.X, Y: pos.Y})
+        }
+    }
+
+    // 2. On publie un événement immédiat pour l'UI
+    w.EventBus.PublishImmediate(event.Event{
+        Type:     event.Type("scanner_triggered"),
+        SourceID: "echo_hound",
+        Payload: map[string]interface{}{
+            "grid_id":    gridID,
+            "positions":  scannedPositions,
+            "duration":   2.0,
+        },
+    })
+
+    return nil
 }
 
 // Engine orchestre tous les systèmes
