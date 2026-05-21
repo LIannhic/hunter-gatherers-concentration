@@ -75,6 +75,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Un identifiant unique (ID)
   - Une position sur la grille
   - Un état (TileState : Hidden, Revealed, Matched, Blocked)
+  - Des tags dynamiques pour le comportement ou le rendu (ex: `moss_lure`, `dangerous_on_reveal`)
   - Des composants optionnels (Lifecycle, Matchable, CreatureAI, etc.)
 
 - **Board/Grid** : Gère la géométrie du plateau
@@ -345,6 +346,16 @@ type MovementProfile struct {
 | `TriggerOnReveal` | Se déplace dès qu'elle est révélée |
 | `TriggerOnEcho` | Se déplace si une autre tuile est révélée |
 | `TriggerProximity` | Se déplace si action dans rayon N cases |
+
+#### Bestiaire (Exemples)
+
+| Créature | Déclencheur | Navigation | Mode | Description |
+|----------|-------------|------------|------|-------------|
+| **Lumifly** | Auto | Errance | Over | Luciole lumineuse volante |
+| **Shadowstalker** | Proximité | Attraction | Shadow | Prédateur discret |
+| **Echo Hound** | Echo | Attraction | Bento | Réagit aux révélations |
+| **Moss Monkey** | Proximité | Target Empty | Bento | Saboteur de cases vides (fuit si saturé) |
+| **Fleeing Sprite** | Proximité | Répulsion | Shadow | Esprit fuyard |
 
 #### Types de navigation
 

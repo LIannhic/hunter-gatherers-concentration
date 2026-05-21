@@ -234,7 +234,7 @@ func (app *Application) FillGridRandomly(gridID string) {
 
 	// 3. Types disponibles
 	resourceTypes := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
-	creatureTypes := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite"}
+	creatureTypes := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey"}
 
 	posIdx := 0
 	totalTiles := len(positions)
@@ -342,7 +342,7 @@ func (app *Application) setupCallbacks() {
 			gridID = app.World.CurrentGridID
 		}
 
-		creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite"}
+		creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey"}
 		species := creatures[rand.Intn(len(creatures))]
 
 		// Trouve une position libre aléatoire
@@ -428,6 +428,10 @@ func (app *Application) setupDebugCallbacks() {
 					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
 						if e.GetState() == entity.Hidden {
 							e.SetState(entity.Revealed)
+
+							// NOUVEAU : Enregistre l'activité pour les créatures
+							app.Engine.TrackTileReveal(tile.Position)
+
 							// Publie un événement pour forcer le renderer à mettre à jour les animations/états
 							app.World.EventBus.Publish(event.NewEntityRevealedEvent(
 								entity.Position{X: tile.Position.X, Y: tile.Position.Y},
@@ -502,6 +506,9 @@ func (app *Application) setupEventSubscriptions() {
 		flipDir, ok5 := e.Payload["flip_direction"].(board.FlipDirection)
 
 		if ok1 && ok3 && ok4 && ok5 {
+			// Enregistre la révélation pour les triggers de créatures
+			app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y})
+
 			if ent, ok := app.World.Entities.Get(entity.ID(entityID)); ok {
 				// Démarre l'animation de flip
 				app.Renderer.StartFlipAnimation(

@@ -111,7 +111,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 			TurnsToNext:      3,
 			CanPropagate:     true,
 			PropagationCount: 2,
-			MaxPropagations:  2,
+			MaxPropagations:  1,
 			PropagationLevel: 0,
 		})
 		r.SetValue(component.Value{
