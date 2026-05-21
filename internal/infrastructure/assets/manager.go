@@ -193,6 +193,8 @@ func (m *Manager) generateAllAssets() {
 	m.images["creature_specter"] = generateSpecter(size, SpecterPalette)
 	// Echo Hound
 	m.images["creature_echo_hound"] = generateEchoHound(size, EchoHoundPalette)
+	// Moss Monkey
+	m.images["creature_moss_monkey"] = generateMossMonkey(size, MossMonkeyPalette)
 	// Fleeing Sprite (utilise le skin de Flutterwing par défaut)
 	m.images["creature_fleeing_sprite"] = m.images["creature_flutterwing"]
 

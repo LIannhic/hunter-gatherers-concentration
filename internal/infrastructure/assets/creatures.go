@@ -79,6 +79,15 @@ var (
 		Eye:       color.RGBA{0, 255, 0, 255},     // Vert radioactif
 		Bg:        color.RGBA{50, 50, 50, 255},
 	}
+
+	// Moss Monkey - Singe mousse
+	MossMonkeyPalette = CreaturePalette{
+		Body:      color.RGBA{100, 140, 60, 255},  // Vert mousse
+		Highlight: color.RGBA{160, 200, 100, 255}, // Vert clair (mousse fraîche)
+		Shadow:    color.RGBA{60, 80, 40, 255},    // Vert forêt profond
+		Eye:       color.RGBA{255, 200, 0, 255},   // Ambre/Jaune
+		Bg:        color.RGBA{50, 45, 40, 255},    // Brun terreux
+	}
 )
 
 // generateLumifly crée l'icône d'une luciole
@@ -291,6 +300,42 @@ func generateEchoHound(size int, p CreaturePalette) *ebiten.Image {
 	vector.DrawFilledRect(img, centerX-5, centerY+10, 4, 15, p.Shadow, true)
 	vector.DrawFilledRect(img, centerX+5, centerY+10, 4, 15, p.Shadow, true)
 	vector.DrawFilledRect(img, centerX+15, centerY+10, 4, 15, p.Shadow, true)
+
+	return img
+}
+
+// generateMossMonkey crée l'icône d'un singe mousse
+func generateMossMonkey(size int, p CreaturePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+
+	centerX := float32(size / 2)
+	centerY := float32(size / 2)
+
+	// Corps (boule de mousse)
+	vector.DrawFilledCircle(img, centerX, centerY+5, 18, p.Body, true)
+	// Touffes de mousse
+	vector.DrawFilledCircle(img, centerX-10, centerY-5, 8, p.Body, true)
+	vector.DrawFilledCircle(img, centerX+10, centerY-5, 8, p.Body, true)
+	vector.DrawFilledCircle(img, centerX, centerY-12, 10, p.Highlight, true)
+
+	// Tête (plus sombre)
+	vector.DrawFilledCircle(img, centerX, centerY-5, 12, p.Shadow, true)
+
+	// Oreilles
+	vector.DrawFilledCircle(img, centerX-12, centerY-8, 5, p.Shadow, true)
+	vector.DrawFilledCircle(img, centerX+12, centerY-8, 5, p.Shadow, true)
+
+	// Yeux ambre
+	vector.DrawFilledCircle(img, centerX-4, centerY-7, 3, p.Eye, true)
+	vector.DrawFilledCircle(img, centerX+4, centerY-7, 3, p.Eye, true)
+	// Pupilles
+	vector.DrawFilledCircle(img, centerX-4, centerY-7, 1, color.Black, true)
+	vector.DrawFilledCircle(img, centerX+4, centerY-7, 1, color.Black, true)
+
+	// Bras (longs pour un singe)
+	vector.StrokeLine(img, centerX-15, centerY+5, centerX-22, centerY+20, 3, p.Body, true)
+	vector.StrokeLine(img, centerX+15, centerY+5, centerX+22, centerY+20, 3, p.Body, true)
 
 	return img
 }
