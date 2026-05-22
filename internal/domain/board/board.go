@@ -7,6 +7,38 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
+// Position est maintenant définie dans internal/domain/entity/entity.go
+type Position = entity.Position
+
+// Direction est maintenant définie dans internal/domain/entity/entity.go
+type Direction = entity.Direction
+
+const (
+	North = entity.DirNorth
+	East  = entity.DirEast
+	South = entity.DirSouth
+	West  = entity.DirWest
+)
+
+// FlipDirection est maintenant définie dans internal/domain/entity/entity.go
+type FlipDirection = entity.FlipDirection
+
+const (
+	FlipTop         = entity.FlipTop
+	FlipTopRight    = entity.FlipTopRight
+	FlipRight       = entity.FlipRight
+	FlipBottomRight = entity.FlipBottomRight
+	FlipBottom      = entity.FlipBottom
+	FlipBottomLeft  = entity.FlipBottomLeft
+	FlipLeft        = entity.FlipLeft
+	FlipTopLeft     = entity.FlipTopLeft
+	FlipCenter      = entity.FlipCenter
+)
+
+func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
+	return entity.CalculateFlipDirection(tileSize, localX, localY)
+}
+
 // Bearing représente l'orientation de la Grille (Cardinaux)
 type Bearing int
 
@@ -69,183 +101,18 @@ const (
 	StageClimax
 )
 
-// Position représente une coordonnée sur le plateau
-type Position struct {
-	X, Y int
-}
-
-func (p Position) Add(other Position) Position {
-	return Position{X: p.X + other.X, Y: p.Y + other.Y}
-}
-
-func (p Position) Distance(other Position) int {
-	dx := p.X - other.X
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := p.Y - other.Y
-	if dy < 0 {
-		dy = -dy
-	}
-	return dx + dy // Distance de Manhattan
-}
-
-func (p Position) String() string {
-	return fmt.Sprintf("(%d,%d)", p.X, p.Y)
-}
-
-// Direction pour les déplacements
-type Direction int
-
-const (
-	North Direction = iota
-	South
-	East
-	West
-)
-
-func (d Direction) Vector() Position {
+func DirectionVector(d Direction) Position {
 	switch d {
 	case North:
-		return Position{0, -1}
+		return Position{X: 0, Y: -1}
 	case South:
-		return Position{0, 1}
+		return Position{X: 0, Y: 1}
 	case East:
-		return Position{1, 0}
+		return Position{X: 1, Y: 0}
 	case West:
-		return Position{-1, 0}
+		return Position{X: -1, Y: 0}
 	}
-	return Position{0, 0}
-}
-
-// FlipDirection représente la direction de flip d'une tuile lors du reveal
-// Cette information est purement visuelle et n'impacte pas la logique métier
-type FlipDirection int
-
-const (
-	FlipTop FlipDirection = iota
-	FlipTopRight
-	FlipRight
-	FlipBottomRight
-	FlipBottom
-	FlipBottomLeft
-	FlipLeft
-	FlipTopLeft
-	FlipCenter // Flip direct (clic au centre)
-)
-
-func (f FlipDirection) String() string {
-	switch f {
-	case FlipTop:
-		return "top"
-	case FlipTopRight:
-		return "top-right"
-	case FlipRight:
-		return "right"
-	case FlipBottomRight:
-		return "bottom-right"
-	case FlipBottom:
-		return "bottom"
-	case FlipBottomLeft:
-		return "bottom-left"
-	case FlipLeft:
-		return "left"
-	case FlipTopLeft:
-		return "top-left"
-	case FlipCenter:
-		return "center"
-	}
-	return "unknown"
-}
-
-// ToRotationAngles retourne les angles de rotation (X, Y) pour l'animation de flip
-// en degrés, selon la direction. Utilisé par le renderer pour l'animation.
-func (f FlipDirection) ToRotationAngles() (rotateX, rotateY float64) {
-	switch f {
-	case FlipTop:
-		return -90, 0
-	case FlipTopRight:
-		return -45, 45
-	case FlipRight:
-		return 0, 90
-	case FlipBottomRight:
-		return 45, 45
-	case FlipBottom:
-		return 90, 0
-	case FlipBottomLeft:
-		return 45, -45
-	case FlipLeft:
-		return 0, -90
-	case FlipTopLeft:
-		return -45, -45
-	case FlipCenter:
-		return 0, 0
-	}
-	return 0, 0
-}
-
-// CalculateFlipDirection détermine la direction de flip basée sur la position
-// du clic dans une tuile. tileSize est la taille de la tuile, localX et localY
-// sont les coordonnées du clic relatives à la tuile (0,0 = coin supérieur gauche)
-func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
-	// Définit les zones (en pourcentage de la taille de la tuile)
-	// Centre : 40% au milieu
-	// Bords : 30% de chaque côté
-	centerStart := tileSize * 35 / 100
-	centerEnd := tileSize * 65 / 100
-
-	// Détermine la zone verticale
-	var vertical int // 0 = top, 1 = center, 2 = bottom
-	if localY < centerStart {
-		vertical = 0 // top
-	} else if localY > centerEnd {
-		vertical = 2 // bottom
-	} else {
-		vertical = 1 // center
-	}
-
-	// Détermine la zone horizontale
-	var horizontal int // 0 = left, 1 = center, 2 = right
-	if localX < centerStart {
-		horizontal = 0 // left
-	} else if localX > centerEnd {
-		horizontal = 2 // right
-	} else {
-		horizontal = 1 // center
-	}
-
-	// Combine pour obtenir la direction
-	switch vertical {
-	case 0: // top
-		switch horizontal {
-		case 0:
-			return FlipTopLeft
-		case 1:
-			return FlipTop
-		case 2:
-			return FlipTopRight
-		}
-	case 1: // center
-		switch horizontal {
-		case 0:
-			return FlipLeft
-		case 1:
-			return FlipCenter
-		case 2:
-			return FlipRight
-		}
-	case 2: // bottom
-		switch horizontal {
-		case 0:
-			return FlipBottomLeft
-		case 1:
-			return FlipBottom
-		case 2:
-			return FlipBottomRight
-		}
-	}
-
-	return FlipCenter
+	return Position{X: 0, Y: 0}
 }
 
 // Plot représente une case du plateau de jeu
@@ -278,7 +145,7 @@ func (p *Plot) PopEntity() (string, bool) {
 }
 
 func (p *Plot) String() string {
-	return fmt.Sprintf("Plot[%s entities=%v]", p.Position.String(), p.EntitiesID)
+	return fmt.Sprintf("Plot[%v entities=%v]", p.Position, p.EntitiesID)
 }
 
 type PlotModifier struct {
@@ -318,7 +185,7 @@ func NewGrid(id string, width, height int, biome BiomeType) *Grid {
 		ExitsState:    make(map[Direction][2]entity.TileState),
 	}
 
-	for d := Direction(0); d <= West; d++ {
+	for d := entity.DirNorth; d <= entity.DirWest; d++ {
 		g.ExitsState[d] = [2]entity.TileState{entity.Hidden | entity.Blocked, entity.Hidden | entity.Blocked}
 	}
 
@@ -399,8 +266,8 @@ func (g *Grid) GetNeighbors(pos Position) []*Plot {
 	var neighbors []*Plot
 
 	dirs := []Position{
-		{0, -1}, {0, 1}, {1, 0}, {-1, 0}, // N, S, E, W
-		{-1, -1}, {1, -1}, {-1, 1}, {1, 1}, // Diagonales (NW, NE, SW, SE)
+		{X: 0, Y: -1}, {X: 0, Y: 1}, {X: 1, Y: 0}, {X: -1, Y: 0}, // N, S, E, W
+		{X: -1, Y: -1}, {X: 1, Y: -1}, {X: -1, Y: 1}, {X: 1, Y: 1}, // Diagonales (NW, NE, SW, SE)
 	}
 
 	for _, d := range dirs {
@@ -415,4 +282,36 @@ func (g *Grid) GetNeighbors(pos Position) []*Plot {
 
 func (g *Grid) GetTileAt(x, y int) (*Plot, error) {
 	return g.Get(Position{X: x, Y: y})
+}
+
+// RotateClockwise effectue une rotation à 90° dans le sens horaire du plateau
+func (g *Grid) RotateClockwise() {
+	// 1. Mise à jour du Bearing (Orientation globale)
+	g.MainBearing = Bearing((int(g.MainBearing) + 1) % 4)
+
+	// 2. Transformation des coordonnées des parcelles (Plots)
+	newPlots := make(map[Position]*Plot)
+	for oldPos, plot := range g.Plots {
+		newPos := g.TransformPosition(oldPos)
+		plot.Position = newPos
+		newPlots[newPos] = plot
+	}
+	g.Plots = newPlots
+
+	// 3. Rotation des sorties (ExitsState)
+	newExitsState := make(map[Direction][2]entity.TileState)
+	// Nord -> Est -> Sud -> West -> Nord
+	newExitsState[East] = g.ExitsState[North]
+	newExitsState[South] = g.ExitsState[East]
+	newExitsState[West] = g.ExitsState[South]
+	newExitsState[North] = g.ExitsState[West]
+	g.ExitsState = newExitsState
+}
+
+// TransformPosition transforme une position locale lors d'une rotation horaire de 90°
+func (g *Grid) TransformPosition(pos Position) Position {
+	return Position{
+		X: g.Height - 1 - pos.Y,
+		Y: pos.X,
+	}
 }

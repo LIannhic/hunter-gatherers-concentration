@@ -437,7 +437,7 @@ func (app *Application) setupDebugCallbacks() {
 								entity.Position{X: tile.Position.X, Y: tile.Position.Y},
 								string(e.GetID()),
 								gID,
-								board.FlipCenter,
+								entity.FlipCenter,
 							))
 						}
 					}
@@ -463,7 +463,7 @@ func (app *Application) setupDebugCallbacks() {
 							entity.Position{X: tile.Position.X, Y: tile.Position.Y},
 							string(e.GetID()),
 							gID,
-							board.FlipCenter,
+							entity.FlipCenter,
 						))
 					}
 				}
@@ -503,7 +503,7 @@ func (app *Application) setupEventSubscriptions() {
 		position, ok1 := e.Payload["position"].(entity.Position)
 		entityID, ok3 := e.Payload["entity_id"].(string)
 		gridID, ok4 := e.Payload["grid_id"].(string)
-		flipDir, ok5 := e.Payload["flip_direction"].(board.FlipDirection)
+		flipDir, ok5 := e.Payload["flip_direction"].(entity.FlipDirection)
 
 		if ok1 && ok3 && ok4 && ok5 {
 			// Enregistre la révélation pour les triggers de créatures
@@ -617,13 +617,12 @@ func (app *Application) updateMenu() error {
 				app.SaveMenu.UpdateMetas(metas)
 				app.SaveMenu.SetVisible(true)
 			}
-		} else if app.hasSaves {
-			// Bouton "Changer de profil" (situé sous le bouton démarrer)
-			if y > 410 && y < 450 && x > 300 && x < 500 {
-				metas, _ := app.Persistence.GetSaveSummaries()
-				app.SaveMenu.UpdateMetas(metas)
-				app.SaveMenu.SetVisible(true)
-			}
+		} else if app.TitleScreen.IsPlaytestButtonClicked(x, y) {
+			app.StartPlaytestGame()
+		} else if app.hasSaves && app.TitleScreen.IsProfileButtonClicked(x, y) {
+			metas, _ := app.Persistence.GetSaveSummaries()
+			app.SaveMenu.UpdateMetas(metas)
+			app.SaveMenu.SetVisible(true)
 		}
 	}
 	return nil
@@ -636,7 +635,20 @@ func (app *Application) updatePlaying() error {
 
 	// Mise à jour du compte à rebours temps réel (60 fps fixe)
 	if app.World.TurnTimer != nil {
-		expired := app.World.TurnTimer.Update(1.0 / 60.0)
+		dt := 1.0 / 60.0
+
+		// 1. ARRÊT DU TIMER : zones de départ et de fin
+		isPortalZone := app.World.DreamPlane != nil && (app.World.CurrentGridID == app.World.DreamPlane.StartZoneID || app.World.CurrentGridID == app.World.DreamPlane.EndZoneID)
+		if isPortalZone {
+			dt = 0 // Stoppe l'écoulement
+		}
+
+		// 2. RALENTISSEMENT : pendant la prévisualisation (mode portail portable)
+		if app.Input.IsPortablePortalMode() {
+			dt /= 5.0 // 5x plus lent
+		}
+
+		expired := app.World.TurnTimer.Update(dt)
 		if expired {
 			fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
 			// Simule un Skip : recache les tuiles et consomme le tour
@@ -784,6 +796,21 @@ func (app *Application) StartGameWithSlot(slotID int) {
 	}
 }
 
+// StartPlaytestGame démarre une session de test dense
+func (app *Application) StartPlaytestGame() {
+	fmt.Println("[PLAYTEST] Starting playtest session")
+	app.sessionStartTime = time.Now()
+
+	app.World.Hub = meta.NewHub()
+	app.World.Player = player.New("playtest_player")
+	app.World.Difficulty = meta.GetSettings(meta.LevelPlaytest)
+
+	// Utilise le layout de test
+	app.World.GeneratePlaytestLayout("playtest_plane")
+
+	app.StartGame()
+}
+
 // StartGame démarre le jeu depuis le menu (logique commune)
 func (app *Application) StartGame() {
 	oldState := app.State
@@ -887,7 +914,7 @@ func (app *Application) Draw(screen *ebiten.Image) {
 
 // drawMenu dessine l'écran titre
 func (app *Application) drawMenu(screen *ebiten.Image) {
-	app.TitleScreen.Render(screen)
+	app.TitleScreen.Render(screen, app.hasSaves)
 
 	if app.hasSaves {
 		text.Draw(screen, "[ CHANGER DE PROFIL ]", basicfont.Face7x13, 335, 430, color.RGBA{150, 150, 255, 255})

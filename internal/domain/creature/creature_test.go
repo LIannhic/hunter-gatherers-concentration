@@ -82,6 +82,22 @@ func (m *mockWorldState) GetNearbyCreatures(pos entity.Position, radius int) []*
 	return nil
 }
 
+func (m *mockWorldState) GetEmptyPlots() []entity.Position {
+	return nil
+}
+
+func (m *mockWorldState) GetGridTotalPlots() int {
+	return 36
+}
+
+func (m *mockWorldState) IsGridSaturatedWithTraps() bool {
+	return false
+}
+
+func (m *mockWorldState) HasActivityNearby(pos entity.Position, radius int) bool {
+	return true
+}
+
 func (m *mockWorldState) GetResources(pos entity.Position, radius int) []string {
 	return nil
 }

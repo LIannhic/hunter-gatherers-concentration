@@ -167,7 +167,7 @@ func TestOrientationRelativeDirections(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		vec := o.GetRelativeDirection(tc.rel)
+		vec := GetRelativeDirection(&o, tc.rel)
 		if vec != tc.expected {
 			t.Errorf("%s from North: expected %v, got %v", tc.rel, tc.expected, vec)
 		}

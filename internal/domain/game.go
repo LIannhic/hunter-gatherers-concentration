@@ -27,8 +27,8 @@ type (
 	// Board & Environnement
 	Grid          = board.Grid
 	Plot          = board.Plot
-	Direction     = board.Direction
-	FlipDirection = board.FlipDirection
+	Direction     = entity.Direction
+	FlipDirection = entity.FlipDirection
 	PlotModifier  = board.PlotModifier
 	BiomeType     = board.BiomeType // Ajouté
 	Climate       = board.Climate   // Ajouté
@@ -86,10 +86,10 @@ const (
 	Blocked  = entity.Blocked
 
 	// Orientations
-	North = board.North
-	South = board.South
-	East  = board.East
-	West  = board.West
+	North = entity.DirNorth
+	South = entity.DirSouth
+	East  = entity.DirEast
+	West  = entity.DirWest
 
 	// Biomes (Ajoutés pour faciliter CreateGrid)
 	BiomeForest = board.BiomeForest
@@ -97,15 +97,15 @@ const (
 	BiomeDesert = board.BiomeDesert
 
 	// Flip directions
-	FlipTop         = board.FlipTop
-	FlipTopRight    = board.FlipTopRight
-	FlipRight       = board.FlipRight
-	FlipBottomRight = board.FlipBottomRight
-	FlipBottom      = board.FlipBottom
-	FlipBottomLeft  = board.FlipBottomLeft
-	FlipLeft        = board.FlipLeft
-	FlipTopLeft     = board.FlipTopLeft
-	FlipCenter      = board.FlipCenter
+	FlipTop         = entity.FlipTop
+	FlipTopRight    = entity.FlipTopRight
+	FlipRight       = entity.FlipRight
+	FlipBottomRight = entity.FlipBottomRight
+	FlipBottom      = entity.FlipBottom
+	FlipBottomLeft  = entity.FlipBottomLeft
+	FlipLeft        = entity.FlipLeft
+	FlipTopLeft     = entity.FlipTopLeft
+	FlipCenter      = entity.FlipCenter
 
 	// Game states
 	StateMenu     = event.StateMenu

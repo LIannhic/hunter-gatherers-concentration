@@ -531,7 +531,7 @@ func (c *UnlockNavigationCommand) Execute() error {
 
 type SwitchZoneCommand struct {
 	World     *domain.World
-	Direction board.Direction
+	Direction entity.Direction
 }
 
 func (c *SwitchZoneCommand) CanExecute() bool {
@@ -568,16 +568,33 @@ func (c *SwitchZoneCommand) Execute() error {
 	newPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
 
 	switch c.Direction {
-	case board.North:
+	case entity.DirNorth:
 		newPos = entity.Position{X: grid.Width / 2, Y: grid.Height - 1}
-	case board.South:
+	case entity.DirSouth:
 		newPos = entity.Position{X: grid.Width / 2, Y: 0}
-	case board.East:
+	case entity.DirEast:
 		newPos = entity.Position{X: 0, Y: grid.Height / 2}
-	case board.West:
+	case entity.DirWest:
 		newPos = entity.Position{X: grid.Width - 1, Y: grid.Height / 2}
 	}
 	c.World.SetPlayerPosition(newPos)
 
 	return nil
+}
+
+type RotateGridCommand struct {
+	World  *domain.World
+	GridID string
+}
+
+func (c *RotateGridCommand) CanExecute() bool {
+	_, ok := c.World.GetGrid(c.GridID)
+	return ok
+}
+
+func (c *RotateGridCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("grid not found")
+	}
+	return c.World.RotateGrid(c.GridID)
 }

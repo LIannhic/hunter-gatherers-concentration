@@ -120,6 +120,23 @@ func (g *LayoutGenerator) GenerateDreamPlane(id string, level meta.DifficultyLev
 	return plane
 }
 
+// GeneratePlaytestPlane génère un monde fixe et dense pour le test
+func (g *LayoutGenerator) GeneratePlaytestPlane(id string) *DreamPlane {
+	plane := NewDreamPlane(id)
+
+	// Une seule zone 6x6 dense
+	startGrid := NewGrid("zone_playtest", 6, 6, BiomeForest)
+	plane.AddZone(startGrid)
+	plane.StartZoneID = startGrid.ID
+	plane.EndZoneID = startGrid.ID // Départ = Fin pour le test simple
+	plane.Coords[startGrid.ID] = Position{4, 4}
+
+	// Setup structures
+	g.SetupPortalArea(startGrid, true)
+
+	return plane
+}
+
 func (g *LayoutGenerator) findAvailableDirectionAndCoords(plane *DreamPlane, zoneID string) (Direction, Position, bool) {
 	currentPos := plane.Coords[zoneID]
 	allDirs := []Direction{North, South, East, West}
@@ -134,7 +151,7 @@ func (g *LayoutGenerator) findAvailableDirectionAndCoords(plane *DreamPlane, zon
 		}
 
 		// Calcule les nouvelles coordonnées
-		vec := d.Vector()
+		vec := DirectionVector(d)
 		newPos := Position{X: currentPos.X + vec.X, Y: currentPos.Y + vec.Y}
 
 		// Vérifie les limites 9x9 (0..8)

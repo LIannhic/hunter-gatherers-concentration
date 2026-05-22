@@ -209,6 +209,85 @@ func (w *World) GenerateLayout(id string) {
 	w.CurrentGridID = w.DreamPlane.StartZoneID
 }
 
+// GeneratePlaytestLayout génère un monde de test dense avec toutes les entités
+func (w *World) GeneratePlaytestLayout(id string) {
+	gen := board.NewLayoutGenerator()
+	w.DreamPlane = gen.GeneratePlaytestPlane(id)
+
+	w.Grids = make(map[string]*board.Grid)
+	w.GridOrder = make([]string, 0)
+	w.Entities = entity.NewManager()
+	w.Components = component.NewStore()
+
+	grid := w.DreamPlane.Zones[w.DreamPlane.StartZoneID]
+	w.Grids[grid.ID] = grid
+	w.GridOrder = append(w.GridOrder, grid.ID)
+	w.CurrentGridID = grid.ID
+
+	// Population de test : une paire de chaque type
+	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "moss_monkey"}
+	resources := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
+
+	idx := 0
+	placePair := func(name string, isCreature bool) {
+		// Trouve des positions libres
+		count := 0
+		for y := 0; y < grid.Height && count < 2; y++ {
+			for x := 0; x < grid.Width && count < 2; x++ {
+				pos := board.Position{X: x, Y: y}
+				plot, _ := grid.Get(pos)
+				if plot.StructureID == "" && len(plot.EntitiesID) == 0 {
+					if isCreature {
+						_, _ = w.SpawnCreature(grid.ID, name, entity.Position(pos))
+					} else {
+						_, _ = w.SpawnResource(grid.ID, name, entity.Position(pos))
+					}
+					count++
+				}
+			}
+		}
+	}
+
+	for _, c := range creatures {
+		placePair(c, true)
+		idx++
+	}
+	for _, r := range resources {
+		placePair(r, false)
+		idx++
+	}
+}
+
+// RotateGrid fait pivoter une grille et met à jour ses entités
+func (w *World) RotateGrid(gridID string) error {
+	grid, ok := w.GetGrid(gridID)
+	if !ok {
+		return ErrGridNotFound
+	}
+
+	// 1. Rotation logique du plateau
+	grid.RotateClockwise()
+
+	// 2. Mise à jour de toutes les entités présentes sur cette grille
+	for _, e := range w.Entities.GetAllActive() {
+		if e.GetGridID() == gridID {
+			// Recalcule la position physique
+			oldPos := e.GetPosition()
+			newPos := grid.TransformPosition(oldPos)
+
+			// Met à jour la position dans l'interface et l'index du manager
+			_ = w.Entities.UpdatePosition(e.GetID(), newPos)
+
+			// Met à jour l'orientation (Tourner : +90°)
+			oldOrient := e.GetOrientation()
+			newOrient := entity.Direction((int(oldOrient) + 1) % 4)
+			e.SetOrientation(newOrient)
+		}
+	}
+
+	return nil
+}
+
 // GetGridForEntity retourne le grid sur lequel se trouve une entité
 func (w *World) GetGridForEntity(entityID string) (*board.Grid, bool) {
 	e, ok := w.Entities.Get(entity.ID(entityID))
@@ -571,6 +650,8 @@ func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) 
 
 	r := w.ResourceFactory.Create(rtype, entity.Position{X: pos.X, Y: pos.Y})
 	r.SetGridID(gridID)
+	// Orientation aléatoire pour les ressources
+	r.SetOrientation(entity.Direction(rand.Intn(4)))
 
 	grid, _ := w.GetGrid(gridID)
 	grid.InitialMatchableCount++
@@ -604,6 +685,8 @@ func (w *World) SpawnResourceLevel(gridID string, rtype string, pos entity.Posit
 
 	r := w.ResourceFactory.Create(rtype, entity.Position{X: pos.X, Y: pos.Y})
 	r.SetGridID(gridID)
+	// Orientation aléatoire pour les ressources
+	r.SetOrientation(entity.Direction(rand.Intn(4)))
 
 	grid, _ := w.GetGrid(gridID)
 	grid.InitialMatchableCount++
@@ -638,6 +721,11 @@ func (w *World) SpawnCreature(gridID string, species string, pos entity.Position
 	}
 
 	c.SetGridID(gridID)
+	// L'orientation est déjà définie par le factory/profil, mais on l'assure ici
+	if c.MovementProfile != nil {
+		c.SetOrientation(c.MovementProfile.Orientation.Direction)
+	}
+
 	grid, _ := w.GetGrid(gridID)
 	grid.InitialMatchableCount++
 
@@ -675,6 +763,7 @@ func (w *World) SpawnTrap(gridID string, pos entity.Position) (entity.Entity, er
 		GridID:   gridID,
 		Active:   true,
 		State:    entity.Hidden,
+		Orientation: entity.Direction(rand.Intn(4)),
 		Tags:     []string{"trap"},
 		Metadata: make(map[string]interface{}),
 	}
@@ -708,6 +797,7 @@ func (w *World) SpawnStructure(gridID string, stype string, pos entity.Position)
 		GridID:   gridID,
 		Active:   true,
 		State:    entity.Hidden,
+		Orientation: entity.DirNorth, // Par défaut pour les structures
 		Tags:     []string{stype},
 		Metadata: make(map[string]interface{}),
 	}
@@ -1848,7 +1938,7 @@ func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
 			if e.GetState()&entity.Hidden != 0 {
 				e.SetState(entity.Revealed)
 				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+					e.GetPosition(), string(e.GetID()), gridID, entity.FlipCenter))
 			}
 		}
 	}
@@ -1888,7 +1978,7 @@ func (s *PreviewSystem) revealHalfPairs(world *World, entities []entity.Entity, 
 			if e.GetState()&entity.Hidden != 0 {
 				e.SetState(entity.Revealed)
 				world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-					e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+					e.GetPosition(), string(e.GetID()), gridID, entity.FlipCenter))
 			}
 		}
 	}
@@ -1910,7 +2000,7 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 						// Portail de commencement : se cache et se bloque de manière permanente
 						e.SetState(entity.Hidden | entity.Blocked)
 						world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-							e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+							e.GetPosition(), string(e.GetID()), gridID, entity.FlipCenter))
 						continue
 					}
 					// Les autres structures (dolmens, portail de fin) restent révélées
@@ -1920,7 +2010,7 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 				if e.GetState()&entity.Revealed != 0 {
 					e.SetState(entity.Hidden)
 					world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-						e.GetPosition(), string(e.GetID()), gridID, board.FlipCenter))
+						e.GetPosition(), string(e.GetID()), gridID, entity.FlipCenter))
 				}
 			}
 		}

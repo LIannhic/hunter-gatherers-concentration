@@ -90,6 +90,11 @@ func (m *Manager) generateAllAssets() {
 	defaultImg.Fill(color.RGBA{100, 100, 100, 255})
 	m.images["default"] = defaultImg
 
+	// Image blanche (pour les triangles colorés)
+	whiteImg := ebiten.NewImage(1, 1)
+	whiteImg.Fill(color.White)
+	m.images["white"] = whiteImg
+
 	// === TUILES AVEC THEMES ===
 	for themeName, theme := range m.themes {
 		// Tuile cachée avec motif décoratif

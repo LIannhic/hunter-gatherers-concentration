@@ -2,6 +2,8 @@ package component
 
 import (
 	"time"
+
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
 // Component est l'interface marqueur pour l'ECS
@@ -229,3 +231,34 @@ type Concealment struct {
 }
 
 func (c Concealment) Type() string { return "concealment" }
+
+// --- Types partagés pour le Domaine ---
+
+// Orientation est un composant qui stocke la direction actuelle
+type Orientation struct {
+	Direction entity.Direction
+}
+
+func (o Orientation) Type() string { return "orientation" }
+
+func (o *Orientation) ToVector() entity.Position {
+	switch o.Direction {
+	case entity.DirNorth:
+		return entity.Position{X: 0, Y: -1}
+	case entity.DirEast:
+		return entity.Position{X: 1, Y: 0}
+	case entity.DirSouth:
+		return entity.Position{X: 0, Y: 1}
+	case entity.DirWest:
+		return entity.Position{X: -1, Y: 0}
+	}
+	return entity.Position{X: 0, Y: 0}
+}
+
+func (o *Orientation) Rotate(degrees int) {
+	steps := (degrees / 90) % 4
+	if steps < 0 {
+		steps += 4
+	}
+	o.Direction = entity.Direction((int(o.Direction) + steps) % 4)
+}

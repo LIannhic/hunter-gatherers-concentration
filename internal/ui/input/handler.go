@@ -307,6 +307,13 @@ func (h *Handler) handleMouse() error {
 			fmt.Printf("[SÉLECTION] Tuile en %v sur %s sélectionnée : %s\n", pos, gridID, info)
 			h.selectedTile = &pos
 			h.selectedGridID = gridID
+
+			// NOUVEAU : Réinitialise le timer si on clique sur une structure révélée
+			// (Dolmen, Obélisque, Portail)
+			if ent.GetType() == entity.TypeStructure && h.world.TurnTimer != nil {
+				fmt.Println("[ACTION] Structure activée : Timer réinitialisé")
+				h.world.TurnTimer.Reset()
+			}
 		}
 	}
 	return nil
@@ -642,20 +649,25 @@ func (h *Handler) handleKeyboard() {
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		fmt.Println("[ACTION] Réinitialisation de la rotation")
-		if h.OnResetRotation != nil {
-			h.OnResetRotation()
+		if grid, ok := h.world.GetCurrentGrid(); ok {
+			for int(grid.MainBearing) != 0 {
+				_ = h.world.RotateGrid(grid.ID)
+			}
 		}
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyEqual) || inpututil.IsKeyJustPressed(ebiten.KeyKPEqual) {
-		if h.OnRotateBoard != nil {
-			h.OnRotateBoard(15)
-		}
+		fmt.Println("[ACTION] Rotation horaire (+90°)")
+		cmd := &usecase.RotateGridCommand{World: h.world, GridID: h.GetCurrentGridID()}
+		_ = cmd.Execute()
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyMinus) || inpututil.IsKeyJustPressed(ebiten.KeyKPSubtract) {
-		if h.OnRotateBoard != nil {
-			h.OnRotateBoard(-15)
+		fmt.Println("[ACTION] Rotation anti-horaire (-90°)")
+		// 3 rotations horaires = 1 rotation anti-horaire
+		for i := 0; i < 3; i++ {
+			cmd := &usecase.RotateGridCommand{World: h.world, GridID: h.GetCurrentGridID()}
+			_ = cmd.Execute()
 		}
 	}
 
@@ -668,7 +680,7 @@ func (h *Handler) handleKeyboard() {
 }
 
 func (h *Handler) handleNavigationKeys() {
-	var dir board.Direction
+	var dir entity.Direction
 	var pressed bool
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
@@ -786,7 +798,7 @@ func (h *Handler) getHoveredTile() (board.Position, string, bool) {
 	return h.renderer.ScreenToGrid(x, y, h.world)
 }
 
-func (h *Handler) getClickedExit() (board.Direction, int, bool) {
+func (h *Handler) getClickedExit() (entity.Direction, int, bool) {
 	x, y := ebiten.CursorPosition()
 	// Coordonnées relatives au Playmat
 	px := float64(x) - ui.PlaymatX
@@ -795,7 +807,7 @@ func (h *Handler) getClickedExit() (board.Direction, int, bool) {
 	return h.checkExitClick(px, py)
 }
 
-func (h *Handler) checkExitClick(px, py float64) (board.Direction, int, bool) {
+func (h *Handler) checkExitClick(px, py float64) (entity.Direction, int, bool) {
 	if px >= ui.ExitNorthX && px < ui.ExitNorthX+ui.ExitNorthW && py >= ui.ExitNorthY && py < ui.ExitNorthY+ui.ExitNorthH {
 		index := 0
 		if px >= ui.ExitNorthX+ui.TileSize {
@@ -841,7 +853,7 @@ func (h *Handler) calculateFlipDirection(gridID string) domain.FlipDirection {
 	}
 
 	tileSize := h.renderer.GetTileSize()
-	return board.CalculateFlipDirection(tileSize, localX, localY)
+	return entity.CalculateFlipDirection(tileSize, localX, localY)
 }
 
 func (h *Handler) renderHighlights(screen *ebiten.Image) {

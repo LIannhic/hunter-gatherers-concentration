@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/component"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
@@ -136,9 +137,9 @@ func (nl *NavigationLogic) wander(world WorldQuery, creature *Creature) entity.P
 		{X: 0, Y: -1}, {X: 0, Y: 1},
 		{X: -1, Y: 0}, {X: 1, Y: 0},
 	}
-	
+
 	// 30% de chance de suivre la direction privilégiée
-	if nl.WanderBias != (entity.Position{}) && rand.Float32() < 0.3 {
+	if creature != nil && world != nil && nl.WanderBias != (entity.Position{}) && rand.Float32() < 0.3 {
 		if world.IsValidMove(entity.Position{
 			X: creature.GetPosition().X + nl.WanderBias.X,
 			Y: creature.GetPosition().Y + nl.WanderBias.Y,
@@ -146,7 +147,7 @@ func (nl *NavigationLogic) wander(world WorldQuery, creature *Creature) entity.P
 			return nl.WanderBias
 		}
 	}
-	
+
 	// Direction aléatoire
 	return directions[rand.Intn(len(directions))]
 }
@@ -310,15 +311,6 @@ func (mf *MovementFrequency) GetMoveCount() int {
 // ORIENTATION & DIRECTION RELATIVE
 // ============================================================================
 
-type Direction int
-
-const (
-	DirNorth Direction = iota
-	DirEast
-	DirSouth
-	DirWest
-)
-
 type RelativeDirection string
 
 const (
@@ -334,43 +326,23 @@ const (
 	RelRotate180 RelativeDirection = "rotate_180"// Rotation 180°
 )
 
-// Orientation définit la direction vers laquelle regarde la créature
-type Orientation struct {
-	Direction Direction
-}
+// Orientation est maintenant définie dans internal/domain/component/component.go
+type Orientation = component.Orientation
+type Direction = entity.Direction
 
-func (o *Orientation) Type() string { return "orientation" }
-
-func (o *Orientation) ToVector() entity.Position {
-	switch o.Direction {
-	case DirNorth:
-		return entity.Position{X: 0, Y: -1}
-	case DirEast:
-		return entity.Position{X: 1, Y: 0}
-	case DirSouth:
-		return entity.Position{X: 0, Y: 1}
-	case DirWest:
-		return entity.Position{X: -1, Y: 0}
-	}
-	return entity.Position{X: 0, Y: -1}
-}
-
-func (o *Orientation) Rotate(degrees int) {
-	switch degrees {
-	case 90:
-		o.Direction = Direction((int(o.Direction) + 1) % 4)
-	case 180:
-		o.Direction = Direction((int(o.Direction) + 2) % 4)
-	case 270, -90:
-		o.Direction = Direction((int(o.Direction) + 3) % 4)
-	}
-}
+const (
+	DirNorth = entity.DirNorth
+	DirEast  = entity.DirEast
+	DirSouth = entity.DirSouth
+	DirWest  = entity.DirWest
+)
 
 // GetRelativeDirection convertit une direction relative en vecteur absolu
-func (o *Orientation) GetRelativeDirection(rel RelativeDirection) entity.Position {
+func GetRelativeDirection(o *Orientation, rel RelativeDirection) entity.Position {
 	switch rel {
 	case RelForward:
-		return o.ToVector()
+		vec := o.ToVector()
+		return entity.Position{X: vec.X, Y: vec.Y}
 	case RelBackward:
 		vec := o.ToVector()
 		return entity.Position{X: -vec.X, Y: -vec.Y}
@@ -398,19 +370,19 @@ func (o *Orientation) GetRelativeDirection(rel RelativeDirection) entity.Positio
 		}
 	case RelDiagFL:
 		forward := o.ToVector()
-		left := o.GetRelativeDirection(RelLeft)
+		left := GetRelativeDirection(o, RelLeft)
 		return entity.Position{X: forward.X + left.X, Y: forward.Y + left.Y}
 	case RelDiagFR:
 		forward := o.ToVector()
-		right := o.GetRelativeDirection(RelRight)
+		right := GetRelativeDirection(o, RelRight)
 		return entity.Position{X: forward.X + right.X, Y: forward.Y + right.Y}
 	case RelDiagBL:
-		backward := o.GetRelativeDirection(RelBackward)
-		left := o.GetRelativeDirection(RelLeft)
+		backward := GetRelativeDirection(o, RelBackward)
+		left := GetRelativeDirection(o, RelLeft)
 		return entity.Position{X: backward.X + left.X, Y: backward.Y + left.Y}
 	case RelDiagBR:
-		backward := o.GetRelativeDirection(RelBackward)
-		right := o.GetRelativeDirection(RelRight)
+		backward := GetRelativeDirection(o, RelBackward)
+		right := GetRelativeDirection(o, RelRight)
 		return entity.Position{X: backward.X + right.X, Y: backward.Y + right.Y}
 	}
 	return entity.Position{X: 0, Y: 0}

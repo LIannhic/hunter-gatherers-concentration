@@ -41,6 +41,20 @@ func (c *Creature) SetMovementProfile(m *MovementProfile) {
 	c.MovementProfile = m
 }
 
+func (c *Creature) GetOrientation() entity.Direction {
+	if c.MovementProfile != nil {
+		return c.MovementProfile.Orientation.Direction
+	}
+	return c.BaseEntity.GetOrientation()
+}
+
+func (c *Creature) SetOrientation(o entity.Direction) {
+	if c.MovementProfile != nil {
+		c.MovementProfile.Orientation.Direction = o
+	}
+	c.BaseEntity.SetOrientation(o)
+}
+
 func (c *Creature) GetComponent(name string) interface{} {
 	switch name {
 	case "orientation":

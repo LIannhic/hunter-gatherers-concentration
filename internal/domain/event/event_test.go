@@ -3,7 +3,6 @@ package event
 import (
 	"testing"
 
-	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
@@ -219,7 +218,7 @@ func TestNewAssociationMadeEvent(t *testing.T) {
 
 func TestNewTileRevealedEvent(t *testing.T) {
 	pos := entity.Position{X: 2, Y: 3}
-	flipDir := board.FlipCenter
+	flipDir := entity.FlipCenter
 	e := NewEntityRevealedEvent(pos, "entity1", "test_grid", flipDir)
 
 	if e.Type != TileRevealed {
