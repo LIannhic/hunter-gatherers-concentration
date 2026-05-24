@@ -49,7 +49,18 @@ func (c *RevealTileCommand) CanExecute() bool {
 
 	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 	ent, ok := c.World.Entities.Get(entity.ID(topID))
-	if !ok || ent.GetState()&entity.Hidden == 0 {
+	if !ok {
+		return false
+	}
+
+	state := ent.GetState()
+	// Si c'est un piège révélé, on peut toujours le recacher (flip inverse)
+	if ent.GetType() == entity.TypeTrap && state&entity.Revealed != 0 {
+		return state&entity.Matched == 0
+	}
+
+	// Sinon (caché), ne peut pas révéler une tuile déjà révélée ou appairée
+	if state&entity.Revealed != 0 || state&entity.Matched != 0 {
 		return false
 	}
 
@@ -63,17 +74,25 @@ func (c *RevealTileCommand) CanExecute() bool {
 
 func (c *RevealTileCommand) Execute() error {
 	if c.World.CurrentGridID != c.GridID {
-		fmt.Println("Player is not on this grid")
-		fmt.Printf("Player on %s but tried %s\n", c.World.CurrentGridID, c.GridID)
-		return errors.New("player is not on this grid")
+		fmt.Println("Le joueur n'est pas sur cette grille")
+		fmt.Printf("Joueur sur %s mais a tenté %s\n", c.World.CurrentGridID, c.GridID)
+		return errors.New("le joueur n'est pas sur cette grille")
 	}
 
 	if !c.CanExecute() {
-		return errors.New("cannot reveal this tile")
+		return errors.New("impossible de révéler cette tuile")
+	}
+
+	// Avant de révéler, on met à jour la position du joueur à la parcelle cliquée
+	c.World.SetPlayerPosition(entity.Position{X: c.Position.X, Y: c.Position.Y})
+
+	// Déplace les shadowstalkers d'une case vers le joueur (comportement pré-révélation)
+	if c.World != nil {
+		c.World.MoveSpeciesOneStepTowards("shadowstalker", c.World.GetPlayerPosition())
 	}
 
 	// Révèle l'entité via le world
-	ent, err := c.World.RevealTile(c.GridID, c.Position)
+	ent, err := c.World.RevealTile(c.GridID, c.Position, c.FlipDirection)
 	if err != nil {
 		return err
 	}
@@ -148,7 +167,7 @@ func (c *MatchTilesCommand) CanExecute() bool {
 
 func (c *MatchTilesCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("cannot match these tiles")
+		return errors.New("impossible d'appairer ces tuiles")
 	}
 
 	// Consomme 1 point de mana par tentative
@@ -190,6 +209,12 @@ func (c *MatchTilesCommand) Execute() error {
 			isMatch = true
 			matchType = "creature_capture"
 		}
+	}
+
+	// Cas 3 : Deux pièges - ils s'annulent
+	if !isMatch && entity1.GetType() == entity.TypeTrap && entity2.GetType() == entity.TypeTrap {
+		isMatch = true
+		matchType = "trap_neutralization"
 	}
 
 	if isMatch {
@@ -238,9 +263,19 @@ func (c *MatchTilesCommand) Execute() error {
 			c.World.Player.TakeDamage(1, "creature_fail")
 		}
 
-		// Recacher les entités
-		entity1.SetState(entity.Hidden)
-		entity2.SetState(entity.Hidden)
+		// Recacher les entités avec animation basée sur la pente (Slope)
+		grid, _ := c.World.GetGrid(c.GridID)
+		plot1, _ := grid.Get(c.Pos1)
+		plot2, _ := grid.Get(c.Pos2)
+
+		_, _ = c.World.FlipTile(c.GridID, c.Pos1, plot1.Tilt.ToFlipDirection())
+		_, _ = c.World.FlipTile(c.GridID, c.Pos2, plot2.Tilt.ToFlipDirection())
+
+		// Publie les événements pour le renderer (Immediate pour éviter les délais)
+		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(c.Pos1), string(entity1.GetID()), c.GridID, plot1.Tilt.ToFlipDirection()))
+		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(c.Pos2), string(entity2.GetID()), c.GridID, plot2.Tilt.ToFlipDirection()))
 
 		if c.OnFailure != nil {
 			c.OnFailure()
@@ -248,6 +283,55 @@ func (c *MatchTilesCommand) Execute() error {
 
 		return errors.New("association échouée")
 	}
+}
+
+type DiscardTrapCommand struct {
+	World     *domain.World
+	GridID    string
+	Position  board.Position
+	OnSuccess func()
+}
+
+func (c *DiscardTrapCommand) CanExecute() bool {
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
+		return false
+	}
+	plot, err := grid.Get(c.Position)
+	if err != nil || len(plot.EntitiesID) == 0 {
+		return false
+	}
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	ent, ok := c.World.Entities.Get(entity.ID(topID))
+	if !ok {
+		return false
+	}
+	// On ne peut défausser qu'un piège révélé
+	return ent.GetType() == entity.TypeTrap && ent.GetState()&entity.Revealed != 0
+}
+
+func (c *DiscardTrapCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("impossible de défausser ce piège")
+	}
+
+	// Consomme 1 point de mana (compte comme un tour/match)
+	c.World.Player.ConsumeMana(1)
+
+	grid, _ := c.World.GetGrid(c.GridID)
+	plot, _ := grid.Get(c.Position)
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+
+	// Supprime l'entité du monde (défausse)
+	c.World.RemoveEntity(entity.ID(topID))
+
+	// Note: On pourrait émettre un événement spécifique si besoin
+
+	if c.OnSuccess != nil {
+		c.OnSuccess()
+	}
+
+	return nil
 }
 
 type EndTurnCommand struct {
@@ -314,7 +398,7 @@ func (c *ClearBoardCommand) CanExecute() bool {
 func (c *ClearBoardCommand) Execute() error {
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
-		return errors.New("grid not found")
+		return errors.New("grille non trouvée")
 	}
 
 	// Supprime toutes les entités de ce grid
@@ -347,7 +431,7 @@ func (c *UsePortablePortalCommand) CanExecute() bool {
 
 func (c *UsePortablePortalCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("cannot deploy portable portal")
+		return errors.New("impossible de déployer le portail portable")
 	}
 
 	if c.Center.X < 0 || c.Center.Y < 0 {
@@ -360,111 +444,111 @@ func (c *UsePortablePortalCommand) Execute() error {
 }
 
 type UseScannerItemCommand struct {
-    World     *domain.World
-    GridID    string
-    ItemIndex int // L'index de l'objet dans la liste d'inventaire du joueur
+	World     *domain.World
+	GridID    string
+	ItemIndex int // L'index de l'objet dans la liste d'inventaire du joueur
 }
 
 func (c *UseScannerItemCommand) CanExecute() bool {
-    if c.World == nil || c.World.Player == nil {
-       return false
-    }
+	if c.World == nil || c.World.Player == nil {
+		return false
+	}
 
-    // 1. Vérifie si l'index est valide dans l'inventaire
-    inv := &c.World.Player.Inventory
-    if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
-       return false
-    }
+	// 1. Vérifie si l'index est valide dans l'inventaire
+	inv := &c.World.Player.Inventory
+	if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
+		return false
+	}
 
-    // 2. Récupère l'objet sans le supprimer pour vérification
-    item, err := inv.GetItem(c.ItemIndex)
-    if err != nil {
-       return false
-    }
+	// 2. Récupère l'objet sans le supprimer pour vérification
+	item, err := inv.GetItem(c.ItemIndex)
+	if err != nil {
+		return false
+	}
 
-    if item.Name != "echo_hound" || !item.IsUsable {
-       return false
-    }
+	if item.Name != "echo_hound" || !item.IsUsable {
+		return false
+	}
 
-    return true
+	return true
 }
 
 func (c *UseScannerItemCommand) Execute() error {
-    if !c.CanExecute() {
-       return errors.New("impossible d'utiliser le scanner (item invalide ou inutilisable)")
-    }
+	if !c.CanExecute() {
+		return errors.New("impossible d'utiliser le scanner (item invalide ou inutilisable)")
+	}
 
-    // 4. 🛠️ AJUSTEMENT : Utilise c.GridID s'il est fourni, sinon replie-toi sur c.World.CurrentGridID
-    targetGrid := c.GridID
-    if targetGrid == "" {
-        targetGrid = c.World.CurrentGridID
-    }
+	// 4. 🛠️ AJUSTEMENT : Utilise c.GridID s'il est fourni, sinon replie-toi sur c.World.CurrentGridID
+	targetGrid := c.GridID
+	if targetGrid == "" {
+		targetGrid = c.World.CurrentGridID
+	}
 
-    // Déclenche l'effet de scan dans le monde
-    err := c.World.TriggerScannerEffect(targetGrid)
-    if err != nil {
-       return fmt.Errorf("échec de l'effet de scan : %w", err)
-    }
+	// Déclenche l'effet de scan dans le monde
+	err := c.World.TriggerScannerEffect(targetGrid)
+	if err != nil {
+		return fmt.Errorf("échec de l'effet de scan : %w", err)
+	}
 
-    // Si le scan a fonctionné, on consomme l'objet en le retirant de l'inventaire
-    inv := &c.World.Player.Inventory
-    err = inv.RemoveItem(c.ItemIndex)
-    if err != nil {
-       return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
-    }
+	// Si le scan a fonctionné, on consomme l'objet en le retirant de l'inventaire
+	inv := &c.World.Player.Inventory
+	err = inv.RemoveItem(c.ItemIndex)
+	if err != nil {
+		return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
+	}
 
-    fmt.Printf("[ITEM] Le joueur a utilisé le cri de l'Echo Hound depuis l'emplacement %d\n", c.ItemIndex)
+	fmt.Printf("[ITEM] Le joueur a utilisé le cri de l'Echo Hound depuis l'emplacement %d\\n", c.ItemIndex)
 
-    return nil
+	return nil
 }
 
 // --- COMMANDE DÉDIÉE À LA DREAMBERRY ---
 type UseDreamberryItemCommand struct {
-    World     *domain.World
-    ItemIndex int // L'index de l'objet dans l'inventaire
+	World     *domain.World
+	ItemIndex int // L'index de l'objet dans l'inventaire
 }
 
 func (c *UseDreamberryItemCommand) CanExecute() bool {
-    if c.World == nil || c.World.Player == nil {
-       return false
-    }
+	if c.World == nil || c.World.Player == nil {
+		return false
+	}
 
-    inv := &c.World.Player.Inventory
-    if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
-       return false
-    }
+	inv := &c.World.Player.Inventory
+	if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
+		return false
+	}
 
-    item, err := inv.GetItem(c.ItemIndex)
-    if err != nil {
-       return false
-    }
+	item, err := inv.GetItem(c.ItemIndex)
+	if err != nil {
+		return false
+	}
 
-    // La commande ne s'occupe QUE de la dreamberry utilisable
-    if item.Name != "dreamberry" || !item.IsUsable {
-       return false
-    }
+	// La commande ne s'occupe QUE de la dreamberry utilisable
+	if item.Name != "dreamberry" || !item.IsUsable {
+		return false
+	}
 
-    return true
+	return true
 }
 
 func (c *UseDreamberryItemCommand) Execute() error {
-    if !c.CanExecute() {
-       return errors.New("impossible d'utiliser la dreamberry (item invalide ou inutilisable)")
-    }
+	if !c.CanExecute() {
+		return errors.New("impossible d'utiliser la dreamberry (item invalide ou inutilisable)")
+	}
 
-    // 1. Applique l'effet de restauration de mana
-    const manaRestorationAmount = 5 // À ajuster selon l'équilibrage
-    c.World.Player.RestoreMana(manaRestorationAmount)
+	// 1. Applique l'effet de restauration de mana
+	const manaRestorationAmount = 5 // À ajuster selon l'équilibrage
+	c.World.Player.RestoreMana(manaRestorationAmount)
 
-    // 2. Consomme l'objet en le retirant de l'inventaire
-    inv := &c.World.Player.Inventory
-    err := inv.RemoveItem(c.ItemIndex)
-    if err != nil {
-       return fmt.Errorf("erreur lors de la suppression de la dreamberry : %w", err)
-    }
+	// 2. Consomme l'objet en le retirant de l'inventaire
+	inv := &c.World.Player.Inventory
+	err := inv.RemoveItem(c.ItemIndex)
+	if err != nil {
+		return fmt.Errorf("erreur lors de la suppression de la dreamberry : %w", err)
+	}
 
-    fmt.Printf("[ITEM] Le joueur a consommé une Dreamberry (Mana +%d) depuis l'emplacement %d\n", manaRestorationAmount, c.ItemIndex)
-    return nil
+	fmt.Printf("[ITEM] Le joueur a consommé une Dreamberry (Mana +%d) depuis l'emplacement %d\\n", manaRestorationAmount, c.ItemIndex)
+	return nil
 }
 
 type ClearAllBoardsCommand struct {
@@ -496,7 +580,7 @@ func (c *SwitchGridCommand) CanExecute() bool {
 
 func (c *SwitchGridCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("grid not found")
+		return errors.New("grille non trouvée")
 	}
 	c.World.SetCurrentGrid(c.GridID)
 
@@ -521,11 +605,11 @@ func (c *UnlockNavigationCommand) CanExecute() bool {
 func (c *UnlockNavigationCommand) Execute() error {
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
-		return errors.New("grid not found")
+		return errors.New("grille non trouvée")
 	}
 
 	grid.NavigationForcedOpen = true
-	fmt.Printf("[DEBUG] Navigation forcée pour la zone %s\n", c.GridID)
+	fmt.Printf("[DEBUG] Navigation forcée pour la zone %s\\n", c.GridID)
 	return nil
 }
 
@@ -594,7 +678,7 @@ func (c *RotateGridCommand) CanExecute() bool {
 
 func (c *RotateGridCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("grid not found")
+		return errors.New("grille non trouvée")
 	}
 	return c.World.RotateGrid(c.GridID)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/resource"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/structure"
 )
 
 // Ré-export des types principaux
@@ -52,6 +53,11 @@ type (
 	Action   = creature.Action
 	AI       = creature.AI
 	Resource = resource.Resource
+
+	// Structure
+	Structure           = structure.Structure
+	NavigationStructure = structure.NavigationStructure
+	NavType             = structure.NavType
 
 	// Event & State
 	Bus       = event.Bus
@@ -128,6 +134,9 @@ var (
 
 	NewResource        = resource.New
 	NewResourceFactory = resource.NewFactory
+
+	NewStructure  = structure.NewStructure
+	NewNavigation = structure.NewNavigation
 
 	NewBus = event.NewBus
 

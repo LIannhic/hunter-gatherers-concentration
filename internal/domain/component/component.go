@@ -262,3 +262,14 @@ func (o *Orientation) Rotate(degrees int) {
 	}
 	o.Direction = entity.Direction((int(o.Direction) + steps) % 4)
 }
+
+// MovingAnimation gère l'état d'un déplacement fluide dans le temps
+type MovingAnimation struct {
+    StartX, StartY float64       // Position de départ (en pixels)
+    CurrentX, CurrentY float64   // Position actuelle calculée (en pixels)
+    TargetGridX, TargetGridY int // Case de destination (sur la grille)
+    CurrentTick    int           // Frame actuelle de l'animation
+    DurationTicks  int           // Durée totale souhaitée (ex: 15 ou 30 ticks)
+}
+
+func (m MovingAnimation) Type() string { return "moving_animation" }

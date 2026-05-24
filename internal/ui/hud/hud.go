@@ -12,6 +12,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -22,8 +23,11 @@ import (
 // HUD affiche les informations de jeu
 type HUD struct {
 	world                *domain.World
+	assets               *assets.Manager
 	showDetails          bool
 	showInventoryDetails bool
+	showAssetsDetails    bool
+	showVictory          bool
 	fullFeedbackTimer    int // Timer pour le retour visuel d'inventaire plein
 
 	inventoryOffscreen *ebiten.Image // Buffer pour le clipping de l'inventaire
@@ -45,6 +49,8 @@ func NewHUD(world *domain.World) *HUD {
 		world:                world,
 		showDetails:          false,
 		showInventoryDetails: false,
+		showAssetsDetails:    false,
+		showVictory:          false,
 		fullFeedbackTimer:    0,
 		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 331),
 		selectedLoots:        make(map[int]bool),
@@ -72,6 +78,10 @@ func (h *HUD) Update() {
 func (h *HUD) SetTimerCallbacks(getRemaining func() float64, getPanic func() bool) {
 	h.getTimerRemaining = getRemaining
 	h.getTimerPanic = getPanic
+}
+
+func (h *HUD) SetAssetsManager(am *assets.Manager) {
+	h.assets = am
 }
 
 func (h *HUD) GetSelectedLootItem() *player.LootItem {
@@ -107,11 +117,40 @@ func (h *HUD) ClearActiveLootSelection() {
 // ToggleDetails bascule l'affichage de la fenêtre de détails
 func (h *HUD) ToggleDetails() {
 	h.showDetails = !h.showDetails
+	if h.showDetails {
+		h.showInventoryDetails = false
+		h.showAssetsDetails = false
+	}
 }
 
 // ToggleInventoryDetails bascule l'affichage de la liste de l'inventaire
 func (h *HUD) ToggleInventoryDetails() {
 	h.showInventoryDetails = !h.showInventoryDetails
+	if h.showInventoryDetails {
+		h.showDetails = false
+		h.showAssetsDetails = false
+	}
+}
+
+// ToggleAssetsDetails bascule l'affichage de l'atlas des assets
+func (h *HUD) ToggleAssetsDetails() {
+	h.showAssetsDetails = !h.showAssetsDetails
+	if h.showAssetsDetails {
+		h.showDetails = false
+		h.showInventoryDetails = false
+		h.showVictory = false
+	}
+}
+
+func (h *HUD) ShowVictory() {
+	h.showVictory = true
+	h.showDetails = false
+	h.showInventoryDetails = false
+	h.showAssetsDetails = false
+}
+
+func (h *HUD) IsVictoryVisible() bool {
+	return h.showVictory
 }
 
 // Render dessine le HUD complet
@@ -128,6 +167,188 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	if h.showInventoryDetails {
 		h.renderInventoryWindow(screen)
 	}
+
+	if h.showAssetsDetails {
+		h.renderAssetsWindow(screen)
+	}
+
+	if h.showVictory {
+		h.renderVictoryWindow(screen)
+	}
+}
+
+// renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
+func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
+	// Fond semi-transparent couvrant l'aire de jeu
+	overlay := ebiten.NewImage(ui.ScreenWidth, ui.ScreenHeight)
+	overlay.Fill(color.RGBA{0, 0, 0, 200})
+	screen.DrawImage(overlay, nil)
+
+	// Fenêtre centrale
+	winW, winH := 800, 500
+	x := (ui.ScreenWidth - winW) / 2
+	y := (ui.ScreenHeight - winH) / 2
+
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{30, 30, 40, 255}, true)
+	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 2, color.RGBA{100, 100, 150, 255}, true)
+
+	text.Draw(screen, "ATLAS DES ASSETS (T pour fermer)", basicfont.Face7x13, x+20, y+30, color.RGBA{200, 200, 255, 255})
+
+	// Liste des assets à montrer
+	assetsToDraw := []struct {
+		name string
+		key  string
+	}{
+		{"Dos Tuile Std", "tile_hidden"},
+		{"Tuile Révélée", "tile_revealed"},
+		{"Tuile Matchée", "tile_matched"},
+		{"Tuile Piège", "tile_trap"},
+		{"Tuile Bloquée", "tile_blocked"},
+		{"Tuile Scellée", "tile_sealed"},
+		{"Portail", "tile_portal"},
+		{"Sortie", "tile_exit"},
+		{"Case Vide", "square_empty"},
+	}
+
+    colWidth := 150
+    rowHeight := 120
+    itemsPerRow := 5
+
+    for i, asset := range assetsToDraw {
+        row := i / itemsPerRow
+        col := i % itemsPerRow
+
+        ax := x + 30 + col*colWidth
+        ay := y + 60 + row*rowHeight
+
+        // Cadre de l'asset
+        vector.StrokeRect(screen, float32(ax), float32(ay), 88, 88, 1, color.RGBA{60, 60, 80, 255}, true)
+
+        // Dessin de l'asset si disponible
+        if h.assets != nil {
+            img := h.assets.GetImage(asset.key)
+            if img != nil {
+                op := &ebiten.DrawImageOptions{}
+                op.GeoM.Translate(float64(ax), float64(ay))
+                // On scale un peu si l'image est plus grande que le cadre
+                sw := 88.0 / float64(img.Bounds().Dx())
+                sh := 88.0 / float64(img.Bounds().Dy())
+                s := sw
+                if sh < s { s = sh }
+                op.GeoM.Scale(s, s)
+                screen.DrawImage(img, op)
+            }
+        }
+
+        // Nom de l'asset
+        text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+105, color.White)
+
+        // TODO: En pratique, il faudrait passer Application ou AssetsManager au HUD
+        // Pour l'instant on montre la structure.
+        text.Draw(screen, "["+asset.key+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
+    }
+}
+
+// renderVictoryWindow dessine l'écran de victoire
+func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
+	overlay := ebiten.NewImage(ui.ScreenWidth, ui.ScreenHeight)
+	overlay.Fill(color.RGBA{0, 0, 0, 220})
+	screen.DrawImage(overlay, nil)
+
+	winW, winH := 600, 400
+	x := (ui.ScreenWidth - winW) / 2
+	y := (ui.ScreenHeight - winH) / 2
+
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{20, 40, 20, 255}, true)
+	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 3, color.RGBA{100, 255, 100, 255}, true)
+
+	text.Draw(screen, "VICTOIRE !", basicfont.Face7x13, x+250, y+50, color.RGBA{100, 255, 100, 255})
+	text.Draw(screen, "Vous avez franchi le portail final.", basicfont.Face7x13, x+150, y+100, color.White)
+
+	// Calcul des gains
+	totalValue := 0
+	resourceCount := 0
+	creatureCount := 0
+	for _, item := range h.world.Player.Inventory.Items {
+		if item.Type == entity.TypeResource {
+			resourceCount++
+			totalValue += 100 // Valeur arbitraire pour l'instant
+		} else if item.Type == entity.TypeCreature {
+			creatureCount++
+			totalValue += 250
+		}
+	}
+
+	statsY := y + 150
+	text.Draw(screen, fmt.Sprintf("Ressources collectées : %d", resourceCount), basicfont.Face7x13, x+100, statsY, color.White)
+	text.Draw(screen, fmt.Sprintf("Créatures capturées : %d", creatureCount), basicfont.Face7x13, x+100, statsY+30, color.White)
+	text.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d éclats", totalValue), basicfont.Face7x13, x+100, statsY+70, color.RGBA{255, 255, 100, 255})
+
+	// Boutons
+	btnW, btnH := 160, 40
+
+	// Bouton REJOUER
+	bx1 := x + 100
+	by := y + 300
+	vector.DrawFilledRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), color.RGBA{40, 80, 40, 255}, true)
+	vector.StrokeRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
+	text.Draw(screen, "REJOUER", basicfont.Face7x13, bx1+50, by+25, color.White)
+
+	// Bouton MENU
+	bx2 := x + 340
+	vector.DrawFilledRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), color.RGBA{80, 40, 40, 255}, true)
+	vector.StrokeRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
+	text.Draw(screen, "MENU", basicfont.Face7x13, bx2+60, by+25, color.White)
+}
+
+func (h *HUD) HandleVictoryClick(mx, my int) string {
+	if !h.showVictory {
+		return ""
+	}
+
+	winW, winH := 600, 400
+	x := (ui.ScreenWidth - winW) / 2
+	y := (ui.ScreenHeight - winH) / 2
+
+	btnW, btnH := 160, 40
+	by := y + 300
+
+	// REJOUER
+	bx1 := x + 100
+	if mx >= bx1 && mx <= bx1+btnW && my >= by && my <= by+btnH {
+		return "replay"
+	}
+
+	// MENU
+	bx2 := x + 340
+	if mx >= bx2 && mx <= bx2+btnW && my >= by && my <= by+btnH {
+		return "menu"
+	}
+
+	return ""
+}
+
+func (h *HUD) HandleGameOverClick(mx, my int) string {
+	winW, winH := 1280, 720
+	x := (ui.ScreenWidth - winW) / 2
+	y := (ui.ScreenHeight - winH) / 2
+
+	btnW, btnH := 160, 40
+	by := y + 300
+
+	// REJOUER
+	bx1 := x + 100
+	if mx >= bx1 && mx <= bx1+btnW && my >= by && my <= by+btnH {
+		return "replay"
+	}
+
+	// MENU
+	bx2 := x + 340
+	if mx >= bx2 && mx <= bx2+btnW && my >= by && my <= by+btnH {
+		return "menu"
+	}
+
+	return ""
 }
 
 // getGridDetailedCounts retourne le nombre d'entités par type/espèce pour une grille donnée

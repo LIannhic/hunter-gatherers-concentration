@@ -3,6 +3,7 @@ package renderer
 import (
 	"image/color"
 	"math"
+	"strings"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
@@ -48,53 +49,135 @@ func (r *BoardRenderer) ApplyBoardRotation(v []ebiten.Vertex, cx, cy float32) {
 	}
 }
 
+// GetTransformationGeometry retourne les coordonnées des 4 coins d'une tuile (0,0 à 1,1)
+// pour une transformation D4 donnée. Ordre: TL, TR, BR, BL.
+func GetTransformationGeometry(t entity.Transformation) [4][2]float32 {
+	switch t {
+	case entity.TransIdentity:
+		return [4][2]float32{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
+	case entity.TransRot90:
+		return [4][2]float32{{1, 0}, {1, 1}, {0, 1}, {0, 0}}
+	case entity.TransRot180:
+		return [4][2]float32{{1, 1}, {0, 1}, {0, 0}, {1, 0}}
+	case entity.TransRot270:
+		return [4][2]float32{{0, 1}, {0, 0}, {1, 0}, {1, 1}}
+	case entity.TransMirrorH:
+		return [4][2]float32{{1, 0}, {0, 0}, {0, 1}, {1, 1}}
+	case entity.TransMirrorD1:
+		return [4][2]float32{{0, 0}, {0, 1}, {1, 1}, {1, 0}}
+	case entity.TransMirrorV:
+		return [4][2]float32{{0, 1}, {1, 1}, {1, 0}, {0, 0}}
+	case entity.TransMirrorD2:
+		return [4][2]float32{{1, 1}, {1, 0}, {0, 0}, {0, 1}}
+	}
+	return [4][2]float32{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
+}
+
 func (r *BoardRenderer) renderFlippingTile(screen *ebiten.Image, x, y float64, anim *FlipAnimation, ent entity.Entity, thicknessColor color.Color) {
 	margin := (r.tileSize - ui.FaceSize) / 2
 	tx, ty := float32(x+margin), float32(y+margin)
 	cx, cy := float32(x+r.tileSize/2), float32(y+r.tileSize/2)
 
-	frontImg := r.assets.GetImage("tile_hidden")
-	var backImg *ebiten.Image
-	if ent.GetType() == entity.TypeTrap {
-		backImg = r.assets.GetImage("tile_trap")
+	hiddenImg := r.assets.GetImage("tile_hidden")
+	var revealedImg *ebiten.Image
+
+	if ent != nil && ent.GetType() == entity.TypeTrap {
+		revealedImg = r.assets.GetImage("tile_trap")
+	} else if ent == nil && strings.HasPrefix(anim.EntityID, "exit_") {
+		revealedImg = r.assets.GetImage("tile_exit")
 	} else {
-		backImg = r.assets.GetImage("tile_revealed")
+		revealedImg = r.assets.GetImage("tile_revealed")
 	}
 
 	tp := float32(smoothProgress(anim.Progress))
-	showBack := anim.Progress > 0.5
+	isHiding := anim.TileState&entity.Hidden != 0
 
-	var geo thickGeometry
-	dir := anim.FlipDirection
-	switch {
-	case dir == entity.FlipTop || dir == entity.FlipBottom:
-		geo = r.generateFlipV(tx, ty, ui.FaceSize, ui.FlipThickness, dir, tp, thicknessColor)
-	case dir == entity.FlipLeft || dir == entity.FlipRight || dir == entity.FlipCenter:
-		geo = r.generateFlipH(tx, ty, ui.FaceSize, ui.FlipThickness, dir, tp, thicknessColor)
-	default:
-		geo = r.generateFlipDiag(tx, ty, ui.FaceSize, ui.FlipThickness, dir, tp, thicknessColor)
+	g := r.createGeometry()
+	r.initVerts(g.V)
+
+	// Elevation 3D (effet de zoom)
+	elevation := 1.0 + float32(math.Sin(float64(tp)*math.Pi))*0.30
+
+	// Facteur d'écrasement de la tuile (va de 1.0 à -1.0)
+	scaleAnim := 1.0 - 2.0*tp
+
+	for i := 0; i < 4; i++ {
+		var vx, vy float32
+		switch i {
+		case 0:
+			vx, vy = tx, ty
+		case 1:
+			vx, vy = tx+ui.FaceSize, ty
+		case 2:
+			vx, vy = tx+ui.FaceSize, ty+ui.FaceSize
+		case 3:
+			vx, vy = tx, ty+ui.FaceSize
+		}
+
+		relX := vx - cx
+		relY := vy - cy
+
+		switch anim.FlipDirection {
+		case entity.FlipLeft, entity.FlipRight:
+			vx = cx + relX*scaleAnim
+		case entity.FlipTop, entity.FlipBottom:
+			vy = cy + relY*scaleAnim
+		case entity.FlipTopRight, entity.FlipBottomLeft:
+			u := (relX + relY) * 0.5
+			v := (relX - relY) * 0.5
+			v *= scaleAnim
+			vx = cx + u + v
+			vy = cy + u - v
+		case entity.FlipTopLeft, entity.FlipBottomRight:
+			u := (relX - relY) * 0.5
+			v := (relX + relY) * 0.5
+			v *= scaleAnim
+			vx = cx + u + v
+			vy = cy - u + v
+		}
+
+		g.V[i].DstX = cx + (vx-cx)*elevation
+		g.V[i].DstY = cy + (vy-cy)*elevation
 	}
 
-	// Application de la rotation globale du plateau ("Tourner")
-	r.ApplyBoardRotation(geo.V, cx, cy)
+	// Une seule orientation fixe tout le long du flip
+	var currentFace, currentBack *ebiten.Image
 
-	faceImg := frontImg
-	if showBack {
-		faceImg = backImg
+	// On se base uniquement sur l'état de DÉPART pour verrouiller la texture initiale
+	if isHiding {
+		currentFace = revealedImg
+		currentBack = hiddenImg
+	} else {
+		currentFace = hiddenImg
+		currentBack = revealedImg
 	}
 
-	r.drawGeometryPart(screen, geo.V, geo.I[:6], faceImg)    // Face
-	r.drawGeometryPart(screen, geo.V, geo.I[6:12], backImg)  // Dos
-	r.drawSlices(screen, geo, dir, r.assets.GetImage("white")) // Tranches
+	// On utilise STRICTEMENT StartTransform pour projeter la texture de départ
+	trans := anim.StartTransform
 
-	if showBack && ent.GetType() != entity.TypeTrap {
-		// On dessine l'entité sur la face "Face" (sommets 0 à 3) qui a pivoté
-		// Les sommets 0-3 conservent la couleur blanche (non teintée par l'épaisseur)
-		r.renderFlippingEntityTriangles(screen, geo.V[:4], ent)
+	uvCoords := GetTransformationGeometry(trans)
+	for i := 0; i < 4; i++ {
+		g.V[i].SrcX = uvCoords[i][0] * ui.FaceSize
+		g.V[i].SrcY = uvCoords[i][1] * ui.FaceSize
+	}
+
+	// Épaisseur et rotation globale du plateau
+	r.extrude(g.V, anim.FlipDirection, false, 0, tp, thicknessColor)
+	r.ApplyBoardRotation(g.V, cx, cy)
+
+	// Dessin de la tuile déformée par le Mesh de triangles
+	r.drawGeometryPart(screen, g.V, g.I[:6], currentFace)
+	r.drawGeometryPart(screen, g.V, g.I[6:12], currentBack)
+	r.drawSlices(screen, g, anim.FlipDirection, r.assets.GetImage("white"))
+
+	shouldShowIcon := (!isHiding && anim.Progress >= 0.5) || (isHiding && anim.Progress < 0.5)
+
+	if shouldShowIcon && ent != nil && ent.GetType() != entity.TypeTrap {
+		r.renderFlippingEntityTriangles(screen, g.V[:4], ent, trans)
 	}
 }
 
-func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFace []ebiten.Vertex, e entity.Entity) {
+func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFace []ebiten.Vertex, e entity.Entity, trans entity.Transformation) {
 	// 1. Calcul du centre de la face (sommets 0-3 fournis)
 	var cx, cy float32
 	for i := 0; i < 4; i++ {
@@ -133,38 +216,15 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 		return
 	}
 
-	// 3. Réglage des UV pour l'icône avec prise en compte de l'orientation
+	// 3. Réglage des UV pour l'icône avec prise en compte de la transformation diédrique fournie
 	w, h := icon.Size()
 	fw, fh := float32(w), float32(h)
 
-	// Orientation de l'entité
-	orient := entity.DirNorth
-	if e != nil {
-		orient = e.GetOrientation()
-	}
-
-	// Mapping des UV selon l'orientation
-	switch orient {
-	case entity.DirNorth:
-		vIcon[0].SrcX, vIcon[0].SrcY = 0, 0
-		vIcon[1].SrcX, vIcon[1].SrcY = fw, 0
-		vIcon[2].SrcX, vIcon[2].SrcY = fw, fh
-		vIcon[3].SrcX, vIcon[3].SrcY = 0, fh
-	case entity.DirEast:
-		vIcon[0].SrcX, vIcon[0].SrcY = 0, fh
-		vIcon[1].SrcX, vIcon[1].SrcY = 0, 0
-		vIcon[2].SrcX, vIcon[2].SrcY = fw, 0
-		vIcon[3].SrcX, vIcon[3].SrcY = fw, fh
-	case entity.DirSouth:
-		vIcon[0].SrcX, vIcon[0].SrcY = fw, fh
-		vIcon[1].SrcX, vIcon[1].SrcY = 0, fh
-		vIcon[2].SrcX, vIcon[2].SrcY = 0, 0
-		vIcon[3].SrcX, vIcon[3].SrcY = fw, 0
-	case entity.DirWest:
-		vIcon[0].SrcX, vIcon[0].SrcY = fw, 0
-		vIcon[1].SrcX, vIcon[1].SrcY = fw, fh
-		vIcon[2].SrcX, vIcon[2].SrcY = 0, fh
-		vIcon[3].SrcX, vIcon[3].SrcY = 0, 0
+	// On utilise la géométrie de transformation pour mapper les UV
+	uvCoords := GetTransformationGeometry(trans)
+	for i := 0; i < 4; i++ {
+		vIcon[i].SrcX = uvCoords[i][0] * fw
+		vIcon[i].SrcY = uvCoords[i][1] * fh
 	}
 
 	// 4. Rendu de l'icône avec les triangles
@@ -201,132 +261,31 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 	}
 }
 
-func (r *BoardRenderer) generateFlipH(tx, ty, faceSize, thickness float32, dir entity.FlipDirection, tp float32, thicknessColor color.Color) thickGeometry {
-	g := r.createGeometry()
-	r.initVerts(g.V)
-	r.setFaceUV(g.V, faceSize)
-
-	cx, cy := tx+faceSize/2, ty+faceSize/2
-	s := float32(math.Cos(float64(tp) * math.Pi))
-	if dir == entity.FlipLeft {
-		s = -s
-	}
-
-	elevation := 1.0 + float32(math.Sin(float64(tp)*math.Pi))*0.20
-	half, height := (faceSize/2)*s*elevation, (faceSize/2)*elevation
-
-	g.V[0].DstX, g.V[0].DstY = cx-half, cy-height
-	g.V[1].DstX, g.V[1].DstY = cx+half, cy-height
-	g.V[2].DstX, g.V[2].DstY = cx+half, cy+height
-	g.V[3].DstX, g.V[3].DstY = cx-half, cy+height
-
-	r.extrude(g.V, axisHorizontal, dir, false, 0, tp, thickness, thicknessColor)
-	return g
-}
-
-func (r *BoardRenderer) generateFlipV(tx, ty, faceSize, thickness float32, dir entity.FlipDirection, tp float32, thicknessColor color.Color) thickGeometry {
-	g := r.createGeometry()
-	r.initVerts(g.V)
-	r.setFaceUV(g.V, faceSize)
-
-	cx, cy := tx+faceSize/2, ty+faceSize/2
-	s := float32(math.Cos(float64(tp) * math.Pi))
-	if dir == entity.FlipTop {
-		s = -s
-	}
-
-	elevation := 1.0 + float32(math.Sin(float64(tp)*math.Pi))*0.20
-	half, width := (faceSize/2)*s*elevation, (faceSize/2)*elevation
-
-	g.V[0].DstX, g.V[0].DstY = cx-width, cy-half
-	g.V[1].DstX, g.V[1].DstY = cx+width, cy-half
-	g.V[2].DstX, g.V[2].DstY = cx+width, cy+half
-	g.V[3].DstX, g.V[3].DstY = cx-width, cy+half
-
-	r.extrude(g.V, axisVertical, dir, false, 0, tp, thickness, thicknessColor)
-	return g
-}
-
-func (r *BoardRenderer) generateFlipDiag(tx, ty, faceSize, thickness float32, dir entity.FlipDirection, tp float32, thicknessColor color.Color) thickGeometry {
-	g := r.createGeometry()
-	r.initVerts(g.V)
-	r.setFaceUV(g.V, faceSize)
-
-	cx, cy := tx+faceSize/2, ty+faceSize/2
-	tp64 := float64(tp)
-	angle := tp64 * math.Pi
-	halfFace := faceSize / 2
-
-	type vec2 struct {
-		X, Y float32
-	}
-	base := [4]vec2{{-halfFace, -halfFace}, {halfFace, -halfFace}, {halfFace, halfFace}, {-halfFace, halfFace}}
-
-	var a float64
-	if dir == entity.FlipTopRight || dir == entity.FlipBottomLeft {
-		a = math.Pi / 4
-	} else {
-		a = -math.Pi / 4
-	}
-	cosA, sinA := math.Cos(a), math.Sin(a)
-
-	farIdx := map[entity.FlipDirection]int{entity.FlipTopLeft: 2, entity.FlipTopRight: 3, entity.FlipBottomRight: 0, entity.FlipBottomLeft: 1}
-	nearIdx := map[entity.FlipDirection]int{entity.FlipTopLeft: 0, entity.FlipTopRight: 1, entity.FlipBottomRight: 2, entity.FlipBottomLeft: 3}
-
-	cosR := math.Cos(angle)
-	elevation := 1.0 + float32(math.Sin(tp64*math.Pi))*0.20
-
-	for i, p := range base {
-		xr := float64(p.X)*cosA - float64(p.Y)*sinA
-		yr := float64(p.X)*sinA + float64(p.Y)*cosA
-
-		if tp < 0.5 {
-			switch i {
-			case farIdx[dir]:
-				xr *= cosR * 1.1
-			case nearIdx[dir]:
-				xr *= cosR * 0.9
-			default:
-				xr *= cosR
-			}
-		} else {
-			xr *= cosR
-		}
-
-		xf, yf := (xr*cosA+yr*sinA)*float64(elevation), (-xr*sinA+yr*cosA)*float64(elevation)
-		g.V[i].DstX, g.V[i].DstY = cx+float32(xf), cy+float32(yf)
-	}
-
-	r.extrude(g.V, axisDiagonal, dir, false, 0, tp, thickness, thicknessColor)
-	return g
-}
-
-func (r *BoardRenderer) extrude(v []ebiten.Vertex, axis axisType, dir entity.FlipDirection, isIdle bool, hover float32, flipTime float32, baseThick float32, clr color.Color) {
+func (r *BoardRenderer) extrude(v []ebiten.Vertex, dir entity.FlipDirection, isIdle bool, hover float32, flipTime float32, clr color.Color) {
+	baseThick := float32(ui.FlipThickness)
 	var dx, dy float32
-	switch axis {
-	case axisHorizontal:
+	diagThick := baseThick * 0.707
+	switch dir {
+	case entity.FlipLeft:
+		dx = -baseThick
+	case entity.FlipRight:
 		dx = baseThick
-		if dir == entity.FlipLeft {
-			dx = -baseThick
-		}
-	case axisVertical:
+	case entity.FlipTop:
+		dy = -baseThick
+	case entity.FlipBottom:
 		dy = baseThick
-		if dir == entity.FlipTop {
-			dy = -baseThick
-		}
-	case axisDiagonal:
-		diagThick := baseThick * 0.707
-		switch dir {
-		case entity.FlipTopLeft:
-			dx, dy = -diagThick, -diagThick
-		case entity.FlipTopRight:
-			dx, dy = diagThick, -diagThick
-		case entity.FlipBottomLeft:
-			dx, dy = -diagThick, diagThick
-		case entity.FlipBottomRight:
-			dx, dy = diagThick, diagThick
-		}
+	case entity.FlipTopLeft:
+		dx, dy = -diagThick, -diagThick
+	case entity.FlipTopRight:
+		dx, dy = diagThick, -diagThick
+	case entity.FlipBottomLeft:
+		dx, dy = -diagThick, diagThick
+	case entity.FlipBottomRight:
+		dx, dy = diagThick, diagThick
 	}
+
+	cr, cg, cb, ca := clr.RGBA()
+	fR, fG, fB, fA := float32(cr)/0xffff, float32(cg)/0xffff, float32(cb)/0xffff, float32(ca)/0xffff
 
 	var near, far, adj1, adj2 int
 	switch dir {
@@ -340,29 +299,31 @@ func (r *BoardRenderer) extrude(v []ebiten.Vertex, axis axisType, dir entity.Fli
 		near, far, adj1, adj2 = 3, 1, 0, 2
 	}
 
-	cr, cg, cb, ca := clr.RGBA()
-	fR := float32(cr) / 0xffff
-	fG := float32(cg) / 0xffff
-	fB := float32(cb) / 0xffff
-	fA := float32(ca) / 0xffff
-
 	for i := 4; i < 8; i++ {
 		vIdx := i - 4
 		localDx, localDy := dx, dy
+
 		if isIdle {
 			var factor float32 = 1.0
-			switch axis {
-			case axisHorizontal:
-				isNear := (dir == entity.FlipLeft && (vIdx == 0 || vIdx == 3)) || (dir == entity.FlipRight && (vIdx == 1 || vIdx == 2))
-				if isNear {
+			// Utilise la direction de survol pour réduire l'épaisseur sur le côté incliné (perspective)
+			switch dir {
+			case entity.FlipLeft:
+				if vIdx == 0 || vIdx == 3 {
 					factor = 1.0 - (hover * 0.6)
 				}
-			case axisVertical:
-				isNear := (dir == entity.FlipTop && (vIdx == 0 || vIdx == 1)) || (dir == entity.FlipBottom && (vIdx == 2 || vIdx == 3))
-				if isNear {
+			case entity.FlipRight:
+				if vIdx == 1 || vIdx == 2 {
 					factor = 1.0 - (hover * 0.6)
 				}
-			case axisDiagonal:
+			case entity.FlipTop:
+				if vIdx == 0 || vIdx == 1 {
+					factor = 1.0 - (hover * 0.6)
+				}
+			case entity.FlipBottom:
+				if vIdx == 2 || vIdx == 3 {
+					factor = 1.0 - (hover * 0.6)
+				}
+			default: // Diagonales
 				switch vIdx {
 				case near:
 					factor = (1.0 - (hover * 0.85)) + 0.125
@@ -375,14 +336,123 @@ func (r *BoardRenderer) extrude(v []ebiten.Vertex, axis axisType, dir entity.Fli
 			localDx *= factor
 			localDy *= factor
 		} else {
-			thicknessAnimi := 1.0 + float32(math.Sin(float64(flipTime)*math.Pi))*0.6
-			localDx *= thicknessAnimi
-			localDy *= thicknessAnimi
+			// Élévation dynamique de la tranche pendant le flip
+			thicknessAnim := 1.0 + float32(math.Sin(float64(flipTime)*math.Pi))*0.6
+			localDx *= thicknessAnim
+			localDy *= thicknessAnim
 		}
-		v[i].DstX, v[i].DstY = v[vIdx].DstX+localDx, v[vIdx].DstY+localDy
+
+		v[i].DstX = v[vIdx].DstX + localDx
+		v[i].DstY = v[vIdx].DstY + localDy
 		v[i].SrcX, v[i].SrcY = v[vIdx].SrcX, v[vIdx].SrcY
 		v[i].ColorR, v[i].ColorG, v[i].ColorB, v[i].ColorA = fR, fG, fB, fA
 	}
+}
+
+func (r *BoardRenderer) generateIdleGeometry(tx, ty float32, ent entity.Entity, thicknessColor color.Color) thickGeometry {
+	g := r.createGeometry()
+	r.initVerts(g.V)
+	r.setFaceUV(g.V, ui.FaceSize)
+
+	// Centre de la tuile pour les calculs de pivot/impact
+	cx, cy := tx+ui.FaceSize/2, ty+ui.FaceSize/2
+
+	// 1. Récupération des états d'animation
+	id := string(ent.GetID())
+	hover, hasHover := r.hoverStates[id]
+	bounce, hasBounce := r.bounceStates[id]
+
+	// 2. Application du HOVER (inclinaison levier)
+	if hasHover && hover.Progress > 0 {
+		h := hover.Progress * 8.0 // Amplitude de l'inclinaison
+		switch hover.Dir {
+		case entity.FlipLeft:
+			g.V[0].DstX, g.V[0].DstY = tx, ty+h*0.25
+			g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize-h*0.25, ty-h*0.75
+			g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize-h*0.25, ty+ui.FaceSize+h*0.75
+			g.V[3].DstX, g.V[3].DstY = tx, ty+ui.FaceSize-h*0.25
+		case entity.FlipRight:
+			g.V[0].DstX, g.V[0].DstY = tx+h*0.25, ty-h*0.75
+			g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize, ty+h*0.25
+			g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize, ty+ui.FaceSize-h*0.25
+			g.V[3].DstX, g.V[3].DstY = tx+h*0.25, ty+ui.FaceSize+h*0.75
+		case entity.FlipTop:
+			g.V[0].DstX, g.V[0].DstY = tx+h*0.25, ty
+			g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize-h*0.25, ty
+			g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize+h*0.75, ty+ui.FaceSize-h*0.25
+			g.V[3].DstX, g.V[3].DstY = tx-h*0.75, ty+ui.FaceSize-h*0.25
+		case entity.FlipBottom:
+			g.V[0].DstX, g.V[0].DstY = tx-h*0.75, ty+h*0.25
+			g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize+h*0.75, ty+h*0.25
+			g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize, ty+ui.FaceSize
+			g.V[3].DstX, g.V[3].DstY = tx, ty+ui.FaceSize
+		case entity.FlipTopLeft:
+			g.V[0].DstX, g.V[0].DstY = tx+h*0.25, ty+h*0.25
+			g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize-h*0.5, ty-h*0.75
+			g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize-h*0.75, ty+ui.FaceSize-h*0.75
+			g.V[3].DstX, g.V[3].DstY = tx-h*0.75, ty+ui.FaceSize-h*0.5
+		case entity.FlipTopRight:
+			g.V[0].DstX, g.V[0].DstY = tx+h*0.5, ty-h*0.75
+			g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize-h*0.25, ty-h*0.25
+			g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize+h*0.75, ty+ui.FaceSize-h*0.5
+			g.V[3].DstX, g.V[3].DstY = tx+h*0.75, ty+ui.FaceSize-h*0.75
+		case entity.FlipBottomRight:
+			g.V[0].DstX, g.V[0].DstY = tx+h*0.75, ty+h*0.75
+			g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize+h*0.75, ty-h*0.5
+			g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize-h*0.25, ty+ui.FaceSize-h*0.25
+			g.V[3].DstX, g.V[3].DstY = tx+h*0.5, ty+ui.FaceSize+h*0.75
+		case entity.FlipBottomLeft:
+			g.V[0].DstX, g.V[0].DstY = tx-h*0.75, ty-h*0.5
+			g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize-h*0.75, ty+h*0.75
+			g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize-h*0.5, ty+ui.FaceSize+h*0.75
+			g.V[3].DstX, g.V[3].DstY = tx+h*0.25, ty+ui.FaceSize-h*0.25
+		}
+	} else {
+		// Position standard au repos
+		g.V[0].DstX, g.V[0].DstY = tx, ty
+		g.V[1].DstX, g.V[1].DstY = tx+ui.FaceSize, ty
+		g.V[2].DstX, g.V[2].DstY = tx+ui.FaceSize, ty+ui.FaceSize
+		g.V[3].DstX, g.V[3].DstY = tx, ty+ui.FaceSize
+	}
+
+	// 3. Application du BOUNCE (impact élastique)
+	if hasBounce {
+		var bAmp float32
+		p := bounce.ImpactT
+		switch {
+		case p < 0.25:
+			bAmp = float32(math.Sin((float64(p)/0.25)*math.Pi/2)) * 6.0
+		case p < 0.5:
+			bAmp = (1.0 - float32((p-0.25)/0.25)) * 6.0
+		case p < 0.75:
+			bAmp = -float32(math.Sin(((float64(p)-0.5)/0.25)*math.Pi/2)) * 2.5
+		}
+
+		if bAmp != 0 {
+			for i := 0; i < 4; i++ {
+				dx := g.V[i].DstX - cx
+				dy := g.V[i].DstY - cy
+				dist := float32(math.Sqrt(float64(dx*dx + dy*dy)))
+				if dist > 0.0001 {
+					g.V[i].DstX += (dx / dist) * bAmp
+					g.V[i].DstY += (dy / dist) * bAmp
+				}
+			}
+		}
+	}
+
+	// 4. Extrude avec prise en compte du survol pour la perspective
+	hProgress := float32(0)
+	hDir := entity.FlipTop
+	if hasHover {
+		hProgress = hover.Progress
+		hDir = hover.Dir
+	} else if hasBounce {
+		hDir = bounce.Dir
+	}
+	r.extrude(g.V, hDir, true, hProgress, 0, thicknessColor)
+
+	return g
 }
 
 func (r *BoardRenderer) createGeometry() thickGeometry {

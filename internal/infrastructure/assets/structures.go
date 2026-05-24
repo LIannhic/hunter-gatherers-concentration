@@ -112,3 +112,19 @@ func generateTileObelisk(size int, theme TileTheme) *ebiten.Image {
 
 	return img
 }
+
+// generateTileExit crée une tuile de navigation avec un motif de demi-flèche
+func generateTileExit(size int, theme TileTheme) *ebiten.Image {
+	img := generateTileRevealed(size, theme)
+
+	centerX, centerY := float32(size)/2, float32(size)/2
+	patternColor := theme.RevealedPattern
+
+	// On dessine la moitié DROITE d'une flèche pointant vers le haut
+	// Tête de flèche (moitié)
+	vector.StrokeLine(img, centerX, centerY-float32(size)*0.3, centerX+float32(size)*0.2, centerY-float32(size)*0.1, 3, patternColor, true)
+	// Corps de flèche (moitié)
+	vector.StrokeLine(img, centerX, centerY-float32(size)*0.3, centerX, centerY+float32(size)*0.2, 3, patternColor, true)
+
+	return img
+}

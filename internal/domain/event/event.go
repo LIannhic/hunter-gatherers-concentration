@@ -28,6 +28,9 @@ const (
 	DifficultyChanged  Type = "difficulty_changed"
 	GridEntered        Type = "grid_entered"
 	CreatureFled       Type = "creature_fled"
+	// Animation events pour l'UI
+	AnimationStarted Type = "animation_started"
+	AnimationEnded   Type = "animation_ended"
 )
 
 // Event structure de base
@@ -132,13 +135,16 @@ func (b *Bus) QueueSize() int {
 
 // --- Événements spécifiques ---
 
-func NewCreatureMovedEvent(creatureID string, from, to entity.Position) Event {
+func NewCreatureMovedEvent(creatureID string, from, to entity.Position, mode string, hidden bool, audible bool) Event {
 	return Event{
 		Type:     CreatureMoved,
 		SourceID: creatureID,
 		Payload: map[string]interface{}{
-			"from": from,
-			"to":   to,
+			"from":    from,
+			"to":      to,
+			"mode":    mode,
+			"hidden":  hidden,
+			"audible": audible,
 		},
 		Timestamp: time.Now(),
 	}

@@ -21,15 +21,13 @@ type DifficultySettings struct {
 func GetSettings(level DifficultyLevel) DifficultySettings {
 	switch level {
 	case LevelEasy:
-		return DifficultySettings{Level: LevelEasy, PreviewDuration: 5.0, PreviewRatio: 1.0, NavThreshold: 0.25, TurnTimerDuration: 30.0}
+		return DifficultySettings{Level: LevelEasy, PreviewDuration: 3.0, PreviewRatio: 1.0, NavThreshold: 0.25, TurnTimerDuration: 60.0}
 	case LevelNormal:
-		return DifficultySettings{Level: LevelNormal, PreviewDuration: 3.0, PreviewRatio: 0.5, NavThreshold: 0.50, TurnTimerDuration: 8.0}
+		return DifficultySettings{Level: LevelNormal, PreviewDuration: 2.0, PreviewRatio: 0.5, NavThreshold: 0.50, TurnTimerDuration: 60.0}
 	case LevelHard:
-		return DifficultySettings{Level: LevelHard, PreviewDuration: 0.0, PreviewRatio: 0.0, NavThreshold: 0.75, TurnTimerDuration: 5.0}
+		return DifficultySettings{Level: LevelHard, PreviewDuration: 1.0, PreviewRatio: 0.8, NavThreshold: 0.75, TurnTimerDuration: 60.0}
 	case LevelInsane:
-		return DifficultySettings{Level: LevelInsane, PreviewDuration: 1.0, PreviewRatio: 1.0, NavThreshold: 1.00, TurnTimerDuration: 4.0}
-	case LevelPlaytest:
-		return DifficultySettings{Level: LevelPlaytest, PreviewDuration: 0.0, PreviewRatio: 0.0, NavThreshold: 0.0, TurnTimerDuration: 60.0}
+		return DifficultySettings{Level: LevelInsane, PreviewDuration: 0.5, PreviewRatio: 1.0, NavThreshold: 1.00, TurnTimerDuration: 60.0}
 	default:
 		return GetSettings(LevelNormal)
 	}

@@ -202,7 +202,7 @@ func TestMovementFrequencyDelay(t *testing.T) {
 	// Avec un delay de 2, le compteur doit atteindre 2 pour déclencher
 	// Tour 0: compteur=1, pas de mouvement
 	// Tour 1: compteur=2, mouvement et reset
-	
+
 	// Premier appel: compteur passe à 1, pas de mouvement
 	if freq.CanMove() {
 		t.Error("First turn should not allow move (counter=1)")
@@ -216,6 +216,24 @@ func TestMovementFrequencyDelay(t *testing.T) {
 	// Après reset, le compteur est à 0, donc pas de mouvement
 	if freq.CanMove() {
 		t.Error("After reset, should not allow move immediately")
+	}
+}
+
+func TestMovementFrequencyTracksLastMoveTurn(t *testing.T) {
+	freq := MovementFrequency{Type: FreqVelocity, Velocity: 1}
+
+	if freq.HasMovedThisTurn(1) {
+		t.Error("Expected no move recorded for turn 1")
+	}
+
+	freq.MarkMoved(1)
+
+	if !freq.HasMovedThisTurn(1) {
+		t.Error("Expected move recorded for turn 1")
+	}
+
+	if freq.HasMovedThisTurn(2) {
+		t.Error("Expected move not recorded for turn 2")
 	}
 }
 

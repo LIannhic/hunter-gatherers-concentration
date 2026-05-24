@@ -193,15 +193,21 @@ func generateTileBlocked(size int, theme TileTheme) *ebiten.Image {
 	return img
 }
 
-// generateTileTrap crée une tuile piège (style Hidden mais plus claire)
+// generateTileTrap crée une tuile piège (Style Hidden mais avec une teinte différente)
 func generateTileTrap(size int, theme TileTheme) *ebiten.Image {
-	// Version plus claire du thème Hidden
-	lighterTheme := theme
-	lighterTheme.HiddenBg = lighten(theme.HiddenBg, 35)
-	lighterTheme.HiddenPattern = lighten(theme.HiddenPattern, 35)
-	lighterTheme.HiddenBorder = lighten(theme.HiddenBorder, 35)
+	// Version légèrement plus sombre ou désaturée pour le piège révélé
+	trapTheme := theme
+	trapTheme.HiddenBg = color.RGBA{50, 45, 45, 255} // Teinte plus rougeâtre/sombre
+	trapTheme.HiddenPattern = color.RGBA{70, 60, 60, 255}
 
-	return generateTileHidden(size, lighterTheme)
+	img := generateTileHidden(size, trapTheme)
+
+	// On ajoute un petit indicateur de danger (subtile) au centre
+	centerX, centerY := float32(size)/2, float32(size)/2
+	vector.StrokeLine(img, centerX-5, centerY-5, centerX+5, centerY+5, 2, color.RGBA{150, 50, 50, 100}, true)
+	vector.StrokeLine(img, centerX+5, centerY-5, centerX-5, centerY+5, 2, color.RGBA{150, 50, 50, 100}, true)
+
+	return img
 }
 
 // generateTileSealed crée une tuile scellée (Hidden + Cadenas)
@@ -225,6 +231,23 @@ func generateTileSealed(size int, theme TileTheme) *ebiten.Image {
 
 	// Trou de serrure
 	vector.DrawFilledCircle(img, centerX, centerY+bodyH/2-2, 3, color.RGBA{40, 40, 40, 255}, true)
+
+	return img
+}
+
+// generateEmptySquare crée une image pour case vide (sol nu avec quadrillage)
+func generateEmptySquare(size int) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	// Fond très sombre
+	img.Fill(color.RGBA{15, 15, 20, 255})
+
+	// Quadrillage et bordures
+	gridColor := color.RGBA{40, 40, 50, 255}
+	vector.StrokeRect(img, 0, 0, float32(size), float32(size), 1, gridColor, true)
+
+	// Lignes diagonales subtiles pour marquer le centre
+	vector.StrokeLine(img, 0, 0, float32(size), float32(size), 0.5, gridColor, true)
+	vector.StrokeLine(img, float32(size), 0, 0, float32(size), 0.5, gridColor, true)
 
 	return img
 }

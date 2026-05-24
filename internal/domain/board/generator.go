@@ -48,14 +48,14 @@ func (g *LayoutGenerator) GenerateDreamPlane(id string, level meta.DifficultyLev
 	var pathZoneIDs []string
 
 	// Zone de départ (Toujours 6x6 pour la config Portail)
-	startGrid := NewGrid("zone_start", 6, 6, BiomeForest)
+	startGrid := NewGrid("zone_start", 6, 6, BiomeDefault)
 	plane.AddZone(startGrid)
 	plane.StartZoneID = startGrid.ID
 	plane.Coords[startGrid.ID] = Position{4, 4} // Centre du 9x9 (0..8)
 	pathZoneIDs = append(pathZoneIDs, startGrid.ID)
 
 	// Zones intermédiaires
-	biomes := []BiomeType{BiomeForest, BiomeCave, BiomeDesert}
+	biomes := []BiomeType{BiomeForest, BiomeCave, BiomeDesert, BiomeSwamp}
 	for i := 0; i < pathLength; i++ {
 		biome := biomes[rand.Intn(len(biomes))]
 		gridID := fmt.Sprintf("zone_%d", i+1)
@@ -80,7 +80,7 @@ func (g *LayoutGenerator) GenerateDreamPlane(id string, level meta.DifficultyLev
 	lastID := pathZoneIDs[len(pathZoneIDs)-1]
 	dir, coords, ok := g.findAvailableDirectionAndCoords(plane, lastID)
 	if ok {
-		endGrid := NewGrid("zone_end", 6, 6, BiomeCave)
+		endGrid := NewGrid("zone_end", 6, 6, BiomeDefault)
 		plane.AddZone(endGrid)
 		plane.EndZoneID = endGrid.ID
 		plane.Coords[endGrid.ID] = coords
@@ -210,6 +210,20 @@ func (g *LayoutGenerator) SetupPortalArea(grid *Grid, isStart bool) {
 			} else {
 				plot.StructureID = "finish_portal"
 			}
+		}
+	}
+	// Ajouter des parcelles vides dans les autres positions de la zone
+	otherPositions := []Position{
+		{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5},
+		{1, 0}, {1, 2}, {1, 3}, {1, 5},
+		{2, 0}, {2, 1}, {2, 4}, {2, 5},
+		{3, 0}, {3, 1}, {3, 4}, {3, 5},
+		{4, 0}, {4, 2}, {4, 3}, {4, 5},
+		{5, 0}, {5, 1}, {5, 2}, {5, 3}, {5, 4}, {5, 5},
+	}
+	for _, pos := range otherPositions {
+		if plot, err := grid.Get(pos); err != nil {
+			plot.Empty = true
 		}
 	}
 }

@@ -240,7 +240,7 @@ func TestBurrowerProperties(t *testing.T) {
 	if c.Behavior.State != "hiding" {
 		t.Errorf("Burrower should be hiding, got %s", c.Behavior.State)
 	}
-	
+
 	if c.Mobility.MovePattern != "burrow" {
 		t.Errorf("Burrower should have 'burrow' pattern, got %s", c.Mobility.MovePattern)
 	}

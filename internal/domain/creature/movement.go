@@ -15,22 +15,20 @@ import (
 type TriggerType string
 
 const (
-	TriggerPassive    TriggerType = "passive"    // Aucun mouvement (Ressource fixe)
-	TriggerAuto       TriggerType = "auto"       // Se déplace à la fin de chaque tour
-	TriggerOnReveal   TriggerType = "on_reveal"  // Se déplace dès qu'elle est révélée
-	TriggerOnEcho     TriggerType = "on_echo"    // Se déplace si une autre tuile est révélée ailleurs
-	TriggerProximity  TriggerType = "proximity"  // Se déplace si action dans rayon N cases
+	TriggerPassive   TriggerType = "passive"   // Aucun mouvement (Ressource fixe)
+	TriggerAuto      TriggerType = "auto"      // Se déplace à la fin de chaque tour
+	TriggerOnReveal  TriggerType = "on_reveal" // Se déplace dès qu'elle est révélée (Memory)
+	TriggerOnEcho    TriggerType = "on_echo"   // Se déplace quand une tuile spécifique est révélée
+	TriggerProximity TriggerType = "proximity" // Se déplace si action dans rayon N cases
 )
 
-// MovementTrigger définit quand la créature se déplace
 type MovementTrigger struct {
-	Type          TriggerType
-	Radius        int  // Pour Proximity: rayon de détection
-	Triggered     bool // État: a été déclenché ce tour
-	WasRevealed   bool // Pour OnReveal: était révélée au tour précédent
+	Type        TriggerType
+	Radius      int  // Pour Proximity: rayon de détection
+	Triggered   bool // État: a été déclenché ce tour
+	WasRevealed bool // Pour OnReveal: était révélée au tour précédent
 }
 
-// ShouldTrigger vérifie si le déplacement doit se déclencher
 func (mt *MovementTrigger) ShouldTrigger(world WorldQuery, creature *Creature) bool {
 	switch mt.Type {
 	case TriggerPassive:
@@ -38,7 +36,6 @@ func (mt *MovementTrigger) ShouldTrigger(world WorldQuery, creature *Creature) b
 	case TriggerAuto:
 		return true
 	case TriggerOnReveal:
-		// Se déclenche quand la créature devient visible
 		isRevealed := world.IsTileRevealed(creature.GetPosition())
 		if isRevealed && !mt.WasRevealed {
 			mt.WasRevealed = true
@@ -47,17 +44,14 @@ func (mt *MovementTrigger) ShouldTrigger(world WorldQuery, creature *Creature) b
 		mt.WasRevealed = isRevealed
 		return false
 	case TriggerOnEcho:
-		// Se déclenche quand UNE AUTRE tuile est révélée
 		return mt.Triggered
 	case TriggerProximity:
-		// Vérifie si une action a eu lieu dans le rayon
 		return mt.checkProximity(world, creature.GetPosition())
 	}
 	return false
 }
 
 func (mt *MovementTrigger) checkProximity(world WorldQuery, pos entity.Position) bool {
-	// Vérifie les tuiles dans le rayon pour des actions récentes
 	for x := -mt.Radius; x <= mt.Radius; x++ {
 		for y := -mt.Radius; y <= mt.Radius; y++ {
 			if math.Abs(float64(x))+math.Abs(float64(y)) <= float64(mt.Radius) {
@@ -71,15 +65,8 @@ func (mt *MovementTrigger) checkProximity(world WorldQuery, pos entity.Position)
 	return false
 }
 
-// Reset remet l'état du déclencheur
-func (mt *MovementTrigger) Reset() {
-	mt.Triggered = false
-}
-
-// Trigger force le déclenchement (pour Echo)
-func (mt *MovementTrigger) Trigger() {
-	mt.Triggered = true
-}
+func (mt *MovementTrigger) Reset()   { mt.Triggered = false }
+func (mt *MovementTrigger) Trigger() { mt.Triggered = true }
 
 // ============================================================================
 // LOGIQUE DE CIBLE (Navigation) - Où la créature va
@@ -88,34 +75,33 @@ func (mt *MovementTrigger) Trigger() {
 type NavigationType string
 
 const (
-	NavWander       NavigationType = "wander"       // Errance: direction aléatoire
-	NavPatrol       NavigationType = "patrol"       // Patrouille: suit un itinéraire
-	NavOrientation  NavigationType = "orientation"  // D'après l'orientation de la créature
-	NavAttraction   NavigationType = "attraction"   // Vise une cible spécifique
-	NavRepulsion    NavigationType = "repulsion"    // S'éloigne de la cible
+	NavWander      NavigationType = "wander"      // Errance directionnelle
+	NavPatrol      NavigationType = "patrol"      // Suit un itinéraire
+	NavOrientation NavigationType = "orientation" // D'après l'orientation diédrique
+	NavAttraction  NavigationType = "attraction"  // Vise une cible spécifique
+	NavRepulsion   NavigationType = "repulsion"   // S'éloigne de la cible
 )
 
 type TargetType string
 
 const (
-	TargetResource    TargetType = "resource"
-	TargetCursor      TargetType = "cursor"
-	TargetCreature    TargetType = "creature"
-	TargetStructure   TargetType = "structure"
-	TargetEmpty       TargetType = "empty"
-	TargetPlayer      TargetType = "player"
+	TargetResource  TargetType = "resource"
+	TargetCursor    TargetType = "cursor"
+	TargetCreature  TargetType = "creature"
+	TargetStructure TargetType = "structure"
+	TargetEmpty     TargetType = "empty"
+	TargetPlayer    TargetType = "player"
 )
 
-// NavigationLogic définit comment la créature choisit sa destination
 type NavigationLogic struct {
-	Type           NavigationType
-	Target         TargetType      // Pour Attraction/Repulsion
-	PatrolRoute    []entity.Position // Pour Patrouille
-	PatrolIndex    int             // Index actuel dans la route
-	WanderBias     entity.Position // Direction privilégiée pour errance
+	Type        NavigationType
+	Target      TargetType
+	PatrolRoute []entity.Position
+	PatrolIndex int
+	WanderBias  entity.Position
+	TargetName  string // Optionnel: nom/ID spécifique de la cible (ex: "dreamberry")
 }
 
-// DecideDirection retourne la direction choisie
 func (nl *NavigationLogic) DecideDirection(world WorldQuery, creature *Creature) entity.Position {
 	switch nl.Type {
 	case NavWander:
@@ -137,18 +123,15 @@ func (nl *NavigationLogic) wander(world WorldQuery, creature *Creature) entity.P
 		{X: 0, Y: -1}, {X: 0, Y: 1},
 		{X: -1, Y: 0}, {X: 1, Y: 0},
 	}
-
-	// 30% de chance de suivre la direction privilégiée
 	if creature != nil && world != nil && nl.WanderBias != (entity.Position{}) && rand.Float32() < 0.3 {
-		if world.IsValidMove(entity.Position{
+		targetPos := entity.Position{
 			X: creature.GetPosition().X + nl.WanderBias.X,
 			Y: creature.GetPosition().Y + nl.WanderBias.Y,
-		}) {
+		}
+		if world.IsValidMove(targetPos) {
 			return nl.WanderBias
 		}
 	}
-
-	// Direction aléatoire
 	return directions[rand.Intn(len(directions))]
 }
 
@@ -156,35 +139,22 @@ func (nl *NavigationLogic) patrol(world WorldQuery, creature *Creature) entity.P
 	if len(nl.PatrolRoute) == 0 {
 		return nl.wander(world, creature)
 	}
-	
-	// Va vers le prochain point de patrouille
 	target := nl.PatrolRoute[nl.PatrolIndex]
 	current := creature.GetPosition()
-	
-	dir := entity.Position{
-		X: Sign(target.X - current.X),
-		Y: Sign(target.Y - current.Y),
-	}
-	
-	// Si on est arrivé, passe au point suivant
+	dir := entity.Position{X: Sign(target.X - current.X), Y: Sign(target.Y - current.Y)}
+
 	if dir.X == 0 && dir.Y == 0 {
 		nl.PatrolIndex = (nl.PatrolIndex + 1) % len(nl.PatrolRoute)
 		target = nl.PatrolRoute[nl.PatrolIndex]
-		dir = entity.Position{
-			X: Sign(target.X - current.X),
-			Y: Sign(target.Y - current.Y),
-		}
+		dir = entity.Position{X: Sign(target.X - current.X), Y: Sign(target.Y - current.Y)}
 	}
-	
 	return dir
 }
 
 func (nl *NavigationLogic) followOrientation(creature *Creature) entity.Position {
-	// Retourne la direction de l'orientation actuelle
 	if orient, ok := creature.GetComponent("orientation").(*Orientation); ok {
 		return orient.ToVector()
 	}
-	// Par défaut: vers le nord
 	return entity.Position{X: 0, Y: -1}
 }
 
@@ -193,12 +163,7 @@ func (nl *NavigationLogic) moveToward(world WorldQuery, creature *Creature) enti
 	if target == nil {
 		return nl.wander(world, creature)
 	}
-	
-	current := creature.GetPosition()
-	return entity.Position{
-		X: Sign(target.X - current.X),
-		Y: Sign(target.Y - current.Y),
-	}
+	return entity.Position{X: Sign(target.X - creature.GetPosition().X), Y: Sign(target.Y - creature.GetPosition().Y)}
 }
 
 func (nl *NavigationLogic) moveAway(world WorldQuery, creature *Creature) entity.Position {
@@ -206,46 +171,31 @@ func (nl *NavigationLogic) moveAway(world WorldQuery, creature *Creature) entity
 	if target == nil {
 		return nl.wander(world, creature)
 	}
-	
-	current := creature.GetPosition()
-	return entity.Position{
-		X: Sign(current.X - target.X),
-		Y: Sign(current.Y - target.Y),
-	}
+	return entity.Position{X: Sign(creature.GetPosition().X - target.X), Y: Sign(creature.GetPosition().Y - target.Y)}
 }
 
 // ============================================================================
-// MODE DE DÉPLACEMENT - Comment la créature se déplace
+// REFACTORISATION : PHYSIQUE DU MOUVEMENT (Couches / Spatialité)
 // ============================================================================
 
 type MoveMode string
 
 const (
-	ModeBento      MoveMode = "bento"      // Visible: la tuile glisse
-	ModeShadow     MoveMode = "shadow"     // Invisible: permute face cachée
-	ModeSwap       MoveMode = "swap"       // Inversion: échange avec la cible
-	ModeOver       MoveMode = "over"       // Sur les tuiles: masque une tuile
-	ModeUnder      MoveMode = "under"      // Sous les tuiles: caché par une tuile
+	ModeNormal MoveMode = "normal" // Déplacement standard au sol
+	ModeOver   MoveMode = "over"   // Passe au-dessus des autres tuiles
+	ModeUnder  MoveMode = "under"  // Passe en dessous des autres tuiles
+	ModeSwap   MoveMode = "swap"   // Interversion physique de deux tuiles
 )
 
-// MovementMode définit le mode visuel/mécanique du déplacement
 type MovementMode struct {
-	Type      MoveMode
-	SwapMode  bool   // Si true, échange avec l'occupant de la case cible
+	Type     MoveMode
+	SwapMode bool
 }
 
-// ApplyMovement applique le mouvement selon le mode
-// Cette méthode est utilisée par les systèmes externes
 func (mm *MovementMode) ApplyMovement(world ExtendedWorldState, creature *Creature, newPos entity.Position) bool {
 	switch mm.Type {
-	case ModeBento:
+	case ModeNormal:
 		return world.MoveEntity(creature, newPos)
-	case ModeShadow:
-		if world.CanMoveTo(newPos) {
-			world.MoveEntitySilent(creature, newPos)
-			return true
-		}
-		return false
 	case ModeSwap:
 		return world.SwapEntities(creature.GetPosition(), newPos)
 	case ModeOver:
@@ -253,9 +203,42 @@ func (mm *MovementMode) ApplyMovement(world ExtendedWorldState, creature *Creatu
 		return world.MoveEntity(creature, newPos)
 	case ModeUnder:
 		creature.AddTag("burrowed")
-		return world.MoveEntitySilent(creature, newPos)
+		// Reste géré par MoveEntity car la visibilité graphique dépend désormais de StealthLevel
+		return world.MoveEntity(creature, newPos)
 	}
 	return false
+}
+
+// ============================================================================
+// NOUVEAU : RÈGLES DE PERCEPTION (Furtivité, Acoustique, Indices)
+// ============================================================================
+
+type StealthLevel string
+
+const (
+	StealthManifest StealthLevel = "manifest" // La tuile glisse visiblement (ex: Bento)
+	StealthCloaked  StealthLevel = "cloaked"  // Déplacement invisible à l'œil nu (ex: Shadow)
+)
+
+type AcousticLevel string
+
+const (
+	AcousticSilent AcousticLevel = "silent" // Aucun bruit généré
+	AcousticEcho   AcousticLevel = "echo"   // Émet un stimulus sonore
+)
+
+// PerceptionProfile régit comment le monde/joueur perçoit les actions de cette entité
+type PerceptionProfile struct {
+	Stealth  StealthLevel  // Visibilité de la translation de la tuile
+	Acoustic AcousticLevel // Niveau sonore de la tuile en mouvement
+
+	// Indices du Passé (A posteriori)
+	LeavesTracks  bool
+	TrackType     string // Ex: "mud", "broken_grass", "scent"
+	TrackDuration int    // Nombre de tours avant disparition
+
+	// Indices du Futur (A priori)
+	TelegraphsIntent bool // Indique des intentions d'attaque, de mouvement, etc...
 }
 
 // ============================================================================
@@ -265,24 +248,23 @@ func (mm *MovementMode) ApplyMovement(world ExtendedWorldState, creature *Creatu
 type FrequencyType string
 
 const (
-	FreqVelocity   FrequencyType = "velocity"   // V cases par tour
-	FreqDelay      FrequencyType = "delay"      // Tous les T tours
-	FreqInstant    FrequencyType = "instant"    // Immédiat
+	FreqVelocity FrequencyType = "velocity"
+	FreqDelay    FrequencyType = "delay"
+	FreqInstant  FrequencyType = "instant"
 )
 
-// MovementFrequency définit le rythme du déplacement
 type MovementFrequency struct {
-	Type        FrequencyType
-	Velocity    int   // Nombre de cases par tour
-	Delay       int   // Tours entre deux mouvements
-	TurnCounter int   // Compteur interne
+	Type          FrequencyType
+	Velocity      int
+	Delay         int
+	TurnCounter   int
+	TurnLastMoved int
 }
 
-// CanMove vérifie si la créature peut se déplacer ce tour
 func (mf *MovementFrequency) CanMove() bool {
 	switch mf.Type {
-	case FreqVelocity:
-		return true // La vélocité est gérée dans le mouvement
+	case FreqVelocity, FreqInstant:
+		return true
 	case FreqDelay:
 		mf.TurnCounter++
 		if mf.TurnCounter >= mf.Delay {
@@ -290,139 +272,118 @@ func (mf *MovementFrequency) CanMove() bool {
 			return true
 		}
 		return false
-	case FreqInstant:
-		return true
 	}
 	return false
 }
 
-// GetMoveCount retourne le nombre de cases à déplacer ce tour
 func (mf *MovementFrequency) GetMoveCount() int {
-	switch mf.Type {
-	case FreqVelocity:
+	if mf.Type == FreqVelocity {
 		return mf.Velocity
-	case FreqDelay, FreqInstant:
-		return 1
 	}
 	return 1
 }
 
+func (mf *MovementFrequency) HasMovedThisTurn(turn int) bool {
+	return mf.TurnLastMoved == turn
+}
+
+func (mf *MovementFrequency) MarkMoved(turn int) {
+	mf.TurnLastMoved = turn
+}
+
 // ============================================================================
-// ORIENTATION & DIRECTION RELATIVE
+// ORIENTATION, COLLISION & CONFIGURATION GLOBALE
 // ============================================================================
 
 type RelativeDirection string
 
 const (
-	RelForward   RelativeDirection = "forward"   // Marche avant
-	RelBackward  RelativeDirection = "backward"  // Recul
-	RelLeft      RelativeDirection = "left"      // Latéral gauche
-	RelRight     RelativeDirection = "right"     // Latéral droit
-	RelDiagFL    RelativeDirection = "diag_fl"   // Diagonal avant-gauche
-	RelDiagFR    RelativeDirection = "diag_fr"   // Diagonal avant-droit
-	RelDiagBL    RelativeDirection = "diag_bl"   // Diagonal arrière-gauche
-	RelDiagBR    RelativeDirection = "diag_br"   // Diagonal arrière-droit
-	RelRotate90  RelativeDirection = "rotate_90" // Rotation 90°
-	RelRotate180 RelativeDirection = "rotate_180"// Rotation 180°
+	RelForward  RelativeDirection = "forward"
+	RelBackward RelativeDirection = "backward"
+	RelLeft     RelativeDirection = "left"
+	RelRight    RelativeDirection = "right"
+	RelDiagFL   RelativeDirection = "diag_fl"
+	RelDiagFR   RelativeDirection = "diag_fr"
+	RelDiagBL   RelativeDirection = "diag_bl"
+	RelDiagBR   RelativeDirection = "diag_br"
 )
 
-// Orientation est maintenant définie dans internal/domain/component/component.go
 type Orientation = component.Orientation
 type Direction = entity.Direction
 
-const (
-	DirNorth = entity.DirNorth
-	DirEast  = entity.DirEast
-	DirSouth = entity.DirSouth
-	DirWest  = entity.DirWest
-)
-
-// GetRelativeDirection convertit une direction relative en vecteur absolu
 func GetRelativeDirection(o *Orientation, rel RelativeDirection) entity.Position {
+	vec := o.ToVector()
 	switch rel {
 	case RelForward:
-		vec := o.ToVector()
 		return entity.Position{X: vec.X, Y: vec.Y}
 	case RelBackward:
-		vec := o.ToVector()
 		return entity.Position{X: -vec.X, Y: -vec.Y}
 	case RelLeft:
 		switch o.Direction {
-		case DirNorth:
+		case entity.DirNorth:
 			return entity.Position{X: -1, Y: 0}
-		case DirEast:
+		case entity.DirEast:
 			return entity.Position{X: 0, Y: -1}
-		case DirSouth:
+		case entity.DirSouth:
 			return entity.Position{X: 1, Y: 0}
-		case DirWest:
+		case entity.DirWest:
 			return entity.Position{X: 0, Y: 1}
 		}
 	case RelRight:
 		switch o.Direction {
-		case DirNorth:
+		case entity.DirNorth:
 			return entity.Position{X: 1, Y: 0}
-		case DirEast:
+		case entity.DirEast:
 			return entity.Position{X: 0, Y: 1}
-		case DirSouth:
+		case entity.DirSouth:
 			return entity.Position{X: -1, Y: 0}
-		case DirWest:
+		case entity.DirWest:
 			return entity.Position{X: 0, Y: -1}
 		}
 	case RelDiagFL:
-		forward := o.ToVector()
-		left := GetRelativeDirection(o, RelLeft)
-		return entity.Position{X: forward.X + left.X, Y: forward.Y + left.Y}
+		l := GetRelativeDirection(o, RelLeft)
+		return entity.Position{X: vec.X + l.X, Y: vec.Y + l.Y}
 	case RelDiagFR:
-		forward := o.ToVector()
-		right := GetRelativeDirection(o, RelRight)
-		return entity.Position{X: forward.X + right.X, Y: forward.Y + right.Y}
+		r := GetRelativeDirection(o, RelRight)
+		return entity.Position{X: vec.X + r.X, Y: vec.Y + r.Y}
 	case RelDiagBL:
-		backward := GetRelativeDirection(o, RelBackward)
-		left := GetRelativeDirection(o, RelLeft)
-		return entity.Position{X: backward.X + left.X, Y: backward.Y + left.Y}
+		b := GetRelativeDirection(o, RelBackward)
+		l := GetRelativeDirection(o, RelLeft)
+		return entity.Position{X: b.X + l.X, Y: b.Y + l.Y}
 	case RelDiagBR:
-		backward := GetRelativeDirection(o, RelBackward)
-		right := GetRelativeDirection(o, RelRight)
-		return entity.Position{X: backward.X + right.X, Y: backward.Y + right.Y}
+		b := GetRelativeDirection(o, RelBackward)
+		r := GetRelativeDirection(o, RelRight)
+		return entity.Position{X: b.X + r.X, Y: b.Y + r.Y}
 	}
 	return entity.Position{X: 0, Y: 0}
 }
 
-// ============================================================================
-// CONTRAINTES DE TERRAIN (Collision)
-// ============================================================================
-
 type CollisionType string
 
 const (
-	CollideStop      CollisionType = "stop"       // S'arrête devant obstacle
-	CollideBounce    CollisionType = "bounce"     // Rebondit (180°)
-	CollideSlide     CollisionType = "slide"      // Contourne (glisse)
-	CollidePhase     CollisionType = "phase"      // Traversée (spectres)
+	CollideStop   CollisionType = "stop"
+	CollideBounce CollisionType = "bounce"
+	CollideSlide  CollisionType = "slide"
+	CollidePhase  CollisionType = "phase"
 )
 
-// CollisionHandler gère les collisions
 type CollisionHandler struct {
-	Type          CollisionType
-	CanPhaseThrough []string // Types de tuiles traversables (pour Phase)
+	Type            CollisionType
+	CanPhaseThrough []string
 }
 
-// HandleCollision gère une collision et retourne la nouvelle direction/position
 func (ch *CollisionHandler) HandleCollision(world WorldQuery, creature *Creature, attemptedPos entity.Position) (entity.Position, bool) {
 	switch ch.Type {
 	case CollideStop:
-		return creature.GetPosition(), false // Reste sur place
+		return creature.GetPosition(), false
 	case CollideBounce:
-		// Inverse l'orientation
 		if orient, ok := creature.GetComponent("orientation").(*Orientation); ok {
 			orient.Rotate(180)
 		}
 		return creature.GetPosition(), false
 	case CollideSlide:
-		// Essaie de glisser le long de l'obstacle
 		return ch.trySlide(world, creature, attemptedPos)
 	case CollidePhase:
-		// Vérifie si on peut traverser
 		if ch.canPhase(world, attemptedPos) {
 			return attemptedPos, true
 		}
@@ -433,39 +394,26 @@ func (ch *CollisionHandler) HandleCollision(world WorldQuery, creature *Creature
 
 func (ch *CollisionHandler) trySlide(world WorldQuery, creature *Creature, attemptedPos entity.Position) (entity.Position, bool) {
 	current := creature.GetPosition()
-	dx := attemptedPos.X - current.X
-	dy := attemptedPos.Y - current.Y
-	
-	// Essaie de glisser horizontalement si bloqué verticalement
+	dx, dy := attemptedPos.X-current.X, attemptedPos.Y-current.Y
 	if dy != 0 {
-		slidePos := entity.Position{X: current.X, Y: attemptedPos.Y}
-		if world.IsValidMove(slidePos) {
+		if slidePos := (entity.Position{X: current.X, Y: attemptedPos.Y}); world.IsValidMove(slidePos) {
 			return slidePos, true
 		}
 	}
-	
-	// Essaie de glisser verticalement si bloqué horizontalement
 	if dx != 0 {
-		slidePos := entity.Position{X: attemptedPos.X, Y: current.Y}
-		if world.IsValidMove(slidePos) {
+		if slidePos := (entity.Position{X: attemptedPos.X, Y: current.Y}); world.IsValidMove(slidePos) {
 			return slidePos, true
 		}
 	}
-	
-	// Essaie les directions latérales
 	lateral := []entity.Position{
-		{X: current.X + 1, Y: current.Y},
-		{X: current.X - 1, Y: current.Y},
-		{X: current.X, Y: current.Y + 1},
-		{X: current.X, Y: current.Y - 1},
+		{X: current.X + 1, Y: current.Y}, {X: current.X - 1, Y: current.Y},
+		{X: current.X, Y: current.Y + 1}, {X: current.X, Y: current.Y - 1},
 	}
-	
 	for _, pos := range lateral {
 		if world.IsValidMove(pos) {
 			return pos, true
 		}
 	}
-	
 	return current, false
 }
 
@@ -479,43 +427,32 @@ func (ch *CollisionHandler) canPhase(world WorldQuery, pos entity.Position) bool
 	return false
 }
 
-// ============================================================================
-// CONFIGURATION COMPLÈTE DU MOUVEMENT
-// ============================================================================
-
-// MovementProfile regroupe toute la configuration de déplacement
+// Profil de mouvement global mis à jour
 type MovementProfile struct {
-	Trigger    MovementTrigger
-	Navigation NavigationLogic
-	Mode       MovementMode
-	Frequency  MovementFrequency
+	Trigger     MovementTrigger
+	Navigation  NavigationLogic
+	Mode        MovementMode
+	Perception  PerceptionProfile // Intégration des règles de perception
+	Frequency   MovementFrequency
 	Orientation Orientation
-	Collision  CollisionHandler
+	Collision   CollisionHandler
 }
 
-// MovementRequest représente une intention de mouvement
 type MovementRequest struct {
-	Creature      *Creature
-	From          entity.Position
-	To            entity.Position
-	Direction     RelativeDirection
-	IsRotation    bool
+	Creature   *Creature
+	From, To   entity.Position
+	Direction  RelativeDirection
+	IsRotation bool
 }
 
-// MovementResult représente le résultat d'un mouvement
 type MovementResult struct {
 	Success       bool
 	FinalPosition entity.Position
 	Rotated       bool
 	NewDirection  Direction
-	SwappedWith   string // ID de l'entité échangée (si ModeSwap)
+	SwappedWith   string
 }
 
-// ============================================================================
-// INTERFACES ÉTENDUES POUR LE MOUVEMENT
-// ============================================================================
-
-// WorldQuery interface pour les requêtes sur le monde
 type WorldQuery interface {
 	WorldState
 	IsTileRevealed(pos entity.Position) bool
@@ -525,7 +462,6 @@ type WorldQuery interface {
 	GetEntitiesAt(pos entity.Position) []entity.Entity
 }
 
-// ExtendedWorldState interface étendue pour les actions de mouvement
 type ExtendedWorldState interface {
 	WorldState
 	MoveEntity(creature *Creature, newPos entity.Position) bool
@@ -534,11 +470,6 @@ type ExtendedWorldState interface {
 	SwapEntities(pos1, pos2 entity.Position) bool
 }
 
-// ============================================================================
-// UTILITAIRES
-// ============================================================================
-
-// Sign retourne le signe d'un entier (-1, 0, ou 1)
 func Sign(x int) int {
 	if x < 0 {
 		return -1
@@ -549,156 +480,70 @@ func Sign(x int) int {
 	return 0
 }
 
-// DefaultMovementProfile retourne un profil de mouvement par défaut
+// Profiles préconfigurés mis à jour avec la sémantique de perception
 func DefaultMovementProfile() *MovementProfile {
 	return &MovementProfile{
-		Trigger: MovementTrigger{
-			Type: TriggerAuto,
-		},
-		Navigation: NavigationLogic{
-			Type: NavWander,
-		},
-		Mode: MovementMode{
-			Type: ModeBento,
-		},
-		Frequency: MovementFrequency{
-			Type:     FreqDelay,
-			Delay:    1,
-		},
-		Orientation: Orientation{
-			Direction: DirNorth,
-		},
-		Collision: CollisionHandler{
-			Type: CollideStop,
-		},
+		Trigger:    MovementTrigger{Type: TriggerAuto},
+		Navigation: NavigationLogic{Type: NavWander},
+		Mode:       MovementMode{Type: ModeNormal},
+		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
+		Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+		Collision:  CollisionHandler{Type: CollideStop},
 	}
 }
 
-// PassiveProfile créature immobile (ressource fixe)
-func PassiveProfile() *MovementProfile {
-	return &MovementProfile{
-		Trigger: MovementTrigger{
-			Type: TriggerPassive,
-		},
-		Navigation: NavigationLogic{
-			Type: NavWander,
-		},
-		Mode: MovementMode{
-			Type: ModeBento,
-		},
-		Frequency: MovementFrequency{
-			Type: FreqInstant,
-		},
-		Orientation: Orientation{
-			Direction: DirNorth,
-		},
-		Collision: CollisionHandler{
-			Type: CollideStop,
-		},
-	}
-}
-
-// HunterProfile chasseur agressif
-func HunterProfile() *MovementProfile {
-	return &MovementProfile{
-		Trigger: MovementTrigger{
-			Type: TriggerAuto,
-		},
-		Navigation: NavigationLogic{
-			Type:   NavAttraction,
-			Target: TargetPlayer,
-		},
-		Mode: MovementMode{
-			Type: ModeBento,
-		},
-		Frequency: MovementFrequency{
-			Type:     FreqVelocity,
-			Velocity: 2,
-		},
-		Orientation: Orientation{
-			Direction: DirNorth,
-		},
-		Collision: CollisionHandler{
-			Type: CollideBounce,
-		},
-	}
-}
-
-// FleeingProfile créature qui fuit
 func FleeingProfile() *MovementProfile {
 	return &MovementProfile{
-		Trigger: MovementTrigger{
-			Type: TriggerProximity,
-			Radius: 3,
+		Trigger:    MovementTrigger{Type: TriggerProximity, Radius: 3},
+		Navigation: NavigationLogic{Type: NavRepulsion, Target: TargetPlayer},
+		Mode:       MovementMode{Type: ModeNormal},
+		Perception: PerceptionProfile{
+			Stealth:       StealthManifest,
+			Acoustic:      AcousticEcho, // Mais fait du bruit en fuyant !
+			LeavesTracks:  true,         // Laisse des indices
+			TrackType:     "broken_grass",
+			TrackDuration: 3,
 		},
-		Navigation: NavigationLogic{
-			Type:   NavRepulsion,
-			Target: TargetPlayer,
-		},
-		Mode: MovementMode{
-			Type: ModeShadow,
-		},
-		Frequency: MovementFrequency{
-			Type:     FreqVelocity,
-			Velocity: 1,
-		},
-		Orientation: Orientation{
-			Direction: DirNorth,
-		},
-		Collision: CollisionHandler{
-			Type: CollideSlide,
-		},
+		Frequency: MovementFrequency{Type: FreqVelocity, Velocity: 1},
+		Collision: CollisionHandler{Type: CollideSlide},
 	}
 }
 
-// SpecterProfile spectre qui traverse les murs
 func SpecterProfile() *MovementProfile {
 	return &MovementProfile{
-		Trigger: MovementTrigger{
-			Type: TriggerOnEcho,
+		Trigger:    MovementTrigger{Type: TriggerOnEcho}, // Se déplace quand une tuile spécifique est révélée
+		Navigation: NavigationLogic{Type: NavWander},
+		Mode:       MovementMode{Type: ModeUnder}, // premier rendu en dessous des tuiles, mais la logique de déplacement reste standard (peut être bloqué par des murs, etc.)
+		Perception: PerceptionProfile{
+			Stealth:          StealthCloaked,
+			Acoustic:         AcousticSilent,
+			TelegraphsIntent: true, // Indique sa prochaine destination
 		},
-		Navigation: NavigationLogic{
-			Type: NavWander,
-		},
-		Mode: MovementMode{
-			Type: ModeShadow,
-		},
-		Frequency: MovementFrequency{
-			Type:     FreqDelay,
-			Delay:    2,
-		},
-		Orientation: Orientation{
-			Direction: DirNorth,
-		},
-		Collision: CollisionHandler{
-			Type:            CollidePhase,
-			CanPhaseThrough: []string{"wall", "structure", "architecture"},
-		},
+		Frequency: MovementFrequency{Type: FreqDelay, Delay: 1},
+		Collision: CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"wall", "structure"}},
 	}
 }
 
-// PatrollerProfile garde qui patrouille
+// PassiveProfile configure une créature immobile
+func PassiveProfile() *MovementProfile {
+	return &MovementProfile{
+		Trigger:    MovementTrigger{Type: TriggerPassive},
+		Navigation: NavigationLogic{Type: NavWander},
+		Mode:       MovementMode{Type: ModeNormal},
+		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
+		Frequency:  MovementFrequency{Type: FreqInstant},
+		Collision:  CollisionHandler{Type: CollideStop},
+	}
+}
+
+// PatrollerProfile configure une créature qui suit une route spécifique
 func PatrollerProfile(route []entity.Position) *MovementProfile {
 	return &MovementProfile{
-		Trigger: MovementTrigger{
-			Type: TriggerAuto,
-		},
-		Navigation: NavigationLogic{
-			Type:        NavPatrol,
-			PatrolRoute: route,
-		},
-		Mode: MovementMode{
-			Type: ModeBento,
-		},
-		Frequency: MovementFrequency{
-			Type:  FreqDelay,
-			Delay: 1,
-		},
-		Orientation: Orientation{
-			Direction: DirNorth,
-		},
-		Collision: CollisionHandler{
-			Type: CollideStop,
-		},
+		Trigger:    MovementTrigger{Type: TriggerAuto},
+		Navigation: NavigationLogic{Type: NavPatrol, PatrolRoute: route},
+		Mode:       MovementMode{Type: ModeNormal},
+		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
+		Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+		Collision:  CollisionHandler{Type: CollideStop},
 	}
 }

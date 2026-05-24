@@ -138,6 +138,10 @@ func (m *Manager) generateAllAssets() {
 		// Tuile portail
 		portalImg := generateTilePortal(size, theme)
 		m.images["tile_portal_"+themeName] = portalImg
+
+		// Tuile de sortie (navigation)
+		exitImg := generateTileExit(size, theme)
+		m.images["tile_exit_"+themeName] = exitImg
 	}
 
 	// Tuiles par défaut (sans suffixe de thème)
@@ -151,11 +155,10 @@ func (m *Manager) generateAllAssets() {
 	m.images["tile_dolmen"] = m.images["tile_dolmen_default"]
 	m.images["tile_obelisk"] = m.images["tile_obelisk_default"]
 	m.images["tile_portal"] = m.images["tile_portal_default"]
+	m.images["tile_exit"] = m.images["tile_exit_default"]
 
-	// Image pour case vide (sol nu sombre)
-	emptyImg := ebiten.NewImage(size, size)
-	emptyImg.Fill(color.RGBA{20, 20, 25, 255})
-	m.images["square_empty"] = emptyImg
+	// Image pour case vide (sol nu avec quadrillage)
+	m.images["square_empty"] = generateEmptySquare(size)
 
 	// Compatibilité
 	m.images["tile_empty"] = m.images["tile_trap"]
