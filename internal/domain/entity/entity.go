@@ -54,7 +54,7 @@ const (
 	TypeArtefact
 	TypeTrap
 	TypeLoot
-	TypeTrace
+	TypeTrack
 )
 
 // Direction représente les orientations cardinales
@@ -233,8 +233,8 @@ func (t Type) String() string {
 		return "trap"
 	case TypeLoot:
 		return "loot"
-    case TypeTrace:
-        return "trace"
+	case TypeTrack:
+		return "track"
 	}
 	return "unknown"
 }
@@ -290,13 +290,13 @@ type Transformation uint8
 
 const (
 	TransIdentity Transformation = iota // 0: e
-	TransRot90                         // 1: r
-	TransRot180                        // 2: r^2
-	TransRot270                        // 3: r^3
-	TransMirrorH                       // 4: s (Miroir Horizontal - Médiane Verticale)
-	TransMirrorD1                      // 5: sr (Miroir Diagonale \)
-	TransMirrorV                       // 6: sr^2 (Miroir Vertical - Médiane Horizontale)
-	TransMirrorD2                      // 7: sr^3 (Miroir Diagonale /)
+	TransRot90                          // 1: r
+	TransRot180                         // 2: r^2
+	TransRot270                         // 3: r^3
+	TransMirrorH                        // 4: s (Miroir Horizontal - Médiane Verticale)
+	TransMirrorD1                       // 5: sr (Miroir Diagonale \)
+	TransMirrorV                        // 6: sr^2 (Miroir Vertical - Médiane Horizontale)
+	TransMirrorD2                       // 7: sr^3 (Miroir Diagonale /)
 )
 
 var d4Table = [8][8]Transformation{
@@ -392,8 +392,8 @@ func (e *BaseEntity) Deactivate()            { e.Active = false }
 func (e *BaseEntity) GetState() TileState    { return e.State }
 func (e *BaseEntity) SetState(s TileState)   { e.State = s }
 
-func (e *BaseEntity) GetTransformation() Transformation      { return e.Transform }
-func (e *BaseEntity) SetTransformation(t Transformation)    { e.Transform = t }
+func (e *BaseEntity) GetTransformation() Transformation  { return e.Transform }
+func (e *BaseEntity) SetTransformation(t Transformation) { e.Transform = t }
 
 func (e *BaseEntity) GetOrientation() Direction {
 	// Déduit une direction simplifiée pour la compatibilité (ex: pour le pathfinding)
@@ -550,46 +550,46 @@ func (m *Manager) CountByType(t Type) int {
 }
 
 func (t Transformation) String() string {
-    switch t {
-    case TransIdentity:
-       return "Identity (0°)"
-    case TransRot90:
-       return "Rot90 (90°)"
-    case TransRot180:
-       return "Rot180 (180°)"
-    case TransRot270:
-       return "Rot270 (270°)"
-    case TransMirrorH:
-       return "MirrorH (Flip G/D)"
-    case TransMirrorV:
-       return "MirrorV (Flip H/B)"
-    case TransMirrorD1:
-       return "MirrorD1 (Diago \\)"
-    case TransMirrorD2:
-       return "MirrorD2 (Diago /)"
-    default:
-       return "Unknown"
-    }
+	switch t {
+	case TransIdentity:
+		return "Identity (0°)"
+	case TransRot90:
+		return "Rot90 (90°)"
+	case TransRot180:
+		return "Rot180 (180°)"
+	case TransRot270:
+		return "Rot270 (270°)"
+	case TransMirrorH:
+		return "MirrorH (Flip G/D)"
+	case TransMirrorV:
+		return "MirrorV (Flip H/B)"
+	case TransMirrorD1:
+		return "MirrorD1 (Diago \\)"
+	case TransMirrorD2:
+		return "MirrorD2 (Diago /)"
+	default:
+		return "Unknown"
+	}
 }
 
-type Trace struct {
+type Track struct {
 	BaseEntity
 	Kind     string   // "mud", "claws", "broken_grass", etc.
 	Duration int      // Nombre de tours restants avant disparition
 	FromPos  Position // Case de départ (équivaut à e.Pos)
-    ToPos    Position // Case d'arrivée du monstre
+	ToPos    Position // Case d'arrivée du monstre
 }
 
-func NewTrace(kind string, duration int, from, to Position) *Trace {
-	t := &Trace{
-		BaseEntity: NewBaseEntity(TypeTrace),
+func NewTrack(kind string, duration int, from, to Position) *Track {
+	t := &Track{
+		BaseEntity: NewBaseEntity(TypeTrack),
 		Kind:       kind,
 		Duration:   duration,
 		FromPos:    from,
 		ToPos:      to,
 	}
 	t.SetPosition(from) // Par défaut on le lie à la case de départ
-	t.AddTag("trace")
+	t.AddTag("track")
 	t.AddTag(kind)
 	return t
 }

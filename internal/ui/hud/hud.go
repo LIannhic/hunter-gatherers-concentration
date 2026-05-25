@@ -33,14 +33,16 @@ type HUD struct {
 	inventoryOffscreen *ebiten.Image // Buffer pour le clipping de l'inventaire
 
 	// Gestion de la suppression et sélection
-	selectedLoots    map[int]bool // Indices sélectionnés
-	selectedLootIndex int         // Item currently selected for usage
-	confirmClearAll  bool         // vrai si on a cliqué sur X sans sélection
+	selectedLoots     map[int]bool // Indices sélectionnés
+	selectedLootIndex int          // Item currently selected for usage
+	confirmClearAll   bool         // vrai si on a cliqué sur X sans sélection
 
 	// Feedback temps réel du compte à rebours
 	getTimerRemaining func() float64 // Temps restant du timer
 	getTimerPanic     func() bool    // true si < 3s
 	pulseFrame        int            // Compteur de frames pour l'animation de pulse
+	infoMessage       string         // Message d'item affiché à l'écran
+	infoMessageTimer  int            // Timer du message d'item
 }
 
 // NewHUD crée un nouveau HUD
@@ -63,6 +65,14 @@ func NewHUD(world *domain.World) *HUD {
 		h.fullFeedbackTimer = 60 // 1 seconde à 60 fps
 	})
 
+	// S'abonne aux messages d'item pour les effets de butin
+	world.EventBus.SubscribeFunc(event.ItemMessage, func(e event.Event) {
+		if msg, ok := e.Payload["message"].(string); ok {
+			h.infoMessage = msg
+			h.infoMessageTimer = 120 // 2 secondes à 60 fps
+		}
+	})
+
 	return h
 }
 
@@ -70,6 +80,12 @@ func NewHUD(world *domain.World) *HUD {
 func (h *HUD) Update() {
 	if h.fullFeedbackTimer > 0 {
 		h.fullFeedbackTimer--
+	}
+	if h.infoMessageTimer > 0 {
+		h.infoMessageTimer--
+		if h.infoMessageTimer == 0 {
+			h.infoMessage = ""
+		}
 	}
 	h.pulseFrame++
 }
@@ -106,8 +122,8 @@ func (h *HUD) IsEchoHoundSelected() bool {
 }
 
 func (h *HUD) IsDreamberrySelected() bool {
-    item := h.GetSelectedLootItem()
-    return item != nil && item.SourceID == player.DreamberryItemSourceID
+	item := h.GetSelectedLootItem()
+	return item != nil && item.SourceID == player.DreamberryItemSourceID
 }
 
 func (h *HUD) ClearActiveLootSelection() {
@@ -179,6 +195,9 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	if h.showVictory {
 		h.renderVictoryWindow(screen)
 	}
+	if h.infoMessageTimer > 0 && h.infoMessage != "" {
+		text.Draw(screen, h.infoMessage, basicfont.Face7x13, 24, ui.ScreenHeight-24, color.RGBA{255, 255, 230, 255})
+	}
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
@@ -212,45 +231,52 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		{"Portail", "tile_portal"},
 		{"Sortie", "tile_exit"},
 		{"Case Vide", "square_empty"},
+		{"Trace Boue", "mud"},
+		{"Trace Griffes", "claws"},
+		{"Herbe Cassée", "broken_grass"},
+		{"Empreinte Pas", "footprints"},
+		{"Rayon Attaque", "intent_beam"},
 	}
 
-    colWidth := 150
-    rowHeight := 120
-    itemsPerRow := 5
+	colWidth := 150
+	rowHeight := 120
+	itemsPerRow := 5
 
-    for i, asset := range assetsToDraw {
-        row := i / itemsPerRow
-        col := i % itemsPerRow
+	for i, asset := range assetsToDraw {
+		row := i / itemsPerRow
+		col := i % itemsPerRow
 
-        ax := x + 30 + col*colWidth
-        ay := y + 60 + row*rowHeight
+		ax := x + 30 + col*colWidth
+		ay := y + 60 + row*rowHeight
 
-        // Cadre de l'asset
-        vector.StrokeRect(screen, float32(ax), float32(ay), 88, 88, 1, color.RGBA{60, 60, 80, 255}, true)
+		// Cadre de l'asset
+		vector.StrokeRect(screen, float32(ax), float32(ay), 88, 88, 1, color.RGBA{60, 60, 80, 255}, true)
 
-        // Dessin de l'asset si disponible
-        if h.assets != nil {
-            img := h.assets.GetImage(asset.key)
-            if img != nil {
-                op := &ebiten.DrawImageOptions{}
-                op.GeoM.Translate(float64(ax), float64(ay))
-                // On scale un peu si l'image est plus grande que le cadre
-                sw := 88.0 / float64(img.Bounds().Dx())
-                sh := 88.0 / float64(img.Bounds().Dy())
-                s := sw
-                if sh < s { s = sh }
-                op.GeoM.Scale(s, s)
-                screen.DrawImage(img, op)
-            }
-        }
+		// Dessin de l'asset si disponible
+		if h.assets != nil {
+			img := h.assets.GetImage(asset.key)
+			if img != nil {
+				op := &ebiten.DrawImageOptions{}
+				op.GeoM.Translate(float64(ax), float64(ay))
+				// On scale un peu si l'image est plus grande que le cadre
+				sw := 88.0 / float64(img.Bounds().Dx())
+				sh := 88.0 / float64(img.Bounds().Dy())
+				s := sw
+				if sh < s {
+					s = sh
+				}
+				op.GeoM.Scale(s, s)
+				screen.DrawImage(img, op)
+			}
+		}
 
-        // Nom de l'asset
-        text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+105, color.White)
+		// Nom de l'asset
+		text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+105, color.White)
 
-        // TODO: En pratique, il faudrait passer Application ou AssetsManager au HUD
-        // Pour l'instant on montre la structure.
-        text.Draw(screen, "["+asset.key+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
-    }
+		// TODO: En pratique, il faudrait passer Application ou AssetsManager au HUD
+		// Pour l'instant on montre la structure.
+		text.Draw(screen, "["+asset.key+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
+	}
 }
 
 // renderVictoryWindow dessine l'écran de victoire
@@ -382,7 +408,7 @@ func (h *HUD) getGridDetailedCounts(gridID string) map[string]int {
 	for _, e := range h.world.Entities.GetByType(entity.TypeStructure) {
 		if e.GetGridID() == gridID {
 			label := "structure"
-			if e.HasTag("commencement_portal") {
+			if e.HasTag("start_portal") {
 				label = "portail_entree"
 			} else if e.HasTag("finish_portal") {
 				label = "portail_sortie"
@@ -523,18 +549,18 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 		// Slot border
 		slotClr := color.RGBA{50, 50, 50, 255}
 
-			// Highlight if selected for deletion or if clear-all-confirmation is on (and item is deletable)
-			highlight := h.selectedLoots[i]
-			if h.confirmClearAll && i < len(items) && items[i].IsDeletable {
-				highlight = true
-			}
+		// Highlight if selected for deletion or if clear-all-confirmation is on (and item is deletable)
+		highlight := h.selectedLoots[i]
+		if h.confirmClearAll && i < len(items) && items[i].IsDeletable {
+			highlight = true
+		}
 
-			if h.selectedLootIndex == i {
-				slotClr = color.RGBA{0, 180, 255, 255} // Blue highlight for active portable portal
-			} else if highlight {
-				slotClr = color.RGBA{255, 100, 100, 255} // Red highlight for deletion
-			}
-			vector.StrokeRect(h.inventoryOffscreen, float32(sx), float32(sy), float32(ui.LootSlotSize), float32(ui.LootSlotSize), 1, slotClr, true)
+		if h.selectedLootIndex == i {
+			slotClr = color.RGBA{0, 180, 255, 255} // Blue highlight for active portable portal
+		} else if highlight {
+			slotClr = color.RGBA{255, 100, 100, 255} // Red highlight for deletion
+		}
+		vector.StrokeRect(h.inventoryOffscreen, float32(sx), float32(sy), float32(ui.LootSlotSize), float32(ui.LootSlotSize), 1, slotClr, true)
 
 		if i < len(items) {
 			item := items[i]
@@ -591,21 +617,21 @@ func (h *HUD) renderGauges(screen *ebiten.Image) {
 		return
 	}
 
-    // Health gauge
-    h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255})
-    
-    // Mana gauge
-    h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255})
-    
-    // Sanity gauge (avec pulse si panique)
-    var sanityX float64 = ui.GaugesX + ui.SanityGaugeRelativeX
-    var sanityY float64 = ui.GaugesY + ui.SanityGaugeRelativeY
-    if h.getTimerPanic != nil && h.getTimerPanic() {
-        // Phase de panique : la jauge de santé mentale tremble de plus en plus fort
-        offset := h.computePanicOffset()
-        sanityX += offset
-    }
-    h.drawVerticalGauge(screen, sanityX, sanityY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255})
+	// Health gauge
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255})
+
+	// Mana gauge
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255})
+
+	// Sanity gauge (avec pulse si panique)
+	var sanityX float64 = ui.GaugesX + ui.SanityGaugeRelativeX
+	var sanityY float64 = ui.GaugesY + ui.SanityGaugeRelativeY
+	if h.getTimerPanic != nil && h.getTimerPanic() {
+		// Phase de panique : la jauge de santé mentale tremble de plus en plus fort
+		offset := h.computePanicOffset()
+		sanityX += offset
+	}
+	h.drawVerticalGauge(screen, sanityX, sanityY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255})
 }
 
 // computePanicOffset calcule un décalage oscillant dont l'amplitude augmente
@@ -620,8 +646,8 @@ func (h *HUD) computePanicOffset() float64 {
 	}
 	// Intensité inversement proportionnelle au temps restant
 	intensity := (3.0 - remaining) / 3.0 // 0.0 → 1.0
-	maxAmp := 6.0 * intensity             // amplitude max 6 px
-	freq := 0.4 + (intensity * 0.6)       // fréquence accélère
+	maxAmp := 6.0 * intensity            // amplitude max 6 px
+	freq := 0.4 + (intensity * 0.6)      // fréquence accélère
 	return math.Sin(float64(h.pulseFrame)*freq) * maxAmp
 }
 

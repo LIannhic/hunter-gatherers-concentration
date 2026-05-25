@@ -324,19 +324,32 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			CanMove: true,
 			Speed:   1,
 		})
+
+		// Pour dessiner et contourner un espace de 3x3 cases,
+		// il faut faire 2 pas (translations) par côté.
+		squarePattern3x3 := []entity.Position{
+			{X: 1, Y: 0},  // 1 pas à Droite
+			{X: 0, Y: 1},  // 1 pas en Bas
+			{X: -1, Y: 0}, // 1 pas à Gauche
+			{X: 0, Y: -1}, // 1 pas en Haut
+		}
+
 		c.SetMovementProfile(&MovementProfile{
-			Trigger:    MovementTrigger{Type: TriggerOnReveal},
-			Navigation: NavigationLogic{Type: NavWander},
-			Mode:       MovementMode{Type: ModeUnder}, // Couche Souterraine (Z-sorting bas)
+			Trigger: MovementTrigger{Type: TriggerAuto},
+			Navigation: NavigationLogic{
+				Type:        NavRelative,
+				PatrolRoute: squarePattern3x3,
+				PatrolIndex: 0,
+			},
+			Mode: MovementMode{Type: ModeUnder},
 			Perception: PerceptionProfile{
 				Stealth:       StealthManifest,
 				Acoustic:      AcousticSilent,
-				LeavesTracks:  true,  // Laisse des indices en creusant
-				TrackType:     "mud", // Des monticules de boue/terre retournée
-				TrackDuration: 4,
+				LeavesTracks:  true,
+				TrackType:     "mud",
+				TrackDuration: 2,
 			},
-	            // Se déplace immédiatement une fois révélée, puis reste discrète
-	            Frequency:   MovementFrequency{Type: FreqInstant},
+			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
 			Orientation: Orientation{Direction: DirNorth},
 			Collision:   CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"dirt", "soil"}},
 		})
@@ -387,7 +400,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Speed:   1,
 		})
 		c.SetMovementProfile(&MovementProfile{
-			Trigger:    MovementTrigger{Type: TriggerOnEcho},
+			Trigger: MovementTrigger{Type: TriggerOnEcho},
 			// Quand une tile est révélée, se dirige vers la ressource la plus proche (dreamberries)
 			Navigation: NavigationLogic{Type: NavAttraction, Target: TargetResource, TargetName: "dreamberry"},
 			Mode:       MovementMode{Type: ModeNormal},

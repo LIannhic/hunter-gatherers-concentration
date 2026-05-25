@@ -126,8 +126,7 @@ func (w *World) GetCompletionRatio(gridID string) float64 {
 	for _, e := range w.Entities.GetAllActive() {
 		// On compte ressources, créatures et pièges comme éléments à appairer
 		if e.GetGridID() == gridID && (e.GetType() == entity.TypeResource ||
-			e.GetType() == entity.TypeCreature ||
-			e.GetType() == entity.TypeTrap) {
+			e.GetType() == entity.TypeCreature) {
 			currentMatchable++
 		}
 	}
@@ -681,8 +680,8 @@ func (w *World) PopulateInitialStructures() {
 		for pos, plot := range grid.Plots {
 			if plot.StructureID != "" {
 				stype := "unknown"
-				// Décodage de l'ID de structure (ex: "commencement_portal" ou "struct_dolmen_1_1")
-				if plot.StructureID == "commencement_portal" || plot.StructureID == "finish_portal" {
+				// Décodage de l'ID de structure (ex: "start_portal" ou "struct_dolmen_1_1")
+				if plot.StructureID == "start_portal" || plot.StructureID == "finish_portal" {
 					stype = plot.StructureID
 				} else if strings.HasPrefix(plot.StructureID, "struct_") {
 					parts := strings.Split(plot.StructureID, "_")
@@ -719,13 +718,16 @@ func (w *World) RemoveEntity(id entity.ID) {
 		w.Engine.TrackTileReveal(board.Position{X: pos.X, Y: pos.Y})
 	}
 
-	grid, ok := w.Grids[gridID]
-	if ok {
-		_, err := grid.RemoveEntity(board.Position{X: pos.X, Y: pos.Y}, idStr)
-		if err != nil {
-			fmt.Printf("[WORLD] Erreur lors du retrait de %s du board: %v\n", idStr, err)
-		} else {
-			fmt.Printf("[WORLD] Entité %s supprimée de la grille %s à la position %v\n", idStr, gridID, pos)
+	// Ne tente de retirer de la grille que si ce n'est pas une Trace (qui n'y est jamais enregistrée)
+	if e.GetType() != entity.TypeTrack {
+		grid, ok := w.Grids[gridID]
+		if ok {
+			_, err := grid.RemoveEntity(board.Position{X: pos.X, Y: pos.Y}, idStr)
+			if err != nil {
+				//fmt.Printf("[WORLD] Erreur lors du retrait de %s du board: %v\n", idStr, err)
+			} else {
+				fmt.Printf("[WORLD] Entité %s supprimée de la grille %s à la position %v\n", idStr, gridID, pos)
+			}
 		}
 	}
 
@@ -868,35 +870,35 @@ func (w *World) is3x3DeploymentAreaClear(grid *board.Grid, center board.Position
 }
 
 func (w *World) clear3x3DeploymentArea(grid *board.Grid, center board.Position) {
-    // 1. On crée une liste pour collecter TOUTES les entités de la zone 3x3
-    idsToRemove := make([]string, 0)
+	// 1. On crée une liste pour collecter TOUTES les entités de la zone 3x3
+	idsToRemove := make([]string, 0)
 
-    for dy := 0; dy < 3; dy++ {
-       for dx := 0; dx < 3; dx++ {
-          pos := board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy}
+	for dy := 0; dy < 3; dy++ {
+		for dx := 0; dx < 3; dx++ {
+			pos := board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy}
 
-          // plot est un *Plot (pointeur)
-          plot, err := grid.Get(pos)
-          if err != nil {
-             continue
-          }
+			// plot est un *Plot (pointeur)
+			plot, err := grid.Get(pos)
+			if err != nil {
+				continue
+			}
 
-          // On accumule les IDs à supprimer du monde
-          for _, id := range plot.EntitiesID {
-             idsToRemove = append(idsToRemove, id)
-          }
+			// On accumule les IDs à supprimer du monde
+			for _, id := range plot.EntitiesID {
+				idsToRemove = append(idsToRemove, id)
+			}
 
-          // 2. On nettoie DIRECTEMENT la tuile dans la grille (via le pointeur)
-          plot.Modifier.Obstructed = false
-          plot.StructureID = ""
-          plot.EntitiesID = nil // 'nil' réinitialise proprement la slice
-       }
-    }
+			// 2. On nettoie DIRECTEMENT la tuile dans la grille (via le pointeur)
+			plot.Modifier.Obstructed = false
+			plot.StructureID = ""
+			plot.EntitiesID = nil // 'nil' réinitialise proprement la slice
+		}
+	}
 
-    // 3. On détruit définitivement les entités auprès du gestionnaire du World
-    for _, id := range idsToRemove {
-       w.RemoveEntity(entity.ID(id))
-    }
+	// 3. On détruit définitivement les entités auprès du gestionnaire du World
+	for _, id := range idsToRemove {
+		w.RemoveEntity(entity.ID(id))
+	}
 }
 
 // HasPortablePortal vérifie si le joueur possède un portail portable dans son inventaire
@@ -1205,6 +1207,28 @@ func getResourceType(e entity.Entity) string {
 	return "unknown"
 }
 
+// --- SYSTEM: TRACk ---
+// Gère la disparition progressive des traces (indices)
+type TrackSystem struct{}
+
+func (s *TrackSystem) Priority() int { return 5 }
+
+func (s *TrackSystem) Update(world *World) {
+	tracks := world.Entities.GetByType(entity.TypeTrack)
+
+	for _, e := range tracks {
+		t, ok := e.(*entity.Track)
+		if !ok {
+			continue
+		}
+
+		t.Duration--
+		if t.Duration <= 0 {
+			world.RemoveEntity(t.GetID())
+		}
+	}
+}
+
 // --- SYSTEM: TRIGGER ---
 // Gère les déclencheurs (terriers, leurres, etc.)
 type TriggerSystem struct{}
@@ -1424,7 +1448,7 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
 				// Gestion spécifique des structures
 				if e.GetType() == entity.TypeStructure {
-					if e.HasTag("commencement_portal") {
+					if e.HasTag("start_portal") {
 						// Portail de commencement : se cache et se bloque de manière permanente
 						flipDir := tile.Tilt.ToFlipDirection()
 						_, _ = world.FlipTile(gridID, tile.Position, flipDir)
@@ -1498,11 +1522,22 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 	}
 
 	sourceID := string(entID)
-	// Si c'est un EchoHound OU un Dreamberry, on applique le SourceID spécifique
+	// Si c'est un EchoHound, un Dreamberry ou un item de loot consommable,
+	// on applique le SourceID spécifique lorsque disponible.
 	if name == player.EchoHoundItemName {
 		sourceID = player.EchoHoundItemSourceID
 	} else if name == player.DreamberryItemName {
 		sourceID = player.DreamberryItemSourceID
+	} else if name == player.MoonstoneItemName {
+		sourceID = player.MoonstoneItemSourceID
+	} else if name == player.CrystalShardItemName {
+		sourceID = player.CrystalShardItemSourceID
+	} else if name == player.WhisperingHerbItemName {
+		sourceID = player.WhisperingHerbItemSourceID
+	} else if name == player.SpecterItemName {
+		sourceID = player.SpecterItemSourceID
+	} else if name == player.BurrowerItemName {
+		sourceID = player.BurrowerItemSourceID
 	}
 
 	// Un match = un loot
@@ -1511,7 +1546,7 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		Name:        name,
 		Type:        eType,
 		SourceID:    sourceID,
-		IsUsable:    name == player.EchoHoundItemName || name == player.DreamberryItemName,
+		IsUsable:    name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName,
 		IsDeletable: true,
 	}
 
@@ -1649,21 +1684,16 @@ func (s *CreatureAISystem) Update(world *World) {
 			))
 
 		case "spawn_trap":
-			// Le singe dépose un leurre (piège qui ressemble à une tuile cachée)
+			// Le singe dépose un piège standard
 			trap, err := world.SpawnTrap(c.GetGridID(), c.GetPosition())
 			if err == nil {
-				if ent, ok := world.Entities.Get(trap.GetID()); ok {
-					ent.AddTag("moss_lure") // Utilisé par le renderer pour dessiner un dos de tuile
-					ent.SetState(entity.Hidden)
-				}
-
-				// Place le piège SOUS le singe dans la pile
+				// On place le piège SOUS le singe dans la pile
 				if grid, ok := world.GetGrid(c.GetGridID()); ok {
 					pos := board.Position(c.GetPosition())
 					grid.RemoveEntity(pos, string(trap.GetID()))
 					grid.PlaceEntityAtBottom(pos, string(trap.GetID()))
 				}
-				fmt.Printf("[ACTION] %s a posé un leurre à %v\n", c.Species, c.GetPosition())
+				fmt.Printf("[ACTION] %s a posé un piège à %v\n", c.Species, c.GetPosition())
 			}
 
 		case "flee":
@@ -1764,9 +1794,6 @@ func (s *CreatureMovementSystem) Update(world *World) {
 		// Comportements spécifiques après un déplacement déclenché par "OnReveal"
 		if profile.Trigger.Type == creature.TriggerOnReveal {
 			switch c.Species {
-			case "burrower":
-				// Ne bouge qu'une fois quand elle est révélée
-				profile.Trigger.Type = creature.TriggerPassive
 			case "stonewarden":
 				// Après la première révélation, devient patrouilleur suivant son orientation
 				profile.Trigger.Type = creature.TriggerAuto
@@ -1872,6 +1899,50 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 			}
 		}
 		return dir
+
+	case creature.NavRelative:
+		if len(nav.PatrolRoute) == 0 {
+			return s.getNavigationDirection(creature.NavigationLogic{Type: creature.NavWander}, c, world, grid)
+		}
+
+		// 1. On récupère la direction locale du pattern (ex: {X:1, Y:0} pour aller à droite)
+		baseDir := nav.PatrolRoute[nav.PatrolIndex]
+
+		// 2. On ajuste le vecteur selon l'orientation (Direction) de la créature
+		finalDir := baseDir
+		if orient, ok := c.GetComponent("orientation").(*creature.Orientation); ok {
+			switch orient.Direction {
+			case entity.DirEast:
+				// Rotation de 90° horaire : (X, Y) devient (-Y, X)
+				finalDir = entity.Position{X: -baseDir.Y, Y: baseDir.X}
+			case entity.DirSouth:
+				// Rotation de 180° : (X, Y) devient (-X, -Y)
+				finalDir = entity.Position{X: -baseDir.X, Y: -baseDir.Y}
+			case entity.DirWest:
+				// Rotation de 270° : (X, Y) devient (Y, -X)
+				finalDir = entity.Position{X: baseDir.Y, Y: -baseDir.X}
+				// case entity.DirNorth: reste identique (finalDir = baseDir)
+			}
+		}
+
+		// 3. On calcule la position absolue ciblée sur la grille
+		targetPos := entity.Position{
+			X: c.GetPosition().X + finalDir.X,
+			Y: c.GetPosition().Y + finalDir.Y,
+		}
+
+		// 4. Si le déplacement est impossible, on retourne un vecteur nul {0, 0} pour ce tour.
+		if !s.isWalkable(c, targetPos, grid, world) {
+			return entity.Position{X: 0, Y: 0}
+		}
+
+		// 5. Le déplacement est valide, on met à jour l'index persistant de l'IA pour le prochain tour
+		profile := c.MovementProfile
+		if profile != nil {
+			profile.Navigation.PatrolIndex = (nav.PatrolIndex + 1) % len(nav.PatrolRoute)
+		}
+
+		return finalDir
 
 	case creature.NavOrientation:
 		return c.MovementProfile.Orientation.ToVector()
@@ -2169,11 +2240,13 @@ func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos ent
 		pProfile := c.MovementProfile.Perception
 
 		// On passe les deux positions pour matérialiser l'interstice
-		traceEnt := entity.NewTrace(pProfile.TrackType, pProfile.TrackDuration, oldPos, newPos)
-		world.Entities.Register(traceEnt)
+		trackEnt := entity.NewTrack(pProfile.TrackType, pProfile.TrackDuration, oldPos, newPos)
+		trackEnt.SetGridID(c.GetGridID())
+		world.Entities.Register(trackEnt)
 
-		// On l'enregistre sur la grille de départ
-		grid.PlaceEntityAtBottom(board.Position{X: oldPos.X, Y: oldPos.Y}, string(traceEnt.GetID()))
+		// Les traces ne sont plus enregistrées sur la pile de la grille (Plot.EntitiesID)
+		// car ce ne sont pas des tuiles interactives (Memory).
+		// Elles sont gérées directement par le TrackRenderer via le manager d'entités.
 	}
 
 	// Émission de l'événement mis à jour
@@ -2431,6 +2504,7 @@ func NewEngine(world *World) *Engine {
 			&CreatureAISystem{},
 			moveSys,
 			&TriggerSystem{},
+			&TrackSystem{},
 			lootSys,
 		},
 		Running:        false,

@@ -92,7 +92,7 @@ func (r *BoardRenderer) renderFlippingTile(screen *ebiten.Image, x, y float64, a
 	r.initVerts(g.V)
 
 	// Elevation 3D (effet de zoom)
-	elevation := 1.0 + float32(math.Sin(float64(tp)*math.Pi))*0.30
+	elevation := 1.0 + float32(math.Sin(float64(tp)*math.Pi))*0.40
 
 	// Facteur d'écrasement de la tuile (va de 1.0 à -1.0)
 	scaleAnim := 1.0 - 2.0*tp
@@ -161,9 +161,19 @@ func (r *BoardRenderer) renderFlippingTile(screen *ebiten.Image, x, y float64, a
 	r.extrude(g.V, anim.FlipDirection, false, 0, tp, thicknessColor)
 	r.ApplyBoardRotation(g.V, cx, cy)
 
-	// Dessin de la tuile déformée par le Mesh de triangles
-	r.drawGeometryPart(screen, g.V, g.I[:6], currentFace)
-	r.drawGeometryPart(screen, g.V, g.I[6:12], currentBack)
+	// Déterminer quelle face est vers l'avant selon la rotation (scaleAnim)
+	frontFacing := scaleAnim > 0
+
+	if frontFacing {
+		// On dessine le DOS d'abord, puis la FACE
+		r.drawGeometryPart(screen, g.V, g.I[6:12], currentBack)
+		r.drawGeometryPart(screen, g.V, g.I[:6], currentFace)
+	} else {
+		// On dessine la FACE d'abord, puis le DOS (qui est maintenant devant)
+		r.drawGeometryPart(screen, g.V, g.I[:6], currentFace)
+		r.drawGeometryPart(screen, g.V, g.I[6:12], currentBack)
+	}
+
 	r.drawSlices(screen, g, anim.FlipDirection, r.assets.GetImage("white"))
 
 	shouldShowIcon := (!isHiding && anim.Progress >= 0.5) || (isHiding && anim.Progress < 0.5)

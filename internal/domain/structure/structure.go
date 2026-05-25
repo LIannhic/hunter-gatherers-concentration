@@ -43,7 +43,7 @@ func NewStructure(stype string, pos entity.Position) *Structure {
 
 	// Logique de visibilité initiale
 	switch stype {
-	case "commencement_portal":
+	case "start_portal":
 		s.SetState(entity.Revealed)
 	case "finish_portal":
 		s.SetState(entity.Hidden)

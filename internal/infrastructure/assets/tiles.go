@@ -181,9 +181,9 @@ func generateTileMatched(size int, theme TileTheme) *ebiten.Image {
 	return img
 }
 
-// generateTileBlocked crée une tuile bloquée (Hidden + Croix rouge)
+// generateTileBlocked crée une tuile bloquée (Transparent + Croix rouge)
 func generateTileBlocked(size int, theme TileTheme) *ebiten.Image {
-	img := generateTileHidden(size, theme)
+	img := ebiten.NewImage(size, size) // Transparent par défaut
 
 	padding := float32(size) * 0.25
 	crossColor := color.RGBA{200, 0, 0, 255}
@@ -210,9 +210,9 @@ func generateTileTrap(size int, theme TileTheme) *ebiten.Image {
 	return img
 }
 
-// generateTileSealed crée une tuile scellée (Hidden + Cadenas)
+// generateTileSealed crée une tuile scellée (Transparent + Cadenas)
 func generateTileSealed(size int, theme TileTheme) *ebiten.Image {
-	img := generateTileHidden(size, theme)
+	img := ebiten.NewImage(size, size) // Transparent par défaut
 
 	centerX := float32(size) / 2
 	centerY := float32(size) / 2
@@ -226,8 +226,6 @@ func generateTileSealed(size int, theme TileTheme) *ebiten.Image {
 	// Anse du cadenas
 	shackleRadius := float32(size) * 0.12
 	vector.StrokeCircle(img, centerX, centerY-2, shackleRadius, 4, padlockColor, true)
-	// On efface le bas du cercle
-	vector.DrawFilledRect(img, centerX-shackleRadius-2, centerY-2, (shackleRadius+2)*2, 6, theme.HiddenBg, true)
 
 	// Trou de serrure
 	vector.DrawFilledCircle(img, centerX, centerY+bodyH/2-2, 3, color.RGBA{40, 40, 40, 255}, true)

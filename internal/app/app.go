@@ -170,8 +170,8 @@ func NewApplication() (*Application, error) {
 			app.HUD.ClearActiveLootSelection()
 			app.Input.SetPortablePortalMode(false)
 
-			// Démarre le timer de victoire de 10 secondes
-			app.Input.StartVictoryTimer(10.0)
+			// Démarre le timer de victoire de 5 secondes
+			app.Input.StartVictoryTimer(5.0)
 		}
 	}
 
@@ -810,15 +810,15 @@ func (app *Application) updatePlaying() error {
 								ItemIndex: inventoryIdx,
 							}
 
-						case "dreamberry":
-							cmd = &usecase.UseDreamberryItemCommand{
+						case "dreamberry", "moonstone", "crystal_shard", "whispering_herb", "specter", "burrower":
+							cmd = &usecase.UseLootItemCommand{
 								World:     app.World,
 								ItemIndex: inventoryIdx,
 							}
 						}
 
-						// 3. EXÉCUTION DE LA COMMANDE
 						if cmd != nil {
+							fmt.Printf("[ACTION] Tentative d'utilisation de %s...\n", selectedItem.Name)
 							if err := cmd.Execute(); err != nil {
 								fmt.Printf("[ERROR] Échec de l'utilisation de %s : %v\n", selectedItem.Name, err)
 							} else {

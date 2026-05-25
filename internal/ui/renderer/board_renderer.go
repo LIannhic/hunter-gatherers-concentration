@@ -100,12 +100,6 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		effectRenderer = nil
 	}
 
-	trackSprites := map[string]*ebiten.Image{
-		"mud":         am.GetImage("track_mud"),
-		"claws":       am.GetImage("track_claws"),
-		"intent_beam": am.GetImage("intent_beam"),
-	}
-
 	r := &BoardRenderer{
 		assets:               am,
 		tileSize:             ui.TileSize,
@@ -118,7 +112,7 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		activeScannerEffects: make(map[string]*ScannerEffect),
 		hoverStates:          make(map[string]*HoverState),
 		bounceStates:         make(map[string]*BounceState),
-		trackRenderer:        NewTrackRenderer(trackSprites),
+		trackRenderer:        NewTrackRenderer(ui.TileSize),
 	}
 	// Initialise le gestionnaire d'animations lié au renderer
 	r.AnimManager = NewAnimationManager(r)
@@ -161,7 +155,7 @@ func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, fl
 		StartTransform: startTrans,
 		EndTransform:   endTrans,
 		Progress:       0.0,
-		Speed:          1.0 / (flipDuration * 60.0),
+		Speed:          1.5 / (flipDuration * 60.0),
 		EntityID:       entityID,
 		TileState:      finalState,
 	}
@@ -240,8 +234,8 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 			r.activeScannerEffects[gridID] = &ScannerEffect{
 				GridID:    gridID,
 				Positions: positions,
-				Progress:  0.0,
-				Duration:  2.0,
+				Progress:  0.5,
+				Duration:  3.0,
 				Elapsed:   0.0,
 			}
 		}
@@ -388,7 +382,16 @@ func (r *BoardRenderer) renderEmptyGrid(screen *ebiten.Image, gridID string, wor
 // Fonctions de branchement des calques Under/Between/Over vers ton gestionnaire
 func (r *BoardRenderer) renderTracksUnder(screen *ebiten.Image, world *domain.World) {
 	if r.trackRenderer != nil {
-		r.trackRenderer.RenderUnder(screen, world)
+		grid, ok := world.GetCurrentGrid()
+		if !ok {
+			return
+		}
+		isPortalZone := world.DreamPlane != nil && (grid.ID == world.DreamPlane.StartZoneID || grid.ID == world.DreamPlane.EndZoneID)
+		spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
+		if isPortalZone {
+			spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
+		}
+		r.trackRenderer.RenderUnder(screen, world, r.gridOffsetX+padX, r.gridOffsetY+padY, r.tileSize, spacingX, spacingY)
 	}
 }
 func (r *BoardRenderer) renderMovementsUnder(screen *ebiten.Image, world *domain.World) {
@@ -400,7 +403,16 @@ func (r *BoardRenderer) renderEffectsUnder(screen *ebiten.Image, world *domain.W
 
 func (r *BoardRenderer) renderTracksBetween(screen *ebiten.Image, world *domain.World) {
 	if r.trackRenderer != nil {
-		r.trackRenderer.RenderBetween(screen, world)
+		grid, ok := world.GetCurrentGrid()
+		if !ok {
+			return
+		}
+		isPortalZone := world.DreamPlane != nil && (grid.ID == world.DreamPlane.StartZoneID || grid.ID == world.DreamPlane.EndZoneID)
+		spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
+		if isPortalZone {
+			spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
+		}
+		r.trackRenderer.RenderBetween(screen, world, r.gridOffsetX+padX, r.gridOffsetY+padY, r.tileSize, spacingX, spacingY)
 	}
 }
 func (r *BoardRenderer) renderMovementsNormal(screen *ebiten.Image, world *domain.World) {
@@ -408,13 +420,31 @@ func (r *BoardRenderer) renderMovementsNormal(screen *ebiten.Image, world *domai
 }
 func (r *BoardRenderer) renderEffectsBetween(screen *ebiten.Image, world *domain.World) {
 	if r.trackRenderer != nil {
-		r.trackRenderer.RenderEffectsBetween(screen, world)
-	} // Ex: DrawAttackIntent
+		grid, ok := world.GetCurrentGrid()
+		if !ok {
+			return
+		}
+		isPortalZone := world.DreamPlane != nil && (grid.ID == world.DreamPlane.StartZoneID || grid.ID == world.DreamPlane.EndZoneID)
+		spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
+		if isPortalZone {
+			spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
+		}
+		r.trackRenderer.RenderEffectsBetween(screen, world, r.gridOffsetX+padX, r.gridOffsetY+padY, r.tileSize, spacingX, spacingY)
+	}
 }
 
 func (r *BoardRenderer) renderTracksOver(screen *ebiten.Image, world *domain.World) {
 	if r.trackRenderer != nil {
-		r.trackRenderer.RenderOver(screen, world)
+		grid, ok := world.GetCurrentGrid()
+		if !ok {
+			return
+		}
+		isPortalZone := world.DreamPlane != nil && (grid.ID == world.DreamPlane.StartZoneID || grid.ID == world.DreamPlane.EndZoneID)
+		spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
+		if isPortalZone {
+			spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
+		}
+		r.trackRenderer.RenderOver(screen, world, r.gridOffsetX+padX, r.gridOffsetY+padY, r.tileSize, spacingX, spacingY)
 	}
 }
 func (r *BoardRenderer) renderMovementsOver(screen *ebiten.Image, world *domain.World) {
@@ -800,11 +830,13 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 		tileImg = r.assets.GetTileImage("hidden", themeName)
 	}
 
+	// Gestion des Overlays (Blocage / Scellé)
+	var overlayImg *ebiten.Image
 	if visualState&entity.Blocked != 0 {
 		if visualState&entity.Revealed != 0 {
-			tileImg = r.assets.GetImage("tile_blocked")
+			overlayImg = r.assets.GetImage("tile_blocked")
 		} else {
-			tileImg = r.assets.GetImage("tile_sealed")
+			overlayImg = r.assets.GetImage("tile_sealed")
 		}
 	}
 
@@ -838,8 +870,14 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	faceImg := tileImg
 	backImg := r.assets.GetImage("tile_hidden")
 
-	r.drawGeometryPart(screen, geo.V, geo.I[:6], faceImg)
+	// 1. Dessin du Dos
 	r.drawGeometryPart(screen, geo.V, geo.I[6:12], backImg)
+	// 2. Dessin de la Face
+	r.drawGeometryPart(screen, geo.V, geo.I[:6], faceImg)
+	// 3. Dessin de l'Overlay (si présent)
+	if overlayImg != nil {
+		r.drawGeometryPart(screen, geo.V, geo.I[:6], overlayImg)
+	}
 
 	id := string(ent.GetID())
 	hover, hasHover := r.hoverStates[id]
@@ -1070,7 +1108,7 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 
 	progress := float32(ui.PlaymatX) + currentX
 	thickness := float32(120.0)
-	erase := progress - thickness*1.5 // Traîne derrière la vague
+	erase := progress - thickness*2.5 // Traîne derrière la vague
 
 	revealColor := color.RGBA{100, 200, 255, 255} // Bleu cyan spectral
 
@@ -1089,7 +1127,7 @@ func (r *BoardRenderer) getEntityRevealedImage(ent entity.Entity, themeName stri
 	}
 
 	if ent.GetType() == entity.TypeStructure {
-		if ent.HasTag("commencement_portal") || ent.HasTag("finish_portal") || ent.HasTag("portable_portal") {
+		if ent.HasTag("start_portal") || ent.HasTag("finish_portal") || ent.HasTag("portable_portal") {
 			return r.assets.GetTileImage("portal", themeName)
 		} else if ent.HasTag("dolmen") {
 			return r.assets.GetTileImage("dolmen", themeName)

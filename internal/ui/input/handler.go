@@ -227,7 +227,7 @@ func (h *Handler) getEntityInfo(ent entity.Entity) string {
 		switch ent.GetType() {
 		case entity.TypeTrap:
 			return "Piège"
-		case entity.TypeTrace:
+		case entity.TypeTrack:
 			return "Trace"
 		case entity.TypeStructure:
 			return "Structure"
@@ -584,7 +584,7 @@ func (h *Handler) processSkip() {
 	}
 
 	// On cache les tuiles révélées puis déclenche la fin de tour.
-	h.hideRevealedTiles()
+	h.hideAllTilesInGrid()
 	h.ClearSelection()
 
 	if h.OnTurnEnd != nil {
@@ -614,6 +614,34 @@ func (h *Handler) hideRevealedTiles() {
 			ent.SetState(entity.Hidden)
 		}
 	}
+	h.revealedTiles = nil
+}
+
+// HideAllTilesInGrid parcourt toute la grille et passe TOUTES les entités de TOUTES les piles en état Hidden.
+func (h *Handler) hideAllTilesInGrid() {
+	gridID := h.selectedGridID
+	if gridID == "" {
+		gridID = h.world.CurrentGridID
+	}
+	grid, ok := h.world.GetGrid(gridID)
+	if !ok {
+		h.revealedTiles = nil
+		return
+	}
+
+	// On parcourt toutes les positions de la grille
+	for _, plot := range grid.Plots {
+		if len(plot.EntitiesID) == 0 {
+			continue
+		}
+		// Au lieu de prendre uniquement le topID, on boucle sur chaque entité de la pile
+		for _, entID := range plot.EntitiesID {
+			if ent, ok := h.world.Entities.Get(entity.ID(entID)); ok {
+				ent.SetState(entity.Hidden)
+			}
+		}
+	}
+	// On réinitialise les tuiles révélées puisque tout est masqué
 	h.revealedTiles = nil
 }
 
@@ -1216,7 +1244,7 @@ func (h *Handler) handlePortalClick(ent entity.Entity, gridID string, pos board.
 	state := ent.GetState()
 
 	// --- LOGS CONSOLE POUR LES PORTAILS ---
-	if ent.HasTag("commencement_portal") {
+	if ent.HasTag("start_portal") {
 		fmt.Println("[PORTAIL] Les portails de départ ne peuvent pas être utilisés.")
 	} else if ent.HasTag("portable_portal") {
 		stateStr := h.formatState(state)

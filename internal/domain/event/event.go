@@ -29,6 +29,7 @@ const (
 	GridEntered        Type = "grid_entered"
 	WorldGenerated     Type = "world_generated"
 	CreatureFled       Type = "creature_fled"
+	ItemMessage        Type = "item_message"
 	// Animation events pour l'UI
 	AnimationStarted Type = "animation_started"
 	AnimationEnded   Type = "animation_ended"
@@ -210,6 +211,17 @@ func NewLootAcquiredEvent(itemID string, name string, entityType entity.Type) Ev
 			"item_id":     itemID,
 			"name":        name,
 			"entity_type": entityType,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewItemMessageEvent(message string) Event {
+	return Event{
+		Type:     ItemMessage,
+		SourceID: "item_message",
+		Payload: map[string]interface{}{
+			"message": message,
 		},
 		Timestamp: time.Now(),
 	}

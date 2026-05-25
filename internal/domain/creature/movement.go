@@ -77,6 +77,7 @@ type NavigationType string
 const (
 	NavWander      NavigationType = "wander"      // Errance directionnelle
 	NavPatrol      NavigationType = "patrol"      // Suit un itinéraire
+	NavRelative    NavigationType = "relative"    // Par rapport à sa position actuelle
 	NavOrientation NavigationType = "orientation" // D'après l'orientation diédrique
 	NavAttraction  NavigationType = "attraction"  // Vise une cible spécifique
 	NavRepulsion   NavigationType = "repulsion"   // S'éloigne de la cible
@@ -108,6 +109,8 @@ func (nl *NavigationLogic) DecideDirection(world WorldQuery, creature *Creature)
 		return nl.wander(world, creature)
 	case NavPatrol:
 		return nl.patrol(world, creature)
+	case NavRelative:
+		return nl.relative(world, creature)
 	case NavOrientation:
 		return nl.followOrientation(creature)
 	case NavAttraction:
@@ -149,6 +152,59 @@ func (nl *NavigationLogic) patrol(world WorldQuery, creature *Creature) entity.P
 		dir = entity.Position{X: Sign(target.X - current.X), Y: Sign(target.Y - current.Y)}
 	}
 	return dir
+}
+
+func (nl *NavigationLogic) relative(world WorldQuery, creature *Creature) entity.Position {
+	if len(nl.PatrolRoute) == 0 {
+		return nl.wander(world, creature)
+	}
+
+	// 1. On récupère la direction de base définie dans notre pattern (ex: {X: 0, Y: -1} voulant dire "En avant")
+	baseDir := nl.PatrolRoute[nl.PatrolIndex]
+
+	// 2. On prend en compte l'orientation actuelle de la créature.
+	// Si la créature regarde à l'Est, son "En avant" ({X:0, Y:-1} local) doit devenir un mouvement vers l'Est spatial.
+	orient, hasOrient := creature.GetComponent("orientation").(*Orientation)
+
+	finalDir := baseDir
+	if hasOrient {
+		// On applique la rotation de l'orientation au vecteur baseDir
+		finalDir = applyOrientationToVector(orient, baseDir)
+	}
+
+	// 3. On calcule la case du monde visée pour tester sa validité
+	targetPos := entity.Position{
+		X: creature.GetPosition().X + finalDir.X,
+		Y: creature.GetPosition().Y + finalDir.Y,
+	}
+
+	// 4. La créature attend sagement sur place. Si l'obstacle bouge ou s'ouvre, elle reprendra son pattern exact.
+	if !world.IsValidMove(targetPos) {
+		return entity.Position{X: 0, Y: 0}
+	}
+
+	// 5. Le mouvement est valide ! On passe à l'étape suivante du pattern pour le prochain tour
+	nl.PatrolIndex = (nl.PatrolIndex + 1) % len(nl.PatrolRoute)
+
+	return finalDir
+}
+
+// Fonction utilitaire pour adapter un vecteur (X, Y) local à l'orientation absolue de la grille
+func applyOrientationToVector(o *Orientation, localDir entity.Position) entity.Position {
+	switch o.Direction {
+	case entity.DirNorth:
+		return localDir // Pas de changement
+	case entity.DirEast:
+		// Une rotation de 90° horaire : (X, Y) devient (-Y, X)
+		return entity.Position{X: -localDir.Y, Y: localDir.X}
+	case entity.DirSouth:
+		// Une rotation de 180° : (X, Y) devient (-X, -Y)
+		return entity.Position{X: -localDir.X, Y: -localDir.Y}
+	case entity.DirWest:
+		// Une rotation de 270° : (X, Y) devient (Y, -X)
+		return entity.Position{X: localDir.Y, Y: -localDir.X}
+	}
+	return localDir
 }
 
 func (nl *NavigationLogic) followOrientation(creature *Creature) entity.Position {
@@ -542,6 +598,22 @@ func PatrollerProfile(route []entity.Position) *MovementProfile {
 		Trigger:    MovementTrigger{Type: TriggerAuto},
 		Navigation: NavigationLogic{Type: NavPatrol, PatrolRoute: route},
 		Mode:       MovementMode{Type: ModeNormal},
+		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
+		Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+		Collision:  CollisionHandler{Type: CollideStop},
+	}
+}
+
+// RelativePatrollerProfile configure une créature qui suit un pattern de déplacements relatifs constants.
+func RelativePatrollerProfile(pattern []entity.Position) *MovementProfile {
+	return &MovementProfile{
+		Trigger: MovementTrigger{Type: TriggerAuto},
+		Navigation: NavigationLogic{
+			Type:        NavRelative, // Notre nouveau type de navigation
+			PatrolRoute: pattern,
+			PatrolIndex: 0,
+		},
+		Mode:       MovementMode{Type: ModeNormal}, // Mode normal par défaut (le burrower le surchargera en ModeUnder)
 		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
 		Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
 		Collision:  CollisionHandler{Type: CollideStop},

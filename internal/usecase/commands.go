@@ -6,8 +6,10 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/creature"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 )
 
 // DefaultFlipDirection est la direction par défaut si non spécifiée
@@ -257,7 +259,7 @@ func (c *MatchTilesCommand) Execute() error {
 	} else {
 		// Échec : Appliquer les pénalités de santé si des créatures sont impliquées
 		if isCre1 {
-			c.World.Player.TakeDamage(1, "creature_fail")
+			c.World.Player.TakeDamage(10, "creature_fail")
 		}
 		if isCre2 {
 			c.World.Player.TakeDamage(1, "creature_fail")
@@ -499,6 +501,137 @@ func (c *UseScannerItemCommand) Execute() error {
 
 	fmt.Printf("[ITEM] Le joueur a utilisé le cri de l'Echo Hound depuis l'emplacement %d\\n", c.ItemIndex)
 
+	return nil
+}
+
+type UseLootItemCommand struct {
+	World     *domain.World
+	ItemIndex int // L'index de l'objet dans l'inventaire
+}
+
+func (c *UseLootItemCommand) CanExecute() bool {
+	if c.World == nil || c.World.Player == nil {
+		return false
+	}
+
+	inv := &c.World.Player.Inventory
+	if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
+		return false
+	}
+
+	item, err := inv.GetItem(c.ItemIndex)
+	if err != nil {
+		return false
+	}
+
+	if !item.IsUsable {
+		return false
+	}
+
+	switch item.Name {
+	case player.DreamberryItemName,
+		player.MoonstoneItemName,
+		player.CrystalShardItemName,
+		player.WhisperingHerbItemName,
+		player.SpecterItemName,
+		player.BurrowerItemName:
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *UseLootItemCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("impossible d'utiliser cet objet de butin")
+	}
+
+	inv := &c.World.Player.Inventory
+	item, err := inv.GetItem(c.ItemIndex)
+	if err != nil {
+		return err
+	}
+
+	var message string
+
+	switch item.Name {
+	case player.DreamberryItemName:
+		const healthRestoration = 5
+		c.World.Player.Heal(healthRestoration)
+		message = fmt.Sprintf("Dreamberry consommée : +%d santé.", healthRestoration)
+
+	case player.MoonstoneItemName:
+		const sanityRestoration = 5
+		c.World.Player.RestoreSanity(sanityRestoration)
+		message = fmt.Sprintf("Moonstone consommée : +%d sanité.", sanityRestoration)
+
+	case player.CrystalShardItemName:
+		const manaRestoration = 5
+		c.World.Player.RestoreMana(manaRestoration)
+		message = fmt.Sprintf("Crystal Shard consommée : +%d mana.", manaRestoration)
+
+	case player.WhisperingHerbItemName:
+		message = "Une herbe chuchotante murmure un secret apaisant..."
+
+	case player.SpecterItemName:
+		gridID := c.World.CurrentGridID
+		creatures := c.World.Entities.GetByType(entity.TypeCreature)
+		removed := 0
+		for _, e := range creatures {
+			if e.GetGridID() != gridID {
+				continue
+			}
+			c.World.RemoveEntity(e.GetID())
+			removed++
+			if removed >= 2 {
+				break
+			}
+		}
+		if removed < 2 {
+			return errors.New("spectre inutilisable : moins de deux créatures disponibles")
+		}
+		message = "Spectre utilisé : une paire de créatures a disparu du plateau."
+
+	case player.BurrowerItemName:
+		gridID := c.World.CurrentGridID
+		creatures := c.World.Entities.GetByType(entity.TypeCreature)
+		marked := false
+		for _, e := range creatures {
+			if e.GetGridID() != gridID {
+				continue
+			}
+			creatureEnt, ok := e.(*creature.Creature)
+			if !ok {
+				continue
+			}
+			if creatureEnt.MovementProfile == nil {
+				continue
+			}
+			creatureEnt.MovementProfile.Perception.LeavesTracks = true
+			creatureEnt.MovementProfile.Perception.TrackType = "mud"
+			creatureEnt.MovementProfile.Perception.TrackDuration = 3
+			marked = true
+			break
+		}
+		if !marked {
+			return errors.New("burrower inutilisable : aucune créature sur la grille")
+		}
+		message = "Burrower activé : une créature laissera bientôt des traces de boue."
+
+	default:
+		return errors.New("objet de butin non pris en charge")
+	}
+
+	err = inv.RemoveItem(c.ItemIndex)
+	if err != nil {
+		return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
+	}
+
+	if message != "" {
+		c.World.EventBus.PublishImmediate(event.NewItemMessageEvent(message))
+	}
+
+	fmt.Printf("[ITEM] %s utilisé depuis l'emplacement %d\n", item.Name, c.ItemIndex)
 	return nil
 }
 

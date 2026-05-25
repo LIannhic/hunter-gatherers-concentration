@@ -33,8 +33,19 @@ const (
 
 // Dreamberry constants
 const (
-    DreamberryItemSourceID = "dreamberry_source"
-    DreamberryItemName     = "dreamberry"
+	DreamberryItemSourceID = "dreamberry_source"
+	DreamberryItemName     = "dreamberry"
+
+	MoonstoneItemSourceID      = "moonstone_source"
+	MoonstoneItemName          = "moonstone"
+	CrystalShardItemSourceID   = "crystal_shard_source"
+	CrystalShardItemName       = "crystal_shard"
+	WhisperingHerbItemSourceID = "whispering_herb_source"
+	WhisperingHerbItemName     = "whispering_herb"
+	SpecterItemSourceID        = "specter_source"
+	SpecterItemName            = "specter"
+	BurrowerItemSourceID       = "burrower_source"
+	BurrowerItemName           = "burrower"
 )
 
 // LootItem représente un objet récolté
@@ -73,8 +84,63 @@ func NewDreamberryItem() *LootItem {
 	return &LootItem{
 		ID:          string(entity.NewID()),
 		Name:        DreamberryItemName,
-		Type:        entity.TypeCreature,
+		Type:        entity.TypeResource,
 		SourceID:    DreamberryItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewMoonstoneItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        MoonstoneItemName,
+		Type:        entity.TypeResource,
+		SourceID:    MoonstoneItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewCrystalShardItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        CrystalShardItemName,
+		Type:        entity.TypeResource,
+		SourceID:    CrystalShardItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewWhisperingHerbItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        WhisperingHerbItemName,
+		Type:        entity.TypeResource,
+		SourceID:    WhisperingHerbItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewSpecterItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        SpecterItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    SpecterItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewBurrowerItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        BurrowerItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    BurrowerItemSourceID,
 		IsUsable:    true,
 		IsDeletable: true,
 	}
@@ -163,10 +229,10 @@ func (inv *Inventory) HasResource(resourceType string) bool {
 
 // GetItem renvoie un objet sans le supprimer
 func (inv *Inventory) GetItem(index int) (*LootItem, error) {
-    if index < 0 || index >= len(inv.Items) {
-       return nil, errors.New("index invalide")
-    }
-    return inv.Items[index], nil
+	if index < 0 || index >= len(inv.Items) {
+		return nil, errors.New("index invalide")
+	}
+	return inv.Items[index], nil
 }
 
 func (inv *Inventory) GetTotalItems() int {
@@ -270,6 +336,14 @@ func (p *Player) RestoreMana(amount int) {
 	p.Stats.Mana += amount
 	if p.Stats.Mana > p.Stats.MaxMana {
 		p.Stats.Mana = p.Stats.MaxMana
+	}
+}
+
+// RestoreSanity restaure la santé mentale
+func (p *Player) RestoreSanity(amount int) {
+	p.Stats.Sanity += amount
+	if p.Stats.Sanity > p.Stats.MaxSanity {
+		p.Stats.Sanity = p.Stats.MaxSanity
 	}
 }
 

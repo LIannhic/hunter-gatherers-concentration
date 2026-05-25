@@ -215,6 +215,13 @@ func (m *Manager) generateAllAssets() {
 	m.images["direction_left"] = generateDirectionIndicator(size, "left")
 	m.images["direction_right"] = generateDirectionIndicator(size, "right")
 
+	// === TRACES (TRACKS) ===
+	m.images["mud"] = GenerateTrackAsset("mud", size)
+	m.images["claws"] = GenerateTrackAsset("claws", size)
+	m.images["broken_grass"] = GenerateTrackAsset("broken_grass", size)
+	m.images["footprints"] = GenerateTrackAsset("footprints", size)
+	m.images["intent_beam"] = GenerateTrackAsset("intent_beam", size)
+
 	// === ICÔNES DE COMPORTEMENT ===
 	m.generateBehaviorIcons(size)
 

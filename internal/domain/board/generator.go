@@ -207,7 +207,7 @@ func (g *LayoutGenerator) SetupPortalArea(grid *Grid, isStart bool) {
 			} else if portals[pos] {
 				// Portail (4 tuiles)
 				if isStart {
-					plot.StructureID = "commencement_portal"
+					plot.StructureID = "start_portal"
 				} else {
 					plot.StructureID = "finish_portal"
 				}
