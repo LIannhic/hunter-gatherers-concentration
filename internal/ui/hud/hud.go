@@ -149,6 +149,10 @@ func (h *HUD) ShowVictory() {
 	h.showAssetsDetails = false
 }
 
+func (h *HUD) HideVictory() {
+	h.showVictory = false
+}
+
 func (h *HUD) IsVictoryVisible() bool {
 	return h.showVictory
 }
@@ -263,7 +267,8 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 3, color.RGBA{100, 255, 100, 255}, true)
 
 	text.Draw(screen, "VICTOIRE !", basicfont.Face7x13, x+250, y+50, color.RGBA{100, 255, 100, 255})
-	text.Draw(screen, "Vous avez franchi le portail final.", basicfont.Face7x13, x+150, y+100, color.White)
+	text.Draw(screen, "Vous avez franchi le portail final.", basicfont.Face7x13, x+150, y+80, color.White)
+	text.Draw(screen, "Appuyez sur ESC pour retourner au menu.", basicfont.Face7x13, x+130, y+100, color.RGBA{150, 150, 150, 255})
 
 	// Calcul des gains
 	totalValue := 0
@@ -299,6 +304,8 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), color.RGBA{80, 40, 40, 255}, true)
 	vector.StrokeRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
 	text.Draw(screen, "MENU", basicfont.Face7x13, bx2+60, by+25, color.White)
+
+	text.Draw(screen, "Appuyez sur ESC pour retourner au menu.", basicfont.Face7x13, x+130, y+360, color.RGBA{150, 150, 150, 255})
 }
 
 func (h *HUD) HandleVictoryClick(mx, my int) string {
@@ -329,7 +336,7 @@ func (h *HUD) HandleVictoryClick(mx, my int) string {
 }
 
 func (h *HUD) HandleGameOverClick(mx, my int) string {
-	winW, winH := 1280, 720
+	winW, winH := 600, 400
 	x := (ui.ScreenWidth - winW) / 2
 	y := (ui.ScreenHeight - winH) / 2
 
@@ -574,25 +581,15 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 	}
 }
 
+// renderGauges dessine les jauges HP/Mana/Sanity
 func (h *HUD) renderGauges(screen *ebiten.Image) {
-    // Gauges Holder
-    // Note : vector.StrokeRect prend des float32 et n'a pas de paramètre booléen à la fin.
-    vector.StrokeRect(
-        screen, 
-        float32(ui.GaugesX), 
-        float32(ui.GaugesY), 
-        float32(ui.GaugesW), 
-        float32(ui.GaugesH), 
-        1, 
-        color.RGBA{R: 100, G: 100, B: 100, A: 255}, 
-        false, // ATTENTION: Supprime ce paramètre ou change pour la bonne signature si tu utilises une fonction personnalisée
-    )
+	// Gauges Holder
+	vector.StrokeRect(screen, float32(ui.GaugesX), float32(ui.GaugesY), float32(ui.GaugesW), float32(ui.GaugesH), 1, color.RGBA{100, 100, 100, 255}, true)
 
-    p := h.world.Player
-    // Si p ou p.Stats peut être nil, assure-toi de le vérifier en amont
-    if p == nil {
-        return
-    }
+	p := h.world.Player
+	if p == nil {
+		return
+	}
 
     // Health gauge
     h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255})

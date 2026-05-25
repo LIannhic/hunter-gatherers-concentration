@@ -80,10 +80,11 @@ type FlipAnimation struct {
 
 // ScannerEffect représente l'état d'un effet de scanner
 type ScannerEffect struct {
-	GridID   string
-	Progress float64 // 0.0 à 1.0
-	Duration float64 // Durée totale en secondes
-	Elapsed  float64 // Temps écoulé en secondes
+	GridID    string
+	Positions []board.Position
+	Progress  float64 // 0.0 à 1.0
+	Duration  float64 // Durée totale en secondes
+	Elapsed   float64 // Temps écoulé en secondes
 }
 
 // IsActive retourne true si l'animation est en cours
@@ -235,11 +236,13 @@ func (r *BoardRenderer) UpdateEffects(deltaTime float64) {
 func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 	world.EventBus.SubscribeFunc(event.Type("scanner_triggered"), func(e event.Event) {
 		if gridID, ok := e.Payload["grid_id"].(string); ok {
+			positions, _ := e.Payload["positions"].([]board.Position)
 			r.activeScannerEffects[gridID] = &ScannerEffect{
-				GridID:   gridID,
-				Progress: 0.0,
-				Duration: 2.0,
-				Elapsed:  0.0,
+				GridID:    gridID,
+				Positions: positions,
+				Progress:  0.0,
+				Duration:  2.0,
+				Elapsed:   0.0,
 			}
 		}
 	})
@@ -335,7 +338,6 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 		r.renderMovementsOver(screen, world)
 
 		// Le scanner glisse au-dessus de tout le monde sur le plateau
-		r.renderScannerEffects(screen, world.CurrentGridID, world)
 		r.renderEffectsOver(screen, world)
 	}
 
@@ -419,7 +421,9 @@ func (r *BoardRenderer) renderMovementsOver(screen *ebiten.Image, world *domain.
 	r.renderMovingEntities(screen, world, "over")
 }
 func (r *BoardRenderer) renderEffectsOver(screen *ebiten.Image, world *domain.World) {
-	// Explosions globales, météo, etc.
+	if world.CurrentGridID != "" {
+		r.renderScannerEffects(screen, world.CurrentGridID, world)
+	}
 }
 
 // =========================================================================
@@ -457,7 +461,7 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 
 	vector.DrawFilledRect(screen, float32(s.X), float32(s.Y), float32(s.Width), float32(s.Height), bgColor, true)
 
-	if s.ID == actionbuttons.BtnSkip && s.FillProgress > 0 {
+	if (s.ID == actionbuttons.BtnSkip || s.ID == actionbuttons.BtnEndTurn) && s.FillProgress > 0 {
 		fillW := float32(s.Width * s.FillProgress)
 		var fillColor color.Color
 		if s.FillAlert {
@@ -610,7 +614,7 @@ func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, di
 			htx, hty := float32(tx+margin), float32(ty+margin)
 
 			// On simule une entité vide pour la géométrie
-			geo := r.generateIdleGeometry(htx, hty, nil, color.RGBA{100, 100, 200, 255})
+			geo := r.generateIdleGeometry(htx, hty, entityID, color.RGBA{100, 100, 200, 255})
 			r.drawSlices(screen, geo, hover.Dir, r.assets.GetImage("white"))
 
 			// Ajustement de l'opacité/élévation simple si on n'utilise pas drawSlices complet
@@ -680,7 +684,7 @@ func (r *BoardRenderer) isPortalPosition(pos board.Position) bool {
 	return false
 }
 
-// renderGrid s'occupe UNIQUEMENT d'empiler les tuiles réelles (Memory) existantes
+// renderGrid s'occupe UNIQUEMENT d'empiler les tuiles immobiles
 func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *domain.World, forceReveal bool, isLocalToPlaymat bool) {
 	grid, ok := world.GetGrid(gridID)
 	if !ok {
@@ -703,7 +707,7 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 			}
 
 			plot, ok := grid.Plots[pos]
-			// Si pas de plot physique ou pas d'entités, on ne fait rien.
+			// Si pas de plot physique et pas d'entités, on ne fait rien.
 			// Le fond de grille vide a déjà été traité au calque 2 par renderEmptyGrid.
 			if !ok || len(plot.EntitiesID) == 0 {
 				continue
@@ -822,7 +826,7 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	}
 	theme := r.assets.GetTheme(themeName)
 
-	geo := r.generateIdleGeometry(tx, ty, ent, theme.HiddenBorder)
+	geo := r.generateIdleGeometry(tx, ty, entityID, theme.HiddenBorder)
 	r.ApplyBoardRotation(geo.V, cx, cy)
 
 	// Application de l'alpha aux sommets pour la transparence (Ghost)
@@ -1040,10 +1044,48 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 		return
 	}
 
+	// 1. Création de l'image source pour le shader (Revealed items)
 	playmatW, playmatH := ui.PlaymatW, ui.PlaymatH
 	srcImg := ebiten.NewImage(int(playmatW), int(playmatH))
+	// On peut remplir avec un fond très sombre pour le style
 	srcImg.Fill(color.RGBA{15, 15, 20, 255})
 
-	// Suite manquante : rendu de la grille forcée dans l'image tampon + application du shader
-	_ = effect // Évite l'erreur de compilation pour variable non utilisée
+	// 2. Rendu uniquement des positions scannées
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+
+	for _, pos := range effect.Positions {
+		absX, absY := r.calculateTileScreenPos(pos, grid, isPortalZone)
+		sx := absX - ui.PlaymatX
+		sy := absY - ui.PlaymatY
+
+		plot, ok := grid.Plots[pos]
+		if !ok || len(plot.EntitiesID) == 0 {
+			continue
+		}
+		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+
+		// On force le reveal pour voir ce qu'il y a dessous dans le buffer srcImg
+		r.renderSingleTileIDAt(srcImg, sx, sy, gridID, topID, world, true, 1.0)
+	}
+
+	// 3. Paramètres de l'animation pour le shader
+	// On balaie de gauche à droite sur toute la largeur du playmat
+	fullWidth := float32(playmatW)
+	margin := float32(200.0) // Pour que la vague commence/finisse hors champ
+
+	// Progress va de -margin à fullWidth + margin
+	currentX := -margin + float32(effect.Progress)*(fullWidth+2*margin)
+
+	progress := float32(ui.PlaymatX) + currentX
+	thickness := float32(120.0)
+	erase := progress - thickness*1.5 // Traîne derrière la vague
+
+	revealColor := color.RGBA{100, 200, 255, 255} // Bleu cyan spectral
+
+	// 4. Appel du shader via l'EffectRenderer
+	r.effectRenderer.DrawScannerEffect(screen, srcImg, int(ui.PlaymatX), int(ui.PlaymatY), progress, erase, thickness, revealColor)
 }

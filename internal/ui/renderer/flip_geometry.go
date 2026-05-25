@@ -349,7 +349,7 @@ func (r *BoardRenderer) extrude(v []ebiten.Vertex, dir entity.FlipDirection, isI
 	}
 }
 
-func (r *BoardRenderer) generateIdleGeometry(tx, ty float32, ent entity.Entity, thicknessColor color.Color) thickGeometry {
+func (r *BoardRenderer) generateIdleGeometry(tx, ty float32, id string, thicknessColor color.Color) thickGeometry {
 	g := r.createGeometry()
 	r.initVerts(g.V)
 	r.setFaceUV(g.V, ui.FaceSize)
@@ -358,7 +358,6 @@ func (r *BoardRenderer) generateIdleGeometry(tx, ty float32, ent entity.Entity, 
 	cx, cy := tx+ui.FaceSize/2, ty+ui.FaceSize/2
 
 	// 1. Récupération des états d'animation
-	id := string(ent.GetID())
 	hover, hasHover := r.hoverStates[id]
 	bounce, hasBounce := r.bounceStates[id]
 

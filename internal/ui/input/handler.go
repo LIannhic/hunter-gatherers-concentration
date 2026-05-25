@@ -70,6 +70,9 @@ type Handler struct {
 	transitionTimer int  // Frames restantes pour le blocage
 	// Indique qu'un Skip a été demandé et qu'on attend la fin des animations
 	skipPending bool
+
+	// Victory timer (V0.2 : Déclenché par le déploiement du portail portable)
+	victoryTimer *domain.TurnTimer
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
@@ -112,6 +115,16 @@ func (h *Handler) Update() error {
 			h.isTransitioning = false
 		}
 		return nil
+	}
+
+	// Mise à jour du victory timer
+	if h.victoryTimer != nil && h.victoryTimer.Running {
+		if h.victoryTimer.Update(1.0 / 60.0) {
+			if h.OnVictory != nil {
+				h.OnVictory()
+			}
+			h.victoryTimer = nil // Stop after trigger
+		}
 	}
 
 	// Gestion du survol (Hover) pour les animations avancées
@@ -252,6 +265,28 @@ func (h *Handler) handleMouse() error {
 	}
 
 	if h.isProcessing {
+		// EXCEPTION : On autorise le clic sur un portail déjà révélé pour la victoire
+		// (sinon le verrouillage du mode memory bloque la fin de partie)
+		if pos, gridID, ok := h.getHoveredTile(); ok {
+			grid, _ := h.world.GetGrid(gridID)
+			if grid != nil {
+				if plot, err := grid.Get(pos); err == nil && len(plot.EntitiesID) > 0 {
+					topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+					if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
+						if ent.GetState()&entity.Revealed != 0 {
+							isFinish := ent.HasTag("finish_portal")
+							isPortable := ent.HasTag("portable_portal")
+							if isFinish || isPortable {
+								// On traite le clic ici car il est bloqué plus bas
+								h.handlePortalClick(ent, gridID, pos)
+								return nil
+							}
+						}
+					}
+				}
+			}
+		}
+
 		fmt.Println("[INPUT] Traitement en cours, veuillez patienter...")
 		return nil
 	}
@@ -414,24 +449,9 @@ func (h *Handler) handleMouse() error {
 		}
 
 	} else if state&entity.Revealed != 0 {
-		// CAS VICTOIRE : Portail de fin + Portail portable déployé
-		if ent.HasTag("finish_portal") {
-			// On cherche si un portail portable est déployé sur cette grille
-			portalDeployed := false
-			for _, e := range h.world.Entities.GetAllActive() {
-				if e.GetGridID() == gridID && e.HasTag("portable_portal") {
-					portalDeployed = true
-					break
-				}
-			}
-
-			if portalDeployed {
-				fmt.Println("[VICTOIRE] Portail final activé !")
-				if h.OnVictory != nil {
-					h.OnVictory()
-				}
-				return nil
-			}
+		// On délègue à une méthode dédiée pour gérer la victoire et les logs
+		if h.handlePortalClick(ent, gridID, pos) {
+			return nil
 		}
 
 		if ent.GetType() == entity.TypeTrap {
@@ -481,8 +501,9 @@ func (h *Handler) handleMouse() error {
 		}
 
 		if h.selectedTile != nil && h.selectedGridID == gridID && *h.selectedTile == pos {
-			fmt.Printf("[SÉLECTION] Tuile en %v désélectionnée\n", pos)
-			h.ClearSelection()
+			// Déjà sélectionnée : on ne fait rien (le clic gauche ne peut pas désélectionner)
+			info := h.getEntityInfo(ent)
+			fmt.Printf("[SÉLECTION] Tuile en %v déjà sélectionnée : %s\n", pos, info)
 		} else {
 			info := h.getEntityInfo(ent)
 			fmt.Printf("[SÉLECTION] Tuile en %v sur %s sélectionnée : %s\n", pos, gridID, info)
@@ -524,6 +545,15 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 		}
 	case actionbuttons.BtnEndTurn:
 		fmt.Println("[ACTION] Bouton End Turn activé")
+		// Si le portail est déployé, ce bouton agit comme un instant victory
+		if h.victoryTimer != nil && h.victoryTimer.Running {
+			if h.OnVictory != nil {
+				h.OnVictory()
+			}
+			h.victoryTimer = nil
+			return
+		}
+
 		// Si des tuiles sont révélées mais non matchées, on les recache d'abord
 		if len(h.revealedTiles) > 0 {
 			h.hideRevealedTiles()
@@ -627,6 +657,23 @@ func (h *Handler) processMatchAttempt() {
 	if e1 == nil || e2 == nil {
 		h.revealedTiles = nil
 		h.isProcessing = false
+		return
+	}
+
+	// CAS VICTOIRE PAR MATCH : Tout duo de portails révélés (Même grille)
+	isP1Portal := e1.HasTag("finish_portal") || e1.HasTag("portable_portal")
+	isP2Portal := e2.HasTag("finish_portal") || e2.HasTag("portable_portal")
+
+	if isP1Portal && isP2Portal {
+		// On autorise : Finish + Portable OU Finish + Finish (si duplicata) OU Portable + Portable (si duplicata)
+		// L'important est d'avoir deux portails "actifs" ensemble.
+		fmt.Println("[MATCH] ✅ La paire de portails est réunie ! VICTOIRE.")
+		if h.OnVictory != nil {
+			h.OnVictory()
+		}
+		h.revealedTiles = nil
+		h.isProcessing = false
+		h.ClearSelection()
 		return
 	}
 
@@ -1135,8 +1182,91 @@ func (h *Handler) SetPortablePortalMode(active bool) {
 	h.portablePortalMode = active
 }
 
+func (h *Handler) StartVictoryTimer(duration float64) {
+	h.victoryTimer = domain.NewTurnTimer(duration)
+	h.victoryTimer.Reset()
+}
+
+func (h *Handler) GetVictoryTimerProgress() float64 {
+	if h.victoryTimer == nil {
+		return 0
+	}
+	return h.victoryTimer.Progress()
+}
+
+func (h *Handler) IsVictoryTimerActive() bool {
+	return h.victoryTimer != nil && h.victoryTimer.Running
+}
+
 func (h *Handler) IsPortablePortalMode() bool {
 	return h.portablePortalMode
+}
+
+// handlePortalClick gère les interactions avec les portails révélés.
+// Retourne true si l'entrée a été consommée (victoire).
+func (h *Handler) handlePortalClick(ent entity.Entity, gridID string, pos board.Position) bool {
+	state := ent.GetState()
+
+	// --- LOGS CONSOLE POUR LES PORTAILS ---
+	if ent.HasTag("commencement_portal") {
+		fmt.Println("[PORTAIL] Les portails de départ ne peuvent pas être utilisés.")
+	} else if ent.HasTag("portable_portal") {
+		stateStr := h.formatState(state)
+		fmt.Printf("[PORTAIL] Zone: %s, Position: (%d,%d), Etat: %s\n", gridID, pos.X, pos.Y, stateStr)
+	} else if ent.HasTag("finish_portal") {
+		stateStr := h.formatState(state)
+		fmt.Printf("[PORTAIL] Position: (%d,%d), Etat: %s\n", pos.X, pos.Y, stateStr)
+	}
+
+	// CAS VICTOIRE : Portail de fin ou Portail portable déployé
+	isFinish := ent.HasTag("finish_portal")
+	isPortable := ent.HasTag("portable_portal")
+
+	if isFinish || isPortable {
+		// On cherche l'autre partie du duo sur N'IMPORTE QUELLE grille
+		targetTag := "portable_portal"
+		if isPortable {
+			targetTag = "finish_portal"
+		}
+
+		foundOther := false
+		for _, e := range h.world.Entities.GetAllActive() {
+			// On vérifie que l'autre portail existe et est RÉVÉLÉ
+			if e.HasTag(targetTag) && e.GetState()&entity.Revealed != 0 {
+				foundOther = true
+				break
+			}
+		}
+
+		if foundOther {
+			fmt.Println("[VICTOIRE] Portail final activé !")
+			if h.OnVictory != nil {
+				h.OnVictory()
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Handler) formatState(state entity.TileState) string {
+	parts := []string{}
+	if state&entity.Hidden != 0 {
+		parts = append(parts, "Caché")
+	}
+	if state&entity.Revealed != 0 {
+		parts = append(parts, "Révélé")
+	}
+	if state&entity.Matched != 0 {
+		parts = append(parts, "Appairé")
+	}
+	if state&entity.Blocked != 0 {
+		parts = append(parts, "Bloqué")
+	}
+	if len(parts) == 0 {
+		return "Inconnu"
+	}
+	return "" + parts[0] // On retourne le premier état majeur pour la lisibilité
 }
 
 // ResetTimerSkip est appelé par l'app quand le timer temps réel expire.
@@ -1158,6 +1288,7 @@ func (h *Handler) ResetGameState() {
 	h.selectedGridID = ""
 	h.revealedTiles = nil
 	h.isProcessing = false
+	h.victoryTimer = nil
 }
 
 // exitMatchable est un wrapper pour soumettre les sorties au moteur d'association

@@ -178,52 +178,46 @@ func (g *LayoutGenerator) findAvailableDirectionAndCoords(plane *DreamPlane, zon
 
 // SetupPortalArea configure les dolmens/obélisques autour du portail
 func (g *LayoutGenerator) SetupPortalArea(grid *Grid, isStart bool) {
-	// Structure en 2x2 (4 coins) dans un grid 6x6
-	// Coordonnées B2, B5, E2, E5 -> (1,1), (1,4), (4,1), (4,4)
-	corners := []Position{
-		{1, 1}, {1, 4}, {4, 1}, {4, 4},
-	}
-
 	structureType := "obelisk"
 	if isStart {
 		structureType = "dolmen"
 	}
 
-	for _, pos := range corners {
-		if plot, err := grid.Get(pos); err == nil {
-			// On marque la parcelle avec l'ID de structure
-			// Note: On utilisera World pour spawner les entités réelles plus tard
-			// ou on peut mettre un tag/métadonnée ici.
-			plot.StructureID = fmt.Sprintf("struct_%s_%d_%d", structureType, pos.X, pos.Y)
-			plot.Modifier.Obstructed = true // Les structures sont infranchissables
-		}
+	// Définition des zones spéciales
+	corners := map[Position]bool{
+		{1, 1}: true, {1, 4}: true, {4, 1}: true, {4, 4}: true,
+	}
+	portals := map[Position]bool{
+		{2, 2}: true, {2, 3}: true, {3, 2}: true, {3, 3}: true,
 	}
 
-	// Portail au centre (couvrant 2x2) : positions (2,2), (2,3), (3,2), (3,3)
-	portalPositions := []Position{
-		{2, 2}, {2, 3}, {3, 2}, {3, 3},
-	}
-	for _, portalPos := range portalPositions {
-		if plot, err := grid.Get(portalPos); err == nil {
-			if isStart {
-				plot.StructureID = "commencement_portal"
-			} else {
-				plot.StructureID = "finish_portal"
+	// Parcourir toute la grille 6x6
+	for y := 0; y < 6; y++ {
+		for x := 0; x < 6; x++ {
+			pos := Position{X: x, Y: y}
+			plot, err := grid.Get(pos)
+			if err != nil {
+				continue
 			}
-		}
-	}
-	// Ajouter des parcelles vides dans les autres positions de la zone
-	otherPositions := []Position{
-		{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5},
-		{1, 0}, {1, 2}, {1, 3}, {1, 5},
-		{2, 0}, {2, 1}, {2, 4}, {2, 5},
-		{3, 0}, {3, 1}, {3, 4}, {3, 5},
-		{4, 0}, {4, 2}, {4, 3}, {4, 5},
-		{5, 0}, {5, 1}, {5, 2}, {5, 3}, {5, 4}, {5, 5},
-	}
-	for _, pos := range otherPositions {
-		if plot, err := grid.Get(pos); err != nil {
-			plot.Empty = true
+
+			if corners[pos] {
+				// Dolmen ou Obélisque
+				plot.StructureID = fmt.Sprintf("struct_%s_%d_%d", structureType, pos.X, pos.Y)
+				plot.Modifier.Obstructed = true
+				plot.Empty = false
+			} else if portals[pos] {
+				// Portail (4 tuiles)
+				if isStart {
+					plot.StructureID = "commencement_portal"
+				} else {
+					plot.StructureID = "finish_portal"
+				}
+				plot.Empty = false
+			} else {
+				// Tout le reste est vide (pas de monstres/ressources)
+				plot.Empty = true
+				plot.StructureID = ""
+			}
 		}
 	}
 }

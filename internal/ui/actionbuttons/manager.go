@@ -43,6 +43,8 @@ type Manager struct {
 	getPlayer            func() *player.Player
 	getTimerProgress     func() float64 // 0.0 → 1.0 (temps écoulé)
 	getTimerPanic        func() bool    // true si < 3s restantes
+	getVictoryProgress   func() float64 // 0.0 → 1.0 (V0.2)
+	isVictoryActive      func() bool    // true si portail déployé (V0.2)
 
 	// Base coordinates (fixed by UI spec)
 	baseCoords [btnCount]struct{ x, y float64 }
@@ -57,12 +59,14 @@ type Manager struct {
 // getRevealedTileCount doit retourner le nombre de tuiles révélées ce tour.
 // getPlayer doit retourner le joueur courant (pour les StatusEffects).
 // getTimerProgress / getTimerPanic fournissent l'état du compte à rebours temps réel.
-func NewManager(getRevealedTileCount func() int, getPlayer func() *player.Player, getTimerProgress func() float64, getTimerPanic func() bool) *Manager {
+func NewManager(getRevealedTileCount func() int, getPlayer func() *player.Player, getTimerProgress func() float64, getTimerPanic func() bool, getVictoryProgress func() float64, isVictoryActive func() bool) *Manager {
 	m := &Manager{
 		getRevealedTileCount: getRevealedTileCount,
 		getPlayer:            getPlayer,
 		getTimerProgress:     getTimerProgress,
 		getTimerPanic:        getTimerPanic,
+		getVictoryProgress:   getVictoryProgress,
+		isVictoryActive:      isVictoryActive,
 		baseCoords: [btnCount]struct{ x, y float64 }{
 			{ui.ActionBtn1X, ui.ActionBtn1Y},
 			{ui.ActionBtn2X, ui.ActionBtn2Y},
@@ -111,6 +115,15 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 	// Les boutons EndTurn et Menu restent toujours actifs
 	states[BtnEndTurn].Active = true
 	states[BtnMenu].Active = true
+
+	// --- V0.2 : TRANSITION END GAME ---
+	if m.isVictoryActive != nil && m.isVictoryActive() {
+		states[BtnEndTurn].Label = "END GAME"
+		if m.getVictoryProgress != nil {
+			states[BtnEndTurn].FillProgress = m.getVictoryProgress()
+			states[BtnEndTurn].FillAlert = true // Toujours coloré pour indiquer l'importance
+		}
+	}
 
 	// --- FEEDBACK TEMPS RÉEL : Remplissage du bouton Skip ---
 	if m.getTimerProgress != nil {

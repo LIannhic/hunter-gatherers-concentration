@@ -27,6 +27,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font/basicfont"
 )
 
@@ -113,6 +114,8 @@ func NewApplication() (*Application, error) {
 			}
 			return false
 		},
+		func() float64 { return app.Input.GetVictoryTimerProgress() },
+		func() bool { return app.Input.IsVictoryTimerActive() },
 	)
 	app.Renderer.ActionButtons = btnManager
 	app.Input.SetActionButtonsManager(btnManager)
@@ -163,9 +166,12 @@ func NewApplication() (*Application, error) {
 		if err := cmd.Execute(); err != nil {
 			fmt.Printf("[ERROR] Impossible de déployer le portail portable : %v\n", err)
 		} else {
-			fmt.Println("[SUCCESS] Portail portable déployé.")
+			fmt.Println("[SUCCESS] Portail portable déployé. Démarrage du timer de victoire.")
 			app.HUD.ClearActiveLootSelection()
 			app.Input.SetPortablePortalMode(false)
+
+			// Démarre le timer de victoire de 10 secondes
+			app.Input.StartVictoryTimer(10.0)
 		}
 	}
 
@@ -579,7 +585,15 @@ func (app *Application) spawnInitialEntities() {
 			continue
 		}
 
-		isPortalZone := gridID == app.World.DreamPlane.StartZoneID || gridID == app.World.DreamPlane.EndZoneID
+		isStartZone := gridID == app.World.DreamPlane.StartZoneID
+		isEndZone := gridID == app.World.DreamPlane.EndZoneID
+		isPortalZone := isStartZone || isEndZone
+
+		if isStartZone {
+			fmt.Printf("[INIT] Zone de DÉPART (%s) détectée.\n", gridID)
+		} else if isEndZone {
+			fmt.Printf("[INIT] Zone de FIN (%s) détectée.\n", gridID)
+		}
 
 		// 1. Spawner les structures marquées par le générateur
 		for pos, plot := range grid.Plots {
@@ -595,7 +609,10 @@ func (app *Application) spawnInitialEntities() {
 				}
 
 				if stype != "unknown" {
-					app.World.SpawnStructure(gridID, stype, entity.Position{X: pos.X, Y: pos.Y})
+					_, err := app.World.SpawnStructure(gridID, stype, entity.Position{X: pos.X, Y: pos.Y})
+					if err == nil && isPortalZone {
+						fmt.Printf("  - [%s] Structure créée : %s en (%d, %d)\n", gridID, stype, pos.X, pos.Y)
+					}
 				}
 			}
 		}
@@ -679,13 +696,21 @@ func (app *Application) updateMenu() error {
 func (app *Application) updatePlaying() error {
 	// Vérification Victoire
 	if app.HUD.IsVictoryVisible() {
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+			app.HUD.HideVictory()
+			app.ReturnToMenu()
+			return nil
+		}
+
 		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 			mx, my := ebiten.CursorPosition()
 			action := app.HUD.HandleVictoryClick(mx, my)
 			switch action {
 			case "replay":
+				app.HUD.HideVictory()
 				app.StartGameWithSlot(0)
 			case "menu":
+				app.HUD.HideVictory()
 				app.ReturnToMenu()
 			}
 		}
@@ -818,6 +843,11 @@ func (app *Application) updatePlaying() error {
 
 // updateGameOver gère l'écran de fin
 func (app *Application) updateGameOver() error {
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		app.ReturnToMenu()
+		return nil
+	}
+
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		mx, my := ebiten.CursorPosition()
 		action := app.HUD.HandleGameOverClick(mx, my)
@@ -932,6 +962,9 @@ func (app *Application) StartGame() {
 
 // ReturnToMenu retourne au menu principal
 func (app *Application) ReturnToMenu() {
+	// Cache les fenêtres de fin
+	app.HUD.HideVictory()
+
 	// Arrête le timer temps réel
 	if app.World.TurnTimer != nil {
 		app.World.TurnTimer.Stop()
@@ -1024,8 +1057,32 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 // drawGameOver dessine l'écran de fin
 func (app *Application) drawGameOver(screen *ebiten.Image) {
 	screen.Fill(color.Black)
-	text.Draw(screen, "GAME OVER", basicfont.Face7x13, 350, 300, color.White)
-	text.Draw(screen, "Statistiques epuisees. Appuyez sur Echap pour recommencer.", basicfont.Face7x13, 200, 350, color.Gray{180})
+
+	winW, winH := 600, 400
+	x := (ui.ScreenWidth - winW) / 2
+	y := (ui.ScreenHeight - winH) / 2
+
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{40, 20, 20, 255}, true)
+	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 3, color.RGBA{255, 100, 100, 255}, true)
+
+	text.Draw(screen, "GAME OVER", basicfont.Face7x13, x+250, y+50, color.RGBA{255, 100, 100, 255})
+	text.Draw(screen, "Statistiques épuisées. Votre voyage s'arrête ici.", basicfont.Face7x13, x+120, y+100, color.White)
+
+	// Boutons
+	btnW, btnH := 160, 40
+
+	// Bouton REJOUER
+	bx1 := x + 100
+	by := y + 300
+	vector.DrawFilledRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), color.RGBA{80, 40, 40, 255}, true)
+	vector.StrokeRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
+	text.Draw(screen, "REJOUER", basicfont.Face7x13, bx1+50, by+25, color.White)
+
+	// Bouton MENU
+	bx2 := x + 340
+	vector.DrawFilledRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), color.RGBA{40, 40, 40, 255}, true)
+	vector.StrokeRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
+	text.Draw(screen, "MENU", basicfont.Face7x13, bx2+60, by+25, color.White)
 }
 
 // drawVictory dessine l'écran de victoire de la version 0.2
