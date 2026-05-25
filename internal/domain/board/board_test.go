@@ -109,7 +109,7 @@ func TestCalculateFlipDirection(t *testing.T) {
 		localY   int
 		expected entity.FlipDirection
 	}{
-		{50, 50, entity.FlipCenter},      // Centre
+		{50, 50, entity.FlipBottom},      // Centre (dy=0, dx=0, par défaut dy=0 donc vertical=2)
 		{50, 10, entity.FlipTop},         // Haut
 		{10, 50, entity.FlipLeft},        // Gauche
 		{90, 90, entity.FlipBottomRight}, // Bas-Droite

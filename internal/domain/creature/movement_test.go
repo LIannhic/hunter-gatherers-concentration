@@ -279,8 +279,8 @@ func TestDefaultMovementProfile(t *testing.T) {
 		t.Errorf("Default navigation should be Wander, got %s", profile.Navigation.Type)
 	}
 
-	if profile.Mode.Type != ModeBento {
-		t.Errorf("Default mode should be Bento, got %s", profile.Mode.Type)
+	if profile.Mode.Type != ModeNormal {
+		t.Errorf("Default mode should be Normal, got %s", profile.Mode.Type)
 	}
 
 	if profile.Collision.Type != CollideStop {
@@ -296,26 +296,6 @@ func TestPassiveProfile(t *testing.T) {
 	}
 }
 
-func TestHunterProfile(t *testing.T) {
-	profile := HunterProfile()
-
-	if profile.Navigation.Type != NavAttraction {
-		t.Errorf("Hunter navigation should be Attraction, got %s", profile.Navigation.Type)
-	}
-
-	if profile.Navigation.Target != TargetPlayer {
-		t.Errorf("Hunter target should be Player, got %s", profile.Navigation.Target)
-	}
-
-	if profile.Mode.Type != ModeBento {
-		t.Errorf("Hunter mode should be Bento, got %s", profile.Mode.Type)
-	}
-
-	if profile.Frequency.Velocity != 2 {
-		t.Errorf("Hunter velocity should be 2, got %d", profile.Frequency.Velocity)
-	}
-}
-
 func TestFleeingProfile(t *testing.T) {
 	profile := FleeingProfile()
 
@@ -323,8 +303,8 @@ func TestFleeingProfile(t *testing.T) {
 		t.Errorf("Fleeing navigation should be Repulsion, got %s", profile.Navigation.Type)
 	}
 
-	if profile.Mode.Type != ModeShadow {
-		t.Errorf("Fleeing mode should be Shadow, got %s", profile.Mode.Type)
+	if profile.Mode.Type != ModeNormal {
+		t.Errorf("Fleeing mode should be Normal, got %s", profile.Mode.Type)
 	}
 }
 
@@ -335,8 +315,8 @@ func TestSpecterProfile(t *testing.T) {
 		t.Errorf("Specter trigger should be OnEcho, got %s", profile.Trigger.Type)
 	}
 
-	if profile.Mode.Type != ModeShadow {
-		t.Errorf("Specter mode should be Shadow, got %s", profile.Mode.Type)
+	if profile.Mode.Type != ModeUnder {
+		t.Errorf("Specter mode should be Under, got %s", profile.Mode.Type)
 	}
 
 	if profile.Collision.Type != CollidePhase {
@@ -377,9 +357,9 @@ func TestCreatureWithMovementProfile(t *testing.T) {
 		expectedTrigger TriggerType
 		expectedMode    MoveMode
 	}{
-		{"specter", TriggerOnEcho, ModeShadow},
-		{"echo_hound", TriggerOnEcho, ModeBento},
-		{"fleeing_sprite", TriggerProximity, ModeShadow},
+		{"specter", TriggerOnEcho, ModeUnder},
+		{"echo_hound", TriggerOnEcho, ModeNormal},
+		{"fleeing_sprite", TriggerProximity, ModeNormal},
 	}
 
 	for _, tc := range tests {

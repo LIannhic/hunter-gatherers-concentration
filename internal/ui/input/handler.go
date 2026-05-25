@@ -54,6 +54,7 @@ type Handler struct {
 	OnRevealAll           func(gridID string)                        // F5: Cheat - révéler tout
 	OnHideAll             func(gridID string)                        // F6: Cheat - cacher tout
 	OnUnlockNavigation    func(gridID string)                        // F7: Cheat - désceller sorties
+	OnClearBlocked        func(gridID string)                        // F8: Cheat - retirer état bloqué
 	OnUsePortablePortal   func(gridID string, center board.Position) // P / grid placement: Déployer le portail portable
 	OnVictory             func()                                     // Callback déclenché lors de l'activation du portail final
 	OnForceTurn           func()                                     // KeySpace: Forcer le prochain tour
@@ -859,6 +860,13 @@ func (h *Handler) handleKeyboard() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF7) {
 		if h.OnUnlockNavigation != nil {
 			h.OnUnlockNavigation(h.GetCurrentGridID())
+		}
+	}
+
+	// F8: Cheat - retirer l'état bloqué des tuiles
+	if inpututil.IsKeyJustPressed(ebiten.KeyF8) {
+		if h.OnClearBlocked != nil {
+			h.OnClearBlocked(h.GetCurrentGridID())
 		}
 	}
 

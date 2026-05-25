@@ -495,6 +495,43 @@ func (app *Application) setupDebugCallbacks() {
 		}
 	}
 
+	// F8: Retirer état bloqué (cheat)
+	app.Input.OnClearBlocked = func(gridID string) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+
+		if grid, ok := app.World.GetGrid(gridID); ok {
+			count := 0
+			// On décide de l'action à faire basé sur la première entité trouvée
+			shouldBlock := true
+			first := true
+
+			for _, tile := range grid.Plots {
+				for _, id := range tile.EntitiesID {
+					if ent, ok := app.World.Entities.Get(entity.ID(id)); ok {
+						if first {
+							shouldBlock = (ent.GetState()&entity.Blocked == 0)
+							first = false
+						}
+						state := ent.GetState()
+						if shouldBlock {
+							ent.SetState(state | entity.Blocked)
+						} else {
+							ent.SetState(state & ^entity.Blocked)
+						}
+						count++
+					}
+				}
+			}
+			action := "appliqué à"
+			if !shouldBlock {
+				action = "retiré de"
+			}
+			fmt.Printf("[CHEAT] État bloqué %s %d tuile(s) dans la zone %s\n", action, count, gridID)
+		}
+	}
+
 	// F10: Toggle mouvement automatique
 	app.Input.OnToggleAutoMove = func() {
 		app.Engine.Running = !app.Engine.Running
@@ -576,48 +613,15 @@ func (app *Application) setupEventSubscriptions() {
 	})
 }
 
-// spawnInitialEntities crée quelques entités au démarrage sur différents grids
+// spawnInitialEntities crée les entités de base au démarrage
 func (app *Application) spawnInitialEntities() {
-	fmt.Println("[INIT] Populating dream plane...")
+	fmt.Println("=== Spawning initial entities ===")
+	// 1. Délègue au domaine la création des structures fixes (dolmens, portails)
+	app.World.PopulateInitialStructures()
+
+	// 2. Remplissage aléatoire du reste (seulement les zones qui ne sont pas des portails)
 	for _, gridID := range app.World.GridOrder {
-		grid, ok := app.World.GetGrid(gridID)
-		if !ok {
-			continue
-		}
-
-		isStartZone := gridID == app.World.DreamPlane.StartZoneID
-		isEndZone := gridID == app.World.DreamPlane.EndZoneID
-		isPortalZone := isStartZone || isEndZone
-
-		if isStartZone {
-			fmt.Printf("[INIT] Zone de DÉPART (%s) détectée.\n", gridID)
-		} else if isEndZone {
-			fmt.Printf("[INIT] Zone de FIN (%s) détectée.\n", gridID)
-		}
-
-		// 1. Spawner les structures marquées par le générateur
-		for pos, plot := range grid.Plots {
-			if plot.StructureID != "" {
-				stype := "unknown"
-				if plot.StructureID == "commencement_portal" || plot.StructureID == "finish_portal" {
-					stype = plot.StructureID
-				} else if strings.HasPrefix(plot.StructureID, "struct_") {
-					parts := strings.Split(plot.StructureID, "_")
-					if len(parts) >= 2 {
-						stype = parts[1]
-					}
-				}
-
-				if stype != "unknown" {
-					_, err := app.World.SpawnStructure(gridID, stype, entity.Position{X: pos.X, Y: pos.Y})
-					if err == nil && isPortalZone {
-						fmt.Printf("  - [%s] Structure créée : %s en (%d, %d)\n", gridID, stype, pos.X, pos.Y)
-					}
-				}
-			}
-		}
-
-		// 2. Remplissage aléatoire du reste (seulement si ce n'est pas une zone de portail)
+		isPortalZone := app.World.DreamPlane != nil && (gridID == app.World.DreamPlane.StartZoneID || gridID == app.World.DreamPlane.EndZoneID)
 		if !isPortalZone {
 			app.FillGridRandomly(gridID)
 		}

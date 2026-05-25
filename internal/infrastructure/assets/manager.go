@@ -128,20 +128,16 @@ func (m *Manager) generateAllAssets() {
 		m.images["tile_structure_"+themeName] = structImg
 
 		// Tuile dolmen
-		dolmenImg := generateTileDolmen(size, theme)
-		m.images["tile_dolmen_"+themeName] = dolmenImg
+		m.images["tile_dolmen_"+themeName] = generateTileDolmen(size, theme)
 
 		// Tuile obélisque
-		obeliskImg := generateTileObelisk(size, theme)
-		m.images["tile_obelisk_"+themeName] = obeliskImg
+		m.images["tile_obelisk_"+themeName] = generateTileObelisk(size, theme)
 
 		// Tuile portail
-		portalImg := generateTilePortal(size, theme)
-		m.images["tile_portal_"+themeName] = portalImg
+		m.images["tile_portal_"+themeName] = generateTilePortal(size, theme)
 
 		// Tuile de sortie (navigation)
-		exitImg := generateTileExit(size, theme)
-		m.images["tile_exit_"+themeName] = exitImg
+		m.images["tile_exit_"+themeName] = generateTileExit(size, theme)
 	}
 
 	// Tuiles par défaut (sans suffixe de thème)

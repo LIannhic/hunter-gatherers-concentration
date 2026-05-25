@@ -165,7 +165,7 @@ func TestNewCreatureMovedEvent(t *testing.T) {
 	from := entity.Position{X: 0, Y: 0}
 	to := entity.Position{X: 1, Y: 1}
 
-	e := NewCreatureMovedEvent("creature1", from, to)
+	e := NewCreatureMovedEvent("creature1", from, to, "manifest", false, false)
 
 	if e.Type != CreatureMoved {
 		t.Error("Wrong event type")

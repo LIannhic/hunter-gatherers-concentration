@@ -574,7 +574,13 @@ func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, di
 		}
 
 		if animation != nil && animation.IsActive() {
-			r.renderFlippingTile(screen, tx, ty, animation, nil, color.RGBA{100, 100, 200, 255})
+			grid, _ := world.GetGrid(world.CurrentGridID)
+			themeName := "default"
+			if grid != nil {
+				themeName = string(grid.Biome)
+			}
+			theme := r.assets.GetTheme(themeName)
+			r.renderFlippingTile(screen, tx, ty, animation, nil, themeName, theme.HiddenBorder)
 			continue
 		}
 
@@ -763,6 +769,12 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 		visualState &= ^entity.Hidden
 	}
 
+	grid, _ := world.GetGrid(gridID)
+	themeName := "default"
+	if grid != nil {
+		themeName = string(grid.Biome)
+	}
+
 	var animation *FlipAnimation
 	for _, anim := range r.flipAnimations {
 		// Note: On vérifie l'EntityID car la position logique a déjà changé lors du mouvement
@@ -774,13 +786,8 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 
 	isFlipping := animation != nil && animation.IsActive() && !forceReveal
 	if isFlipping {
-		grid, _ := world.GetGrid(gridID)
-		themeName := "default"
-		if grid != nil {
-			themeName = string(grid.Biome)
-		}
 		theme := r.assets.GetTheme(themeName)
-		r.renderFlippingTile(screen, x, y, animation, ent, theme.HiddenBorder)
+		r.renderFlippingTile(screen, x, y, animation, ent, themeName, theme.HiddenBorder)
 		return
 	}
 
@@ -788,23 +795,9 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	if visualState&entity.Matched != 0 {
 		tileImg = r.assets.GetImage("tile_matched")
 	} else if visualState&entity.Revealed != 0 {
-		if ent.GetType() == entity.TypeTrap {
-			tileImg = r.assets.GetImage("tile_trap")
-		} else if ent.GetType() == entity.TypeStructure {
-			if ent.HasTag("commencement_portal") || ent.HasTag("finish_portal") || ent.HasTag("portable_portal") {
-				tileImg = r.assets.GetImage("tile_portal")
-			} else if ent.HasTag("dolmen") {
-				tileImg = r.assets.GetImage("tile_dolmen")
-			} else if ent.HasTag("obelisk") {
-				tileImg = r.assets.GetImage("tile_obelisk")
-			} else {
-				tileImg = r.assets.GetImage("tile_structure")
-			}
-		} else {
-			tileImg = r.assets.GetImage("tile_revealed")
-		}
+		tileImg = r.getEntityRevealedImage(ent, themeName)
 	} else {
-		tileImg = r.assets.GetImage("tile_hidden")
+		tileImg = r.assets.GetTileImage("hidden", themeName)
 	}
 
 	if visualState&entity.Blocked != 0 {
@@ -819,11 +812,6 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	tx, ty := float32(x+margin), float32(y+margin)
 	cx, cy := float32(x+r.tileSize/2), float32(y+r.tileSize/2)
 
-	grid, _ := world.GetGrid(gridID)
-	themeName := "default"
-	if grid != nil {
-		themeName = string(grid.Biome)
-	}
 	theme := r.assets.GetTheme(themeName)
 
 	geo := r.generateIdleGeometry(tx, ty, entityID, theme.HiddenBorder)
@@ -1088,4 +1076,28 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 
 	// 4. Appel du shader via l'EffectRenderer
 	r.effectRenderer.DrawScannerEffect(screen, srcImg, int(ui.PlaymatX), int(ui.PlaymatY), progress, erase, thickness, revealColor)
+}
+
+// getEntityRevealedImage retourne l'image révélée appropriée pour une entité et un thème
+func (r *BoardRenderer) getEntityRevealedImage(ent entity.Entity, themeName string) *ebiten.Image {
+	if ent == nil {
+		return r.assets.GetTileImage("revealed", themeName)
+	}
+
+	if ent.GetType() == entity.TypeTrap {
+		return r.assets.GetTileImage("trap", themeName)
+	}
+
+	if ent.GetType() == entity.TypeStructure {
+		if ent.HasTag("commencement_portal") || ent.HasTag("finish_portal") || ent.HasTag("portable_portal") {
+			return r.assets.GetTileImage("portal", themeName)
+		} else if ent.HasTag("dolmen") {
+			return r.assets.GetTileImage("dolmen", themeName)
+		} else if ent.HasTag("obelisk") {
+			return r.assets.GetTileImage("obelisk", themeName)
+		}
+		return r.assets.GetTileImage("structure", themeName)
+	}
+
+	return r.assets.GetTileImage("revealed", themeName)
 }

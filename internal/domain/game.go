@@ -59,6 +59,9 @@ type (
 	NavigationStructure = structure.NavigationStructure
 	NavType             = structure.NavType
 
+	// Dream Plane (Mega-board structure)
+	DreamPlane = board.DreamPlane
+
 	// Event & State
 	Bus       = event.Bus
 	Event     = event.Event
@@ -126,6 +129,8 @@ var (
 	NewBaseEntity = entity.NewBaseEntity
 
 	NewGrid = board.NewGrid
+
+	NewLayoutGenerator = board.NewLayoutGenerator
 
 	NewStore = component.NewStore
 

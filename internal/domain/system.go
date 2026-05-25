@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/component"
@@ -51,7 +52,7 @@ type World struct {
 	Difficulty meta.DifficultySettings
 
 	// Dream Plane (Mega-board structure)
-	DreamPlane *board.DreamPlane
+	DreamPlane *DreamPlane
 
 	// Factories
 	CreatureFactory *creature.Factory
@@ -186,7 +187,9 @@ func (w *World) SetCurrentGrid(gridID string) bool {
 
 // GenerateLayout génère la structure du monde (Dream Plane)
 func (w *World) GenerateLayout(id string) {
-	gen := board.NewLayoutGenerator()
+	fmt.Printf("[WORLD] Génération du Dream Plane: %s (Difficulté: %s)\n", id, w.Difficulty.Level)
+
+	gen := NewLayoutGenerator()
 	w.DreamPlane = gen.GenerateDreamPlane(id, w.Difficulty.Level, w.WorldsCleared)
 
 	// Nettoie les anciens grids et entités
@@ -196,7 +199,9 @@ func (w *World) GenerateLayout(id string) {
 	w.Components = component.NewStore()
 
 	// Enregistre les zones dans World
-	for _, gridID := range []string{w.DreamPlane.StartZoneID, w.DreamPlane.EndZoneID} {
+	// Priorité au début et à la fin
+	priorityIDs := []string{w.DreamPlane.StartZoneID, w.DreamPlane.EndZoneID}
+	for _, gridID := range priorityIDs {
 		if grid, ok := w.DreamPlane.Zones[gridID]; ok {
 			w.Grids[grid.ID] = grid
 			w.GridOrder = append(w.GridOrder, grid.ID)
@@ -219,11 +224,18 @@ func (w *World) GenerateLayout(id string) {
 	}
 
 	w.CurrentGridID = w.DreamPlane.StartZoneID
+
+	fmt.Printf("[WORLD] Layout généré avec %d zones. Départ: %s, Fin: %s\n",
+		len(w.Grids), w.DreamPlane.StartZoneID, w.DreamPlane.EndZoneID)
+
+	w.EventBus.PublishImmediate(event.NewWorldGeneratedEvent(id, len(w.Grids)))
 }
 
 // GeneratePlaytestLayout génère un monde de test dense avec toutes les entités
 func (w *World) GeneratePlaytestLayout(id string) {
-	gen := board.NewLayoutGenerator()
+	fmt.Printf("[WORLD] Génération du Layout de PLAYTEST: %s\n", id)
+
+	gen := NewLayoutGenerator()
 	w.DreamPlane = gen.GeneratePlaytestPlane(id)
 
 	w.Grids = make(map[string]*board.Grid)
@@ -240,9 +252,9 @@ func (w *World) GeneratePlaytestLayout(id string) {
 	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "moss_monkey"}
 	resources := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
 
-	idx := 0
+	fmt.Println("[WORLD] Population de la zone de playtest...")
+
 	placePair := func(name string, isCreature bool) {
-		// Trouve des positions libres
 		count := 0
 		for y := 0; y < grid.Height && count < 2; y++ {
 			for x := 0; x < grid.Width && count < 2; x++ {
@@ -262,12 +274,15 @@ func (w *World) GeneratePlaytestLayout(id string) {
 
 	for _, c := range creatures {
 		placePair(c, true)
-		idx++
 	}
 	for _, r := range resources {
 		placePair(r, false)
-		idx++
 	}
+
+	fmt.Printf("[WORLD] Playtest layout prêt. Zones: %d, Entités: %d\n",
+		len(w.Grids), w.Entities.Count())
+
+	w.EventBus.PublishImmediate(event.NewWorldGeneratedEvent(id, len(w.Grids)))
 }
 
 // RotateGrid fait pivoter une grille et met à jour ses entités
@@ -621,7 +636,13 @@ func (w *World) SpawnTrap(gridID string, pos entity.Position) (entity.Entity, er
 
 // SpawnStructure crée une structure sur un grid spécifique
 func (w *World) SpawnStructure(gridID string, stype string, pos entity.Position) (entity.Entity, error) {
-	_, plot, err := w.getPlotForSpawn(gridID, pos)
+	grid, ok := w.Grids[gridID]
+	if !ok {
+		return nil, ErrGridNotFound
+	}
+
+	boardPos := board.Position{X: pos.X, Y: pos.Y}
+	plot, err := grid.Get(boardPos)
 	if err != nil {
 		return nil, err
 	}
@@ -632,8 +653,53 @@ func (w *World) SpawnStructure(gridID string, stype string, pos entity.Position)
 	w.Entities.Register(s)
 	plot.PushEntity(string(s.GetID()))
 
+	// Les dolmens et obélisques sont physiquement bloquants
+	if stype == "dolmen" || stype == "obelisk" {
+		plot.Modifier.Obstructed = true
+	}
+
 	w.EventBus.Publish(event.NewEntityCreatedEvent(string(s.GetID()), "structure"))
 	return s, nil
+}
+
+// PopulateInitialStructures parcourt toutes les zones pour créer les entités structures
+func (w *World) PopulateInitialStructures() {
+	fmt.Println("[WORLD] Population des structures initiales...")
+	for _, gridID := range w.GridOrder {
+		grid, _ := w.GetGrid(gridID)
+
+		isStartZone := w.DreamPlane != nil && gridID == w.DreamPlane.StartZoneID
+		isEndZone := w.DreamPlane != nil && gridID == w.DreamPlane.EndZoneID
+		isPortalZone := isStartZone || isEndZone
+
+		if isStartZone {
+			fmt.Printf("[INIT] Zone de DÉPART (%s) détectée.\n", gridID)
+		} else if isEndZone {
+			fmt.Printf("[INIT] Zone de FIN (%s) détectée.\n", gridID)
+		}
+
+		for pos, plot := range grid.Plots {
+			if plot.StructureID != "" {
+				stype := "unknown"
+				// Décodage de l'ID de structure (ex: "commencement_portal" ou "struct_dolmen_1_1")
+				if plot.StructureID == "commencement_portal" || plot.StructureID == "finish_portal" {
+					stype = plot.StructureID
+				} else if strings.HasPrefix(plot.StructureID, "struct_") {
+					parts := strings.Split(plot.StructureID, "_")
+					if len(parts) >= 2 {
+						stype = parts[1]
+					}
+				}
+
+				if stype != "unknown" {
+					_, err := w.SpawnStructure(gridID, stype, entity.Position{X: pos.X, Y: pos.Y})
+					if err == nil && isPortalZone {
+						fmt.Printf("  - [%s] Structure créée : %s en (%d, %d)\n", gridID, stype, pos.X, pos.Y)
+					}
+				}
+			}
+		}
+	}
 }
 
 // RemoveEntity supprime une entité du monde, de sa pile sur la grille et de l'ECS
@@ -802,26 +868,35 @@ func (w *World) is3x3DeploymentAreaClear(grid *board.Grid, center board.Position
 }
 
 func (w *World) clear3x3DeploymentArea(grid *board.Grid, center board.Position) {
-	idsToRemove := make([]string, 0)
-	for dy := 0; dy < 3; dy++ {
-		for dx := 0; dx < 3; dx++ {
-			pos := board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy}
-			plot, err := grid.Get(pos)
-			if err != nil {
-				continue
-			}
-			for _, id := range plot.EntitiesID {
-				idsToRemove = append(idsToRemove, id)
-			}
-			plot.Modifier.Obstructed = false
-			plot.StructureID = ""
-			plot.EntitiesID = []string{}
-		}
-	}
+    // 1. On crée une liste pour collecter TOUTES les entités de la zone 3x3
+    idsToRemove := make([]string, 0)
 
-	for _, id := range idsToRemove {
-		w.RemoveEntity(entity.ID(id))
-	}
+    for dy := 0; dy < 3; dy++ {
+       for dx := 0; dx < 3; dx++ {
+          pos := board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy}
+
+          // plot est un *Plot (pointeur)
+          plot, err := grid.Get(pos)
+          if err != nil {
+             continue
+          }
+
+          // On accumule les IDs à supprimer du monde
+          for _, id := range plot.EntitiesID {
+             idsToRemove = append(idsToRemove, id)
+          }
+
+          // 2. On nettoie DIRECTEMENT la tuile dans la grille (via le pointeur)
+          plot.Modifier.Obstructed = false
+          plot.StructureID = ""
+          plot.EntitiesID = nil // 'nil' réinitialise proprement la slice
+       }
+    }
+
+    // 3. On détruit définitivement les entités auprès du gestionnaire du World
+    for _, id := range idsToRemove {
+       w.RemoveEntity(entity.ID(id))
+    }
 }
 
 // HasPortablePortal vérifie si le joueur possède un portail portable dans son inventaire

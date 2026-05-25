@@ -73,20 +73,16 @@ func GetTransformationGeometry(t entity.Transformation) [4][2]float32 {
 	return [4][2]float32{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
 }
 
-func (r *BoardRenderer) renderFlippingTile(screen *ebiten.Image, x, y float64, anim *FlipAnimation, ent entity.Entity, thicknessColor color.Color) {
+func (r *BoardRenderer) renderFlippingTile(screen *ebiten.Image, x, y float64, anim *FlipAnimation, ent entity.Entity, themeName string, thicknessColor color.Color) {
 	margin := (r.tileSize - ui.FaceSize) / 2
 	tx, ty := float32(x+margin), float32(y+margin)
 	cx, cy := float32(x+r.tileSize/2), float32(y+r.tileSize/2)
 
-	hiddenImg := r.assets.GetImage("tile_hidden")
-	var revealedImg *ebiten.Image
+	hiddenImg := r.assets.GetTileImage("hidden", themeName)
+	revealedImg := r.getEntityRevealedImage(ent, themeName)
 
-	if ent != nil && ent.GetType() == entity.TypeTrap {
-		revealedImg = r.assets.GetImage("tile_trap")
-	} else if ent == nil && strings.HasPrefix(anim.EntityID, "exit_") {
-		revealedImg = r.assets.GetImage("tile_exit")
-	} else {
-		revealedImg = r.assets.GetImage("tile_revealed")
+	if ent == nil && strings.HasPrefix(anim.EntityID, "exit_") {
+		revealedImg = r.assets.GetTileImage("exit", themeName)
 	}
 
 	tp := float32(smoothProgress(anim.Progress))
@@ -509,6 +505,12 @@ func (r *BoardRenderer) drawSlices(screen *ebiten.Image, geo thickGeometry, dir 
 		showBottom, showLeft = true, true
 	case entity.FlipBottomRight:
 		showBottom, showRight = true, true
+	}
+
+	// FIX UV BLEEDING: Set all vertices used by slices to UV (0,0) for the white pixel image
+	for i := range geo.V {
+		geo.V[i].SrcX = 0
+		geo.V[i].SrcY = 0
 	}
 
 	// On utilise l'image blanche pour avoir la couleur pure définie dans les sommets

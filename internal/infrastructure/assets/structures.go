@@ -100,13 +100,6 @@ func generateTileObelisk(size int, theme TileTheme) *ebiten.Image {
 	vector.DrawFilledRect(img, centerX-w/2, centerY-h/2, w, h, patternColor, true)
 
 	// Sommet (Pyramidion)
-	p3x, p3y := centerX, centerY-h/2-w/2
-	vector.DrawFilledCircle(img, p3x, p3y, 2, patternColor, true) // Placeholder pointu
-
-	// On dessine un triangle manuellement avec des lignes car vector n'a pas DrawFilledTriangle simple
-	for i := float32(0); i <= w/2; i += 0.5 {
-		vector.StrokeLine(img, centerX-i, centerY-h/2, centerX+i, centerY-h/2, 1, patternColor, true)
-	}
 	// On utilise plutôt DrawFilledCircle pour le sommet pour rester simple et propre
 	vector.DrawFilledCircle(img, centerX, centerY-h/2, w/2, patternColor, true)
 

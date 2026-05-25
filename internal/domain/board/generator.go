@@ -203,7 +203,6 @@ func (g *LayoutGenerator) SetupPortalArea(grid *Grid, isStart bool) {
 			if corners[pos] {
 				// Dolmen ou Obélisque
 				plot.StructureID = fmt.Sprintf("struct_%s_%d_%d", structureType, pos.X, pos.Y)
-				plot.Modifier.Obstructed = true
 				plot.Empty = false
 			} else if portals[pos] {
 				// Portail (4 tuiles)

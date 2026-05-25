@@ -27,6 +27,7 @@ const (
 	EntityRemoved      Type = "entity_removed"
 	DifficultyChanged  Type = "difficulty_changed"
 	GridEntered        Type = "grid_entered"
+	WorldGenerated     Type = "world_generated"
 	CreatureFled       Type = "creature_fled"
 	// Animation events pour l'UI
 	AnimationStarted Type = "animation_started"
@@ -286,6 +287,17 @@ func NewCreatureFledEvent(creatureID string, species string, gridID string, posi
 			"species":  species,
 			"grid_id":  gridID,
 			"position": position,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewWorldGeneratedEvent(planeID string, zoneCount int) Event {
+	return Event{
+		Type:     WorldGenerated,
+		SourceID: planeID,
+		Payload: map[string]interface{}{
+			"zone_count": zoneCount,
 		},
 		Timestamp: time.Now(),
 	}
