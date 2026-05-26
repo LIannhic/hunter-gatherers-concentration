@@ -114,8 +114,19 @@ Les créatures disposent d'un système de mouvement configurable avec les param�
 - **Bento** : Déplacement visible (le joueur voit le mouvement)
 - **Shadow** : Déplacement invisible (face cachée, le joueur doit deviner)
 - **Swap** : Échange de place avec la cible
-- **Over** : Au-dessus des tuiles (vole)
-- **Under** : Sous les tuiles (terrier)
+- **Over** : Calque supérieur (vol, effets de surface)
+- **Under** : Calque inférieur (fouissage, traces profondes)
+
+### Traces et Indices Environnementaux
+
+Les créatures laissent derrière elles des traces qui respectent des règles de placement précises sur les calques de rendu :
+
+- **Boue (Mud)** : Rendu sur le calque **Under**, positionné exactement entre deux cases (interstice) et orienté selon la direction du mouvement.
+- **Herbe Brisée (Broken Grass)** : Rendu sur le calque **Under**, marquant la case d'origine du déplacement.
+- **Griffures (Claws)** : Rendu sur le calque **Over**, marquant la case de destination (impact).
+- **Empreintes (Footprints)** : Rendu sur le calque **Normal**, apparaissant sous les tuiles physiques pour simuler le passage au sol.
+
+Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il s'agisse d'un plateau 3x3 ou 6x6.
 
 ### Bestiaire
 

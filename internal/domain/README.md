@@ -83,6 +83,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `PreviewSystem` : Gère la révélation temporaire des tuiles à l'entrée d'une zone
   - `LootSystem` : Gère la transformation des associations réussies en butin d'inventaire
   - `ActionSystem` : Gère les actions spécifiques des créatures (ex: `spawn_trap` du Singe Mousse)
+  - `TrackSystem` : Gère la durée de vie et la disparition progressive des traces au sol
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)
@@ -137,6 +138,7 @@ Le cœur du jeu est le mécanisme d'association de tuiles (Memory). Différents 
 - **Logical** : Clé/Serrure, Marteau/Enclume
 - **Elemental** : Feu + Bois, Eau + Plante
 - **Narrative** : Fragments d'histoire
+- **Orientation** : Selon l'orientation des tuiles 
 
 Le pattern Strategy permet de traiter ces différents types uniformément.
 
@@ -324,6 +326,27 @@ L'inventaire agit comme un tampon entre la session de récolte onirique et le fo
 - **Multi-sélection** : Permet de sélectionner plusieurs objets pour une suppression groupée.
 - **Sécurité** : Certains objets (ex: Portail Portatif) possèdent le tag `IsDeletable: false` et ne peuvent pas être supprimés par le joueur.
 - **Affichage** : Utilise un système de clipping et de défilement fluide (pixel par pixel) pour suggérer la profondeur de la réserve.
+
+---
+
+## 9. Rendu Stratifié et Illusion de Profondeur
+
+### Objectif
+
+Bien que le jeu soit en vue aérienne 2D, il simule une profondeur via un système de trois calques conceptuels (Under, Normal, Over).
+
+### Fonctionnement
+
+Le domaine communique l'intention de profondeur au moteur de rendu via les événements de mouvement (`CreatureMoved`) :
+
+- **Calque Under** : Pour les entités fouisseuses (Burrower) ou les traces profondes (boue, herbe brisée). Une entité en mode `Under` est animée et visible si la pile de tuiles à sa position est vide, créant l'illusion qu'elle rampe sous les parcelles.
+- **Calque Normal** : Pour les tuiles physiques (Memory), les ressources et les déplacements standards.
+- **Calque Over** : Pour les entités volantes ou les effets de surface (griffures).
+
+### Distinction Invisibilité vs Profondeur
+
+- `hidden: true` (Furtivité) : L'entité est réellement invisible (ex: Shadowstalker). Le rendu saute l'animation de déplacement.
+- `mode: "under"` (Profondeur) : L'entité est physiquement sous les autres, mais le joueur peut la voir si rien ne la recouvre. L'animation de déplacement est maintenue pour guider l'œil du joueur.
 
 ---
 

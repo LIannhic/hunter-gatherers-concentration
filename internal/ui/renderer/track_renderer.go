@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -47,46 +48,56 @@ func (tr *TrackRenderer) getOrCreateSprite(kind string) *ebiten.Image {
 // =========================================================================
 
 // RenderUnder gère les indices enfouis ou sous les cases (ex: boue profonde, galeries)
-func (tr *TrackRenderer) RenderUnder(screen *ebiten.Image, world *domain.World, offsetX, offsetY, tileSize, spacingX, spacingY float64) {
+func (tr *TrackRenderer) RenderUnder(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
 	tracks := world.Entities.GetByType(entity.TypeTrack)
 	for _, e := range tracks {
 		t, ok := e.(*entity.Track)
 		if !ok || t.GetGridID() != world.CurrentGridID {
 			continue
 		}
-		// On ne dessine ici que les traces "ancrées" (FromPos == ToPos)
-		if t.FromPos == t.ToPos {
-			tr.Draw(screen, t, offsetX, offsetY, tileSize, spacingX, spacingY)
+		// mud et broken_grass sont sur la strate Under
+		if t.Kind == "mud" || t.Kind == "broken_grass" {
+			tr.Draw(screen, t, getCenter)
+		} else if t.FromPos == t.ToPos {
+			// Autres traces statiques par défaut
+			tr.Draw(screen, t, getCenter)
 		}
 	}
 }
 
-// RenderBetween affiche les traces situées dans les interstices (les translations)
-func (tr *TrackRenderer) RenderBetween(screen *ebiten.Image, world *domain.World, offsetX, offsetY, tileSize, spacingX, spacingY float64) {
+// RenderNormal affiche les traces situées dans les interstices (les translations)
+func (tr *TrackRenderer) RenderNormal(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
 	tracks := world.Entities.GetByType(entity.TypeTrack)
 	for _, e := range tracks {
 		t, ok := e.(*entity.Track)
 		if !ok || t.GetGridID() != world.CurrentGridID {
 			continue
 		}
-		// On dessine ici les traces de mouvement (interstices)
-		if t.FromPos != t.ToPos {
-			tr.Draw(screen, t, offsetX, offsetY, tileSize, spacingX, spacingY)
+		// On dessine ici les traces de mouvement génériques (pas mud qui est Under)
+		if t.Kind != "mud" && t.Kind != "claws" && t.Kind != "broken_grass" && t.FromPos != t.ToPos {
+			tr.Draw(screen, t, getCenter)
 		}
 	}
 }
 
-// RenderEffectsBetween dessine les lignes de visée et les lasers d'intention d'attaque
-func (tr *TrackRenderer) RenderEffectsBetween(screen *ebiten.Image, world *domain.World, offsetX, offsetY, tileSize, spacingX, spacingY float64) {
+// RenderEffectsNormal dessine les lignes de visée et les lasers d'intention d'attaque
+func (tr *TrackRenderer) RenderEffectsNormal(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
 	// À implémenter : effets d'attaque si nécessaire
-	// if world.CurrentAttackIntent != nil {
-	//     tr.DrawAttackIntent(screen, world.CurrentAttackIntent, tileSize, spacingX)
-	// }
 }
 
 // RenderOver affiche les indices ou effets aériens (ex: marques de griffes volantes, nuages)
-func (tr *TrackRenderer) RenderOver(screen *ebiten.Image, world *domain.World, offsetX, offsetY, tileSize, spacingX, spacingY float64) {
-	// Évolutions futures pour les traces au-dessus des tuiles physiques
+func (tr *TrackRenderer) RenderOver(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
+	tracks := world.Entities.GetByType(entity.TypeTrack)
+	for _, e := range tracks {
+		t, ok := e.(*entity.Track)
+		if !ok || t.GetGridID() != world.CurrentGridID {
+			continue
+		}
+		// claws est sur la strate Over
+		if t.Kind == "claws" {
+			tr.Draw(screen, t, getCenter)
+		}
+	}
 }
 
 // =========================================================================
@@ -94,7 +105,7 @@ func (tr *TrackRenderer) RenderOver(screen *ebiten.Image, world *domain.World, o
 // =========================================================================
 
 // Draw effectue le rendu d'une trace en calculant sa position (Sur, Sous, ou Entre)
-func (tr *TrackRenderer) Draw(screen *ebiten.Image, t *entity.Track, offsetX, offsetY, tileSize, spacingX, spacingY float64) {
+func (tr *TrackRenderer) Draw(screen *ebiten.Image, t *entity.Track, getCenter func(board.Position) (float64, float64)) {
 	sprite := tr.getOrCreateSprite(t.Kind)
 	if sprite == nil {
 		return // Sécurité si le sprite ne peut pas être généré
@@ -103,32 +114,47 @@ func (tr *TrackRenderer) Draw(screen *ebiten.Image, t *entity.Track, offsetX, of
 	op := &ebiten.DrawImageOptions{}
 	w, h := sprite.Bounds().Dx(), sprite.Bounds().Dy()
 
-	// 1. Coordonnées en pixels des centres des cases de départ et d'arrivée
-	startX := offsetX + float64(t.FromPos.X)*(tileSize+spacingX) + (tileSize / 2)
-	startY := offsetY + float64(t.FromPos.Y)*(tileSize+spacingY) + (tileSize / 2)
-
-	endX := offsetX + float64(t.ToPos.X)*(tileSize+spacingX) + (tileSize / 2)
-	endY := offsetY + float64(t.ToPos.Y)*(tileSize+spacingY) + (tileSize / 2)
+	// 1. Coordonnées en pixels des centres des cases de départ et d'arrivée via le callback dynamique
+	startX, startY := getCenter(t.FromPos)
+	endX, endY := getCenter(t.ToPos)
 
 	var drawX, drawY float64
+	var angle float64
+	hasRotation := false
 
 	// 2. Calcul du point d'ancrage selon la nature géométrique de l'indice
-	if t.FromPos == t.ToPos {
-		// --- INDICE SUR OU SOUS LA CASE ---
+	if t.Kind == "broken_grass" {
+		// Herbes brisées: à l'origine
+		drawX = startX
+		drawY = startY
+	} else if t.Kind == "claws" {
+		// Griffes: à la destination
+		drawX = endX
+		drawY = endY
+	} else if t.Kind == "mud" {
+		// Boue: entre les cases
+		drawX = startX + (endX-startX)*0.5
+		drawY = startY + (endY-startY)*0.5
+		angle = math.Atan2(endY-startY, endX-startX)
+		hasRotation = true
+	} else if t.FromPos == t.ToPos {
+		// --- INDICE STATIQUE ---
 		drawX = startX
 		drawY = startY
 	} else {
-		// --- INDICE ENTRE LES CASES (Interstice) ---
+		// --- INDICE ENTRE LES CASES (Interstice générique) ---
 		drawX = startX + (endX-startX)*0.5
 		drawY = startY + (endY-startY)*0.5
-
-		// Orienter l'indice dans la direction de la translation
-		angle := math.Atan2(endY-startY, endX-startX)
-		op.GeoM.Rotate(angle)
+		angle = math.Atan2(endY-startY, endX-startX)
+		hasRotation = true
 	}
 
-	// 3. Centrage et translation finale unifiés
+	// 3. Centrage, Rotation (si besoin) et translation finale unifiés
+	// IMPORTANT : Toujours centrer avant de pivoter
 	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+	if hasRotation {
+		op.GeoM.Rotate(angle)
+	}
 	op.GeoM.Translate(drawX, drawY)
 
 	screen.DrawImage(sprite, op)

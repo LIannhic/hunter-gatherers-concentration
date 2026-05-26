@@ -347,7 +347,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic:      AcousticSilent,
 				LeavesTracks:  true,
 				TrackType:     "mud",
-				TrackDuration: 3,
+				TrackDuration: 2,
 			},
 			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
 			Orientation: Orientation{Direction: DirNorth},

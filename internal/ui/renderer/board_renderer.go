@@ -24,10 +24,10 @@ import (
 type BoardRenderer struct {
 	assets      *assets.Manager
 	tileSize    float64
-	gridOffsetX float64
-	gridOffsetY float64
-	gridSpacing int // Espace entre les grids
-	gridsPerRow int // Nombre de grids par ligne
+	gridOffsetX float64 // Position écran du coin haut-gauche du plateau
+	gridOffsetY float64 //
+	gridSpacing int     // Espace entre les cases (parcelles)
+	gridsPerRow int     // Nombre de cases par ligne
 
 	// Rotation visuelle globale du plateau (en degrés)
 	boardRotation float64
@@ -243,10 +243,11 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 
 	// Démarre les animations de translation quand une créature se déplace
 	world.EventBus.SubscribeFunc(event.CreatureMoved, func(e event.Event) {
-		// Si l'animation doit être silencieuse, on ne démarre rien
+		// On ne saute l'animation QUE si hidden est explicitement à true (furtivité)
 		if hidden, ok := e.Payload["hidden"].(bool); ok && hidden {
 			return
 		}
+
 		// Récupère les positions
 		from, _ := e.Payload["from"].(entity.Position)
 		to, _ := e.Payload["to"].(entity.Position)
@@ -255,31 +256,22 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 			entityID = e.SourceID
 		}
 
-		// Mode détermine la strate
-		layer := "normal"
+		// Mode détermine la strate de rendu (under, normal, over)
+		var layer Layer = LayerNormal
 		if modeStr, ok := e.Payload["mode"].(string); ok {
 			switch modeStr {
 			case "under":
-				layer = "under"
+				layer = LayerUnder
 			case "over":
-				layer = "over"
+				layer = LayerOver
 			default:
-				layer = "normal"
+				layer = LayerNormal
 			}
 		}
 
 		if r.AnimManager != nil {
 			// Durée: 60 ticks = ~1s à 60fps
-			var l Layer
-			switch layer {
-			case "under":
-				l = LayerUnder
-			case "over":
-				l = LayerOver
-			default:
-				l = LayerNormal
-			}
-			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 60, l)
+			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 60, layer)
 		}
 	})
 }
@@ -312,23 +304,29 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 		}
 
 		// --- 2. COUCHE : FOND DE LA GRILLE (Les cases vides) ---
+		// Toujours rendu sur le plateau (Board area)
 		r.renderEmptyGrid(screen, world.CurrentGridID, world, false)
 
+		isPortalZone := world.DreamPlane != nil && (world.CurrentGridID == world.DreamPlane.StartZoneID || world.CurrentGridID == world.DreamPlane.EndZoneID)
+		getCenter := func(pos board.Position) (float64, float64) {
+			return r.getTileCenter(pos, grid, isPortalZone)
+		}
+
 		// --- 3. STRATE : UNDER (Souterraine) ---
-		r.renderTracksUnder(screen, world)
+		r.renderTracksUnder(screen, world, getCenter)
 		r.renderMovementsUnder(screen, world)
 		r.renderEffectsUnder(screen, world)
 
-		// --- 4. STRATE : TUILES & ENTRE (Plateau et interstices normaux) ---
-		// On pose les tuiles physiques (Memory) par-dessus la strate souterraine
+		// --- 4. STRATE : TUILES & NORMAL ---
+		// Les traces normales sont sous les tuiles statiques
+		r.renderTracksNormal(screen, world, getCenter)
 		r.renderGrid(screen, world.CurrentGridID, world, false, false)
 
-		r.renderTracksBetween(screen, world)
 		r.renderMovementsNormal(screen, world)
-		r.renderEffectsBetween(screen, world)
+		r.renderEffectsNormal(screen, world, getCenter)
 
 		// --- 5. STRATE : OVER (Au-dessus de la surface) ---
-		r.renderTracksOver(screen, world)
+		r.renderTracksOver(screen, world, getCenter)
 		r.renderMovementsOver(screen, world)
 
 		// Le scanner glisse au-dessus de tout le monde sur le plateau
@@ -379,19 +377,10 @@ func (r *BoardRenderer) renderEmptyGrid(screen *ebiten.Image, gridID string, wor
 	}
 }
 
-// Fonctions de branchement des calques Under/Between/Over vers ton gestionnaire
-func (r *BoardRenderer) renderTracksUnder(screen *ebiten.Image, world *domain.World) {
+// Fonctions de branchement des calques Under/Normal/Over vers ton gestionnaire
+func (r *BoardRenderer) renderTracksUnder(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
 	if r.trackRenderer != nil {
-		grid, ok := world.GetCurrentGrid()
-		if !ok {
-			return
-		}
-		isPortalZone := world.DreamPlane != nil && (grid.ID == world.DreamPlane.StartZoneID || grid.ID == world.DreamPlane.EndZoneID)
-		spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
-		if isPortalZone {
-			spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
-		}
-		r.trackRenderer.RenderUnder(screen, world, r.gridOffsetX+padX, r.gridOffsetY+padY, r.tileSize, spacingX, spacingY)
+		r.trackRenderer.RenderUnder(screen, world, getCenter)
 	}
 }
 func (r *BoardRenderer) renderMovementsUnder(screen *ebiten.Image, world *domain.World) {
@@ -401,50 +390,23 @@ func (r *BoardRenderer) renderEffectsUnder(screen *ebiten.Image, world *domain.W
 	// Évolutions futures : secousses sismiques souterraines
 }
 
-func (r *BoardRenderer) renderTracksBetween(screen *ebiten.Image, world *domain.World) {
+func (r *BoardRenderer) renderTracksNormal(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
 	if r.trackRenderer != nil {
-		grid, ok := world.GetCurrentGrid()
-		if !ok {
-			return
-		}
-		isPortalZone := world.DreamPlane != nil && (grid.ID == world.DreamPlane.StartZoneID || grid.ID == world.DreamPlane.EndZoneID)
-		spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
-		if isPortalZone {
-			spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
-		}
-		r.trackRenderer.RenderBetween(screen, world, r.gridOffsetX+padX, r.gridOffsetY+padY, r.tileSize, spacingX, spacingY)
+		r.trackRenderer.RenderNormal(screen, world, getCenter)
 	}
 }
 func (r *BoardRenderer) renderMovementsNormal(screen *ebiten.Image, world *domain.World) {
 	r.renderMovingEntities(screen, world, "normal")
 }
-func (r *BoardRenderer) renderEffectsBetween(screen *ebiten.Image, world *domain.World) {
+func (r *BoardRenderer) renderEffectsNormal(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
 	if r.trackRenderer != nil {
-		grid, ok := world.GetCurrentGrid()
-		if !ok {
-			return
-		}
-		isPortalZone := world.DreamPlane != nil && (grid.ID == world.DreamPlane.StartZoneID || grid.ID == world.DreamPlane.EndZoneID)
-		spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
-		if isPortalZone {
-			spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
-		}
-		r.trackRenderer.RenderEffectsBetween(screen, world, r.gridOffsetX+padX, r.gridOffsetY+padY, r.tileSize, spacingX, spacingY)
+		r.trackRenderer.RenderEffectsNormal(screen, world, getCenter)
 	}
 }
 
-func (r *BoardRenderer) renderTracksOver(screen *ebiten.Image, world *domain.World) {
+func (r *BoardRenderer) renderTracksOver(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
 	if r.trackRenderer != nil {
-		grid, ok := world.GetCurrentGrid()
-		if !ok {
-			return
-		}
-		isPortalZone := world.DreamPlane != nil && (grid.ID == world.DreamPlane.StartZoneID || grid.ID == world.DreamPlane.EndZoneID)
-		spacingX, spacingY, padX, padY := r.getGridSpacing(grid.Width, grid.Height)
-		if isPortalZone {
-			spacingX, spacingY, padX, padY = r.getGridSpacing(6, 6)
-		}
-		r.trackRenderer.RenderOver(screen, world, r.gridOffsetX+padX, r.gridOffsetY+padY, r.tileSize, spacingX, spacingY)
+		r.trackRenderer.RenderOver(screen, world, getCenter)
 	}
 }
 func (r *BoardRenderer) renderMovementsOver(screen *ebiten.Image, world *domain.World) {
@@ -705,6 +667,29 @@ func (r *BoardRenderer) calculateTileScreenPos(pos board.Position, grid *board.G
 	sx := r.gridOffsetX + padX + float64(pos.X)*(r.tileSize+spacingX)
 	sy := r.gridOffsetY + padY + float64(pos.Y)*(r.tileSize+spacingY)
 	return sx, sy
+}
+
+// getTileCenter retourne le centre d'une case en coordonnées écran, avec rotation globale appliquée
+func (r *BoardRenderer) getTileCenter(pos board.Position, grid *board.Grid, isPortal bool) (float64, float64) {
+	x, y := r.calculateTileScreenPos(pos, grid, isPortal)
+	cx, cy := x+r.tileSize/2, y+r.tileSize/2
+
+	if r.boardRotation != 0 {
+		// Le plateau pivote autour de son centre géométrique
+		boardCenterX := r.gridOffsetX + ui.BoardW/2
+		boardCenterY := r.gridOffsetY + ui.BoardH/2
+
+		angle := r.boardRotation * math.Pi / 180
+		cosA, sinA := math.Cos(angle), math.Sin(angle)
+
+		relX := cx - boardCenterX
+		relY := cy - boardCenterY
+
+		cx = boardCenterX + relX*cosA - relY*sinA
+		cy = boardCenterY + relX*sinA + relY*cosA
+	}
+
+	return cx, cy
 }
 
 func (r *BoardRenderer) isPortalPosition(pos board.Position) bool {

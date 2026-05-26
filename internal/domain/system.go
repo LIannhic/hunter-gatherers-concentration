@@ -2239,31 +2239,19 @@ func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos ent
 	}
 
 	// Émission de l'événement mis à jour
-	// Si la créature est "Cloaked" (furtive) ou "Under" (souterraine), le déplacement est discret visuellement
-	silent := isCloaked || mode == creature.ModeUnder
-
-	if silent {
-		world.EventBus.Publish(event.Event{
-			Type:     event.CreatureMoved,
-			SourceID: string(c.GetID()),
-			Payload: map[string]interface{}{
-				"from":    oldPos,
-				"to":      newPos,
-				"mode":    "silent",
-				"hidden":  true, // Indique à l'UI de ne pas lancer d'animation fluide classique
-				"audible": isAudible,
-			},
-		})
-	} else {
-		world.EventBus.Publish(event.NewCreatureMovedEvent(
-			string(c.GetID()),
-			oldPos,
-			newPos,
-			string(mode), // Transmet le mode ("manifest", "silent")
-			false,        // Transmet le booléen hidden
-			isAudible,    // Transmet le booléen audible
-		))
-	}
+	// hidden est vrai UNIQUEMENT si la créature est camouflée (cloaked)
+	// mode transmet la strate (under, normal, over)
+	world.EventBus.Publish(event.Event{
+		Type:     event.CreatureMoved,
+		SourceID: string(c.GetID()),
+		Payload: map[string]interface{}{
+			"from":    oldPos,
+			"to":      newPos,
+			"mode":    string(mode),
+			"hidden":  isCloaked, // Indique si on saute l'animation (Shadowstalker)
+			"audible": isAudible,
+		},
+	})
 	return true
 }
 
