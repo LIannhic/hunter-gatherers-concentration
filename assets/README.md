@@ -91,11 +91,12 @@ Chaque tuile comprend :
 | `burrower` | Fouisseur terrestre | Brun terreux |
 | `flutterwing` | Papillon aérien | Bleu ciel |
 
-### 4. Effets Visuels
+### 4. Effets Visuels et Animations
 
-- **Overlays de flip** : Effets d'ombre pour chaque direction
-- **Indicateurs de direction** : Flèches pour visualiser le sens de flip
-- **Icônes de comportement** : Pastilles colorées pour les états des créatures
+- **Overlays de flip** : Effets d'ombre pour chaque direction.
+- **Indicateurs de direction** : Flèches pour visualiser le sens de flip.
+- **Icônes de comportement** : Pastilles colorées pour les états des créatures.
+- **Animations de fermeture** : Les tuiles se referment en suivant la pente du terrain (`Tilt`), garantissant une cohérence visuelle avec le relief.
 
 ## 🎮 Utilisation dans le Code
 

@@ -73,6 +73,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
   - `Manager` : Stockage et accès rapide aux entités
   - `AddTag(string)`, `HasTag(string)`, `RemoveTag(string)` : Méthodes permettant de gérer les propriétés dynamiques ou visuelles des entités (ex: "moss_lure", "flying").
+  - `ThreatZone` : (Creature) Liste de directions attaquées localement.
 - **`component/`** : Stockage et définition des composants (`Store`)
 - **`system.go`** : Systèmes qui traitent les données
   - `CreatureAISystem` : Gère les comportements de base des créatures
@@ -342,6 +343,10 @@ Le domaine communique l'intention de profondeur au moteur de rendu via les évé
 - **Calque Under** : Pour les entités fouisseuses (Burrower) ou les traces profondes (boue, herbe brisée). Une entité en mode `Under` est animée et visible si la pile de tuiles à sa position est vide, créant l'illusion qu'elle rampe sous les parcelles.
 - **Calque Normal** : Pour les tuiles physiques (Memory), les ressources et les déplacements standards.
 - **Calque Over** : Pour les entités volantes ou les effets de surface (griffures).
+
+### Animation de fermeture et relief
+
+Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement. Elles utilisent la propriété `Tilt` (pente) de la parcelle. Cela simule une tuile qui "retombe" selon la gravité du terrain.
 
 ### Distinction Invisibilité vs Profondeur
 

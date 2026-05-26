@@ -77,11 +77,13 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Un état (TileState : Hidden, Revealed, Matched, Blocked)
   - Des tags dynamiques pour le comportement ou le rendu (ex: `moss_lure`, `dangerous_on_reveal`)
   - Des composants optionnels (Lifecycle, Matchable, CreatureAI, etc.)
+  - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (face, côtés, etc.).
 
 - **Board/Grid** : Gère la géométrie du plateau
   - Chaque tuile contient une référence optionnelle à une entité
   - Les tuiles ne portent plus d'état ; c'est l'entité qui le porte
   - Permet la recherche rapide des entités par position
+  - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles.
 
 - **Systems** : Mettent à jour l'état du monde
   - **CreatureAISystem** : Gère les comportements de base des créatures
@@ -132,9 +134,9 @@ if revealCmd.CanExecute() {
 ```
 
 **Commandes principales :**
-- `RevealTileCommand` : Révèle une entité (passe son état de Hidden à Revealed)
-- `MatchTilesCommand` : Appaire deux entités (passe leur état à Matched)
-- `SwitchGridCommand` : Change de grille active
+- `RevealTileCommand` : Révèle une entité, met à jour la position périphérique du joueur et vérifie la **Confrontation** (dégâts si dans la `ThreatZone`).
+- `MatchTilesCommand` : Tente d'appairer deux entités et applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide).
+- `SwitchGridCommand` : Change de grille active.
 - `UsePortablePortalCommand` : Active un portail portable pour créer une zone de dégagement et extraire le joueur du plan
 
 ### 3. Infrastructure
