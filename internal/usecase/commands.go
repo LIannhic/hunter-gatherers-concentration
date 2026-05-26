@@ -85,8 +85,16 @@ func (c *RevealTileCommand) Execute() error {
 		return errors.New("impossible de révéler cette tuile")
 	}
 
-	// Avant de révéler, on met à jour la position du joueur à la parcelle cliquée
-	c.World.SetPlayerPosition(entity.Position{X: c.Position.X, Y: c.Position.Y})
+	// Calcule la position réelle du joueur en périphérie de la tuile et son ancrage
+	offset, border := flipToPlayerState(c.FlipDirection)
+	playerPos := entity.Position{
+		X: c.Position.X + offset.X,
+		Y: c.Position.Y + offset.Y,
+	}
+
+	// Met à jour l'état du joueur
+	c.World.Player.SetAnchor(border)
+	c.World.SetPlayerPosition(playerPos)
 
 	// Déplace les shadowstalkers d'une case vers le joueur (comportement pré-révélation)
 	if c.World != nil {
@@ -97,6 +105,33 @@ func (c *RevealTileCommand) Execute() error {
 	ent, err := c.World.RevealTile(c.GridID, c.Position, c.FlipDirection)
 	if err != nil {
 		return err
+	}
+
+	// --- NOUVEAU : Logique de Confrontation (Zone de Menace) ---
+	if cre, ok := ent.(*creature.Creature); ok {
+		isThreatened := cre.IsPositionThreatened(playerPos)
+
+		fmt.Printf("[DEBUG] Reveal Créature: %s en %v (Transformation: %s)\n", cre.Species, cre.GetPosition(), cre.GetTransformation().String())
+		fmt.Printf("[DEBUG] Joueur en %v (Ancre: %v) | Menacé ? %v\n", playerPos, border, isThreatened)
+
+		activeThreats := cre.GetActiveThreatDirections()
+		fmt.Printf("[DEBUG] Zones de menace actives: %v\n", activeThreats)
+
+		if isThreatened {
+			fmt.Printf("[COMBAT] Confrontation ! La créature %s attaque le joueur en %v\n", cre.Species, playerPos)
+			c.World.Player.TakeDamage(10, "physical")
+
+			// Publie un événement de dégâts pour l'UI
+			c.World.EventBus.Publish(event.Event{
+				Type:     event.PlayerDamaged,
+				SourceID: string(cre.GetID()),
+				Payload: map[string]interface{}{
+					"damage": 10,
+					"type":   "physical",
+					"reason": "confrontation",
+				},
+			})
+		}
 	}
 
 	// Track this flipped tile for the current turn
@@ -224,6 +259,9 @@ func (c *MatchTilesCommand) Execute() error {
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
 
+		// --- NOUVEAU : Logique de Match Valide (0 dégât) ---
+		// (Déjà implicite car on ne fait rien ici, mais on pourrait loguer)
+
 		// Si ce sont des ressources ou créatures, on incrémente le compteur de paires trouvées pour ouvrir les sorties
 		if entity1.GetType() == entity.TypeCreature || entity1.GetType() == entity.TypeResource {
 			if grid, ok := c.World.GetGrid(c.GridID); ok {
@@ -264,12 +302,30 @@ func (c *MatchTilesCommand) Execute() error {
 
 		return nil
 	} else {
-		// Échec : Appliquer les pénalités de santé si des créatures sont impliquées
+		// Échec : Association invalide
+		// --- NOUVEAU : Logique de Match Invalide (Dégâts par créature) ---
+		creatureCount := 0
 		if isCre1 {
-			c.World.Player.TakeDamage(10, "creature_fail")
+			creatureCount++
 		}
 		if isCre2 {
-			c.World.Player.TakeDamage(1, "creature_fail")
+			creatureCount++
+		}
+
+		if creatureCount > 0 {
+			damage := creatureCount * 10
+			fmt.Printf("[COMBAT] Match invalide avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
+			c.World.Player.TakeDamage(damage, "creature_fail")
+
+			c.World.EventBus.Publish(event.Event{
+				Type:     event.PlayerDamaged,
+				SourceID: "system",
+				Payload: map[string]interface{}{
+					"damage": damage,
+					"type":   "creature_fail",
+					"reason": "invalid_match",
+				},
+			})
 		}
 
 		// Recacher les entités avec animation basée sur la pente (Slope)
@@ -821,4 +877,28 @@ func (c *RotateGridCommand) Execute() error {
 		return errors.New("grille non trouvée")
 	}
 	return c.World.RotateGrid(c.GridID)
+}
+
+// flipToPlayerState convertit une direction de flip en offset de position et en ancrage pour le joueur.
+func flipToPlayerState(f domain.FlipDirection) (entity.Position, player.BorderPosition) {
+	switch f {
+	case domain.FlipTop:
+		return entity.Position{X: 0, Y: -1}, player.BorderTop
+	case domain.FlipTopRight:
+		return entity.Position{X: 1, Y: -1}, player.BorderTopRight
+	case domain.FlipRight:
+		return entity.Position{X: 1, Y: 0}, player.BorderRight
+	case domain.FlipBottomRight:
+		return entity.Position{X: 1, Y: 1}, player.BorderBottomRight
+	case domain.FlipBottom:
+		return entity.Position{X: 0, Y: 1}, player.BorderBottom
+	case domain.FlipBottomLeft:
+		return entity.Position{X: -1, Y: 1}, player.BorderBottomLeft
+	case domain.FlipLeft:
+		return entity.Position{X: -1, Y: 0}, player.BorderLeft
+	case domain.FlipTopLeft:
+		return entity.Position{X: -1, Y: -1}, player.BorderTopLeft
+	default:
+		return entity.Position{X: 0, Y: 0}, player.BorderTop // Fallback
+	}
 }

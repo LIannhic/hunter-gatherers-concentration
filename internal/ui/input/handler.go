@@ -583,6 +583,74 @@ func (h *Handler) processSkip() {
 		return
 	}
 
+	// --- NOUVEAU : Logique de Skip (Pénalité si Match Valide manqué) ---
+	if len(h.revealedTiles) == 2 {
+		pos1 := h.revealedTiles[0]
+		pos2 := h.revealedTiles[1]
+		gridID := h.selectedGridID
+		if gridID == "" {
+			gridID = h.world.CurrentGridID
+		}
+
+		grid, ok := h.world.GetGrid(gridID)
+		if ok {
+			tile1, _ := grid.Get(pos1)
+			tile2, _ := grid.Get(pos2)
+
+			if len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
+				id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+				id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+				e1, _ := h.world.Entities.Get(entity.ID(id1))
+				e2, _ := h.world.Entities.Get(entity.ID(id2))
+
+				if e1 != nil && e2 != nil {
+					// On vérifie si c'était un match valide
+					isMatch := false
+					res1, isRes1 := e1.(*domain.Resource)
+					res2, isRes2 := e2.(*domain.Resource)
+					cre1, isCre1 := e1.(*domain.Creature)
+					cre2, isCre2 := e2.(*domain.Creature)
+
+					if isRes1 && isRes2 {
+						res, err := h.assocEngine.TryAssociate(res1, res2)
+						if err == nil && res.Success {
+							isMatch = true
+						}
+					} else if isCre1 && isCre2 && cre1.Species == cre2.Species {
+						isMatch = true
+					}
+
+					if isMatch {
+						creatureCount := 0
+						if isCre1 {
+							creatureCount++
+						}
+						if isCre2 {
+							creatureCount++
+						}
+
+						if creatureCount > 0 {
+							fmt.Printf("[DEBUG] SKIP d'une paire valide contenant des créatures (Pos: %v, %v)\n", pos1, pos2)
+							damage := creatureCount * 10
+							fmt.Printf("[COMBAT] Skip d'un match VALIDE avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
+							h.world.Player.TakeDamage(damage, "creature_fail")
+
+							h.world.EventBus.Publish(event.Event{
+								Type:     event.PlayerDamaged,
+								SourceID: "system",
+								Payload: map[string]interface{}{
+									"damage": damage,
+									"type":   "creature_fail",
+									"reason": "skipped_valid_match",
+								},
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// On cache les tuiles révélées puis déclenche la fin de tour.
 	h.hideAllTilesInGrid()
 	h.ClearSelection()
@@ -592,7 +660,7 @@ func (h *Handler) processSkip() {
 	}
 }
 
-// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles.
+// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles avec animation basée sur la pente.
 func (h *Handler) hideRevealedTiles() {
 	gridID := h.selectedGridID
 	if gridID == "" {
@@ -611,13 +679,22 @@ func (h *Handler) hideRevealedTiles() {
 		}
 		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
 		if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
-			ent.SetState(entity.Hidden)
+			// On ne flip que si elle est déjà révélée
+			if ent.GetState()&entity.Revealed != 0 {
+				// On utilise la pente (Tilt) de la parcelle pour une fermeture "naturelle"
+				flipDir := plot.Tilt.ToFlipDirection()
+				_, _ = h.world.FlipTile(gridID, pos, flipDir)
+
+				// Notification immédiate pour déclencher l'animation dans le renderer
+				h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+					entity.Position(pos), topID, gridID, flipDir))
+			}
 		}
 	}
 	h.revealedTiles = nil
 }
 
-// HideAllTilesInGrid parcourt toute la grille et passe TOUTES les entités de TOUTES les piles en état Hidden.
+// HideAllTilesInGrid parcourt toute la grille et passe TOUTES les entités révélées en état Hidden avec animation basée sur la pente.
 func (h *Handler) hideAllTilesInGrid() {
 	gridID := h.selectedGridID
 	if gridID == "" {
@@ -634,10 +711,15 @@ func (h *Handler) hideAllTilesInGrid() {
 		if len(plot.EntitiesID) == 0 {
 			continue
 		}
-		// Au lieu de prendre uniquement le topID, on boucle sur chaque entité de la pile
-		for _, entID := range plot.EntitiesID {
-			if ent, ok := h.world.Entities.Get(entity.ID(entID)); ok {
-				ent.SetState(entity.Hidden)
+		// On ne flip que l'entité au sommet si elle est révélée
+		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+		if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
+			if ent.GetState()&entity.Revealed != 0 {
+				flipDir := plot.Tilt.ToFlipDirection()
+				_, _ = h.world.FlipTile(gridID, plot.Position, flipDir)
+
+				h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+					entity.Position(plot.Position), topID, gridID, flipDir))
 			}
 		}
 	}
@@ -727,9 +809,20 @@ func (h *Handler) processMatchAttempt() {
 		h.isProcessing = false
 		h.ClearSelection()
 
-		// On recache les entités
-		e1.SetState(entity.Hidden)
-		e2.SetState(entity.Hidden)
+		// On recache les entités avec animation basée sur la pente (Slope)
+		p1, _ := grid.Get(pos1)
+		p2, _ := grid.Get(pos2)
+		fDir1 := p1.Tilt.ToFlipDirection()
+		fDir2 := p2.Tilt.ToFlipDirection()
+
+		_, _ = h.world.FlipTile(gridID, pos1, fDir1)
+		_, _ = h.world.FlipTile(gridID, pos2, fDir2)
+
+		h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(pos1), string(e1.GetID()), gridID, fDir1))
+		h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(pos2), string(e2.GetID()), gridID, fDir2))
+
 		if h.OnTurnEnd != nil {
 			h.OnTurnEnd()
 		}
