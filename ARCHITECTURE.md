@@ -104,7 +104,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
 
 - **Types d'entités** :
   - `TypeResource` : Ressources récoltables
-  - `TypeCreature` : Créatures avec IA
+  - `TypeCreature` : Créatures avec IA. Supporte **8 directions cardinales et ordinales** pour la détection de menace précise.
   - `TypeStructure` : Structures fixes (terriers, etc.)
   - `TypeArtefact` : Objets spéciaux
   - `TypeTrap` : Pièges / tuiles vides

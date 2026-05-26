@@ -348,6 +348,13 @@ Le domaine communique l'intention de profondeur au moteur de rendu via les évé
 
 Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement. Elles utilisent la propriété `Tilt` (pente) de la parcelle. Cela simule une tuile qui "retombe" selon la gravité du terrain.
 
+### Orientation Persistante et Mathématiques D4
+
+Le moteur gère une accumulation réelle des transformations géométriques :
+- **Composition à Droite** : Chaque nouveau mouvement (flip) est composé avec l'état actuel de l'entité (`current * apply`).
+- **Fermeture Physique** : La fermeture d'une tuile (via la pente du terrain) est une transformation réelle qui modifie l'orientation logique face cachée.
+- **Réversibilité** : Grâce aux propriétés du groupe $D_4$, deux flips identiques s'annulent ($T^2 = I$), permettant de retrouver l'état d'origine si le joueur et le terrain agissent sur le même axe.
+
 ### Distinction Invisibilité vs Profondeur
 
 - `hidden: true` (Furtivité) : L'entité est réellement invisible (ex: Shadowstalker). Le rendu saute l'animation de déplacement.
