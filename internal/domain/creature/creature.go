@@ -23,12 +23,14 @@ type Creature struct {
 	Mobility        component.Mobility
 	Visual          component.Visual
 	MovementProfile *MovementProfile // configuration complète du mouvement
+	ThreatZone      []entity.Direction
 }
 
 func New(species string, pos entity.Position) *Creature {
 	c := &Creature{
 		BaseEntity: entity.NewBaseEntity(entity.TypeCreature),
 		Species:    species,
+		ThreatZone: []entity.Direction{entity.DirNorth}, // Par défaut face à elle
 	}
 	c.SetPosition(pos)
 	c.AddTag("creature")
@@ -487,3 +489,56 @@ func (f *Factory) CreatePatroller(species string, pos entity.Position, route []e
 
 func (f *Factory) GetAI() AI   { return f.ai }
 func (f *Factory) SetAI(ai AI) { f.ai = ai }
+
+// GetActiveThreatDirections retourne les directions menacées réelles après transformation D4
+func (c *Creature) GetActiveThreatDirections() []entity.Direction {
+	transform := c.GetTransformation()
+	activeThreats := make([]entity.Direction, len(c.ThreatZone))
+
+	for i, localDir := range c.ThreatZone {
+		activeThreats[i] = entity.TransformDirection(localDir, transform)
+	}
+
+	return activeThreats
+}
+
+// IsPositionThreatened vérifie si une position cible est menacée par la créature
+func (c *Creature) IsPositionThreatened(target entity.Position) bool {
+	currentPos := c.GetPosition()
+
+	// 1. Calcule la direction relative (vecteur unitaire cardinal)
+	dx := target.X - currentPos.X
+	dy := target.Y - currentPos.Y
+
+	// On ne gère que les menaces alignées cardinalement pour le moment
+	var relDir entity.Direction
+	found := false
+
+	if dx == 0 && dy < 0 {
+		relDir = entity.DirNorth
+		found = true
+	} else if dx > 0 && dy == 0 {
+		relDir = entity.DirEast
+		found = true
+	} else if dx == 0 && dy > 0 {
+		relDir = entity.DirSouth
+		found = true
+	} else if dx < 0 && dy == 0 {
+		relDir = entity.DirWest
+		found = true
+	}
+
+	if !found {
+		return false
+	}
+
+	// 2. Vérifie si cette direction est dans les zones de menace actives
+	activeThreats := c.GetActiveThreatDirections()
+	for _, threat := range activeThreats {
+		if threat == relDir {
+			return true
+		}
+	}
+
+	return false
+}
