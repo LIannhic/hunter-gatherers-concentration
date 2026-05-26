@@ -506,25 +506,37 @@ func (c *Creature) GetActiveThreatDirections() []entity.Direction {
 func (c *Creature) IsPositionThreatened(target entity.Position) bool {
 	currentPos := c.GetPosition()
 
-	// 1. Calcule la direction relative (vecteur unitaire cardinal)
+	// 1. Calcule la direction relative (vecteur unitaire)
 	dx := target.X - currentPos.X
 	dy := target.Y - currentPos.Y
 
-	// On ne gère que les menaces alignées cardinalement pour le moment
 	var relDir entity.Direction
 	found := false
 
+	// Recherche de la direction correspondante parmi les 8 possibles
 	if dx == 0 && dy < 0 {
 		relDir = entity.DirNorth
+		found = true
+	} else if dx > 0 && dy < 0 {
+		relDir = entity.DirNorthEast
 		found = true
 	} else if dx > 0 && dy == 0 {
 		relDir = entity.DirEast
 		found = true
+	} else if dx > 0 && dy > 0 {
+		relDir = entity.DirSouthEast
+		found = true
 	} else if dx == 0 && dy > 0 {
 		relDir = entity.DirSouth
 		found = true
+	} else if dx < 0 && dy > 0 {
+		relDir = entity.DirSouthWest
+		found = true
 	} else if dx < 0 && dy == 0 {
 		relDir = entity.DirWest
+		found = true
+	} else if dx < 0 && dy < 0 {
+		relDir = entity.DirNorthWest
 		found = true
 	}
 
