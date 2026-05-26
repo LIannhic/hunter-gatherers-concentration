@@ -236,8 +236,15 @@ func (w *World) GeneratePlaytestLayout(id string) {
 	w.GridOrder = append(w.GridOrder, grid.ID)
 	w.CurrentGridID = grid.ID
 
-	// Population de test : une paire de chaque type
-	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "moss_monkey"}
+	// Population de test précise pour le debug
+	fmt.Println("[WORLD] Population de la zone de playtest (Echo Hound en 1,1)...")
+
+	// 1. Un Echo Hound isolé pour tester l'animation et l'orientation
+	_, _ = w.SpawnCreature(grid.ID, "echo_hound", entity.Position{X: 1, Y: 1})
+	_, _ = w.SpawnCreature(grid.ID, "echo_hound", entity.Position{X: 2, Y: 1}) // Sa paire
+
+	// 2. Population automatique pour le reste
+	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "moss_monkey"}
 	resources := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
 
 	fmt.Println("[WORLD] Population de la zone de playtest...")
@@ -399,7 +406,7 @@ func (w *World) FlipTile(gridID string, pos board.Position, flipDir entity.FlipD
 	applyTrans := flipDir.ToTransformation()
 
 	// aux axes de l'écran (le curseur du joueur), peu importe l'état de la tuile.
-	newTrans := entity.Compose(applyTrans, currentTrans)
+	newTrans := entity.Compose(currentTrans, applyTrans)
 	ent.SetTransformation(newTrans)
 
 	fmt.Printf("[D4] Tuile %s : %s -> %s (via clic %s)\n",

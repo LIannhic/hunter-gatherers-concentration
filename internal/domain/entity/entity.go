@@ -65,6 +65,10 @@ const (
 	DirEast
 	DirSouth
 	DirWest
+	DirNorthEast
+	DirSouthEast
+	DirSouthWest
+	DirNorthWest
 )
 
 func (d Direction) String() string {
@@ -77,6 +81,14 @@ func (d Direction) String() string {
 		return "South"
 	case DirWest:
 		return "West"
+	case DirNorthEast:
+		return "North-East"
+	case DirSouthEast:
+		return "South-East"
+	case DirSouthWest:
+		return "South-West"
+	case DirNorthWest:
+		return "North-West"
 	default:
 		return "Unknown"
 	}
@@ -90,7 +102,7 @@ func (d Direction) IsOpposite(other Direction) bool {
 		(d == DirWest && other == DirEast)
 }
 
-// ToVector convertit une direction cardinale en vecteur de position relative
+// ToVector convertit une direction en vecteur de position relative
 func (d Direction) ToVector() Position {
 	switch d {
 	case DirNorth:
@@ -101,6 +113,14 @@ func (d Direction) ToVector() Position {
 		return Position{X: 0, Y: 1}
 	case DirWest:
 		return Position{X: -1, Y: 0}
+	case DirNorthEast:
+		return Position{X: 1, Y: -1}
+	case DirSouthEast:
+		return Position{X: 1, Y: 1}
+	case DirSouthWest:
+		return Position{X: -1, Y: 1}
+	case DirNorthWest:
+		return Position{X: -1, Y: -1}
 	}
 	return Position{X: 0, Y: 0}
 }
@@ -135,20 +155,33 @@ func TransformDirection(d Direction, t Transformation) Direction {
 	}
 
 	// 3. Reconvertit le vecteur transformé en Direction
+	// Note : on gère les 8 directions cardinales et ordinales
 	if nx == 0 && ny < 0 {
 		return DirNorth
+	}
+	if nx > 0 && ny < 0 {
+		return DirNorthEast
 	}
 	if nx > 0 && ny == 0 {
 		return DirEast
 	}
+	if nx > 0 && ny > 0 {
+		return DirSouthEast
+	}
 	if nx == 0 && ny > 0 {
 		return DirSouth
+	}
+	if nx < 0 && ny > 0 {
+		return DirSouthWest
 	}
 	if nx < 0 && ny == 0 {
 		return DirWest
 	}
+	if nx < 0 && ny < 0 {
+		return DirNorthWest
+	}
 
-	return d // Fallback si non cardinal (ne devrait pas arriver avec les transformations 90°)
+	return d
 }
 
 // FlipDirection représente la direction de flip d'une tuile lors du reveal
