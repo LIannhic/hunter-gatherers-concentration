@@ -196,10 +196,15 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 	// 2. Interpolation des coins pour une échelle de 75%
 	const scale = 0.75
 	vIcon := make([]ebiten.Vertex, 4)
+	uvCoords := GetTransformationGeometry(trans)
+	w, h := float32(ui.FaceSize), float32(ui.FaceSize)
+
 	for i := 0; i < 4; i++ {
 		vIcon[i] = vFace[i]
 		vIcon[i].DstX = cx + (vFace[i].DstX-cx)*scale
 		vIcon[i].DstY = cy + (vFace[i].DstY-cy)*scale
+		vIcon[i].SrcX = uvCoords[i][0] * w
+		vIcon[i].SrcY = uvCoords[i][1] * h
 	}
 
 	var icon *ebiten.Image
@@ -223,14 +228,14 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 	}
 
 	// 3. Réglage des UV pour l'icône avec prise en compte de la transformation diédrique fournie
-	w, h := icon.Size()
-	fw, fh := float32(w), float32(h)
+	iw, ih := icon.Size()
+	fw, fh := float32(iw), float32(ih)
 
 	// On utilise la géométrie de transformation pour mapper les UV
-	uvCoords := GetTransformationGeometry(trans)
+	iconUvCoords := GetTransformationGeometry(trans)
 	for i := 0; i < 4; i++ {
-		vIcon[i].SrcX = uvCoords[i][0] * fw
-		vIcon[i].SrcY = uvCoords[i][1] * fh
+		vIcon[i].SrcX = iconUvCoords[i][0] * fw
+		vIcon[i].SrcY = iconUvCoords[i][1] * fh
 	}
 
 	// 4. Rendu de l'icône avec les triangles

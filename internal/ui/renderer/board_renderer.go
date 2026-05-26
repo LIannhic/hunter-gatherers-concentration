@@ -172,6 +172,16 @@ func (r *BoardRenderer) UpdateAnimations(world *domain.World) {
 			}
 			r.bounceStates[anim.EntityID] = &BounceState{ImpactT: 0, Dir: anim.FlipDirection}
 			delete(r.flipAnimations, key)
+
+			// Publie l'événement de fin pour débloquer l'UI
+			world.EventBus.PublishImmediate(event.Event{
+				Type:     event.AnimationEnded,
+				SourceID: anim.EntityID,
+				Payload: map[string]interface{}{
+					"grid_id":  anim.GridID,
+					"position": anim.Position,
+				},
+			})
 		}
 	}
 
@@ -284,6 +294,28 @@ func (r *BoardRenderer) GetTileSize() int {
 // GetGridOffset retourne le décalage du plateau
 func (r *BoardRenderer) GetGridOffset() (int, int) {
 	return int(r.gridOffsetX), int(r.gridOffsetY)
+}
+
+// ApplyTransformation applique une transformation D4 à une matrice GeoM d'Ebiten.
+func (r *BoardRenderer) ApplyTransformation(geom *ebiten.GeoM, t entity.Transformation) {
+	switch t {
+	case entity.TransRot90:
+		geom.Rotate(math.Pi / 2)
+	case entity.TransRot180:
+		geom.Rotate(math.Pi)
+	case entity.TransRot270:
+		geom.Rotate(3 * math.Pi / 2)
+	case entity.TransMirrorH:
+		geom.Scale(-1, 1)
+	case entity.TransMirrorV:
+		geom.Scale(1, -1)
+	case entity.TransMirrorD1: // Diagonale \
+		geom.Rotate(math.Pi / 2)
+		geom.Scale(1, -1)
+	case entity.TransMirrorD2: // Diagonale /
+		geom.Rotate(-math.Pi / 2)
+		geom.Scale(1, -1)
+	}
 }
 
 // =========================================================================
@@ -890,7 +922,15 @@ func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y float64, e ent
 	case *domain.Creature:
 		icon := r.assets.GetCreatureIcon(ent.Species)
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-r.tileSize/2, -r.tileSize/2)
+
+		// 1. Centrage de l'asset
+		w, h := icon.Bounds().Dx(), icon.Bounds().Dy()
+		op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+
+		// 2. Application de la transformation D4 (Orientation)
+		r.ApplyTransformation(&op.GeoM, ent.GetTransformation())
+
+		// 3. Mise à l'échelle et placement final
 		op.GeoM.Scale(0.75, 0.75)
 		op.GeoM.Translate(x+r.tileSize/2, y+r.tileSize/2)
 		screen.DrawImage(icon, op)

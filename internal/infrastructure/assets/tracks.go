@@ -10,6 +10,7 @@ package assets
 
 import (
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -158,7 +159,7 @@ func generateFootprintTrack(size int, p TrackPalette) *ebiten.Image {
 	return img
 }
 
-// generateIntentBeam crée le rayon d'intention d'attaque
+// generateIntentBeam crée le rayon d'intention d'attaque (demi-cercle rouge)
 func generateIntentBeam(size int, p TrackPalette) *ebiten.Image {
 	img := ebiten.NewImage(size, size)
 	// Fond transparent
@@ -166,17 +167,50 @@ func generateIntentBeam(size int, p TrackPalette) *ebiten.Image {
 
 	centerX := float32(size / 2)
 	centerY := float32(size / 2)
+	radius := float32(size / 3)
 
-	// Faisceau principal (gradient simulé par des couches)
-	vector.DrawFilledRect(img, centerX-3, 0, 6, float32(size), p.Primary, true)
-	vector.DrawFilledRect(img, centerX-2, 2, 4, float32(size-4), p.Secondary, true)
+	// Dessine un demi-cercle rouge (arc de -90° à 90°)
+	var path vector.Path
+	// On commence au sommet du demi-cercle
+	path.MoveTo(centerX, centerY-radius)
+	// On trace l'arc
+	path.Arc(centerX, centerY, radius, -math.Pi/2, math.Pi/2, vector.Clockwise)
+	// On ferme le demi-cercle par la corde verticale
+	path.Close()
 
-	// Pointe du rayon (arête)
-	vector.DrawFilledCircle(img, centerX, 2, 3, color.RGBA{255, 255, 255, 220}, true)
+	// Remplissage avec la couleur primaire (rouge)
+	vertices, indices := path.AppendVerticesAndIndicesForFilling(nil, nil)
+	for i := range vertices {
+		vertices[i].SrcX = 1
+		vertices[i].SrcY = 1
+		r, g, b, a := p.Primary.RGBA()
+		vertices[i].ColorR = float32(r) / 0xffff
+		vertices[i].ColorG = float32(g) / 0xffff
+		vertices[i].ColorB = float32(b) / 0xffff
+		vertices[i].ColorA = float32(a) / 0xffff
+	}
 
-	// Halo/aura
-	vector.DrawFilledCircle(img, centerX, centerY, float32(size/3),
-		color.RGBA{255, 100, 100, 80}, true)
+	whiteImage := ebiten.NewImage(3, 3)
+	whiteImage.Fill(color.White)
+	img.DrawTriangles(vertices, indices, whiteImage, &ebiten.DrawTrianglesOptions{})
+
+	// Ajoute une bordure plus sombre pour le relief
+	var strokePath vector.Path
+	strokePath.MoveTo(centerX, centerY-radius)
+	strokePath.Arc(centerX, centerY, radius, -math.Pi/2, math.Pi/2, vector.Clockwise)
+	strokePath.Close()
+
+	strokeVertices, strokeIndices := strokePath.AppendVerticesAndIndicesForStroke(nil, nil, &vector.StrokeOptions{Width: 2})
+	for i := range strokeVertices {
+		strokeVertices[i].SrcX = 1
+		strokeVertices[i].SrcY = 1
+		r, g, b, a := p.Shadow.RGBA()
+		strokeVertices[i].ColorR = float32(r) / 0xffff
+		strokeVertices[i].ColorG = float32(g) / 0xffff
+		strokeVertices[i].ColorB = float32(b) / 0xffff
+		strokeVertices[i].ColorA = float32(a) / 0xffff
+	}
+	img.DrawTriangles(strokeVertices, strokeIndices, whiteImage, &ebiten.DrawTrianglesOptions{})
 
 	return img
 }
