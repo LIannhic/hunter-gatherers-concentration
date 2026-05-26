@@ -67,6 +67,90 @@ const (
 	DirWest
 )
 
+func (d Direction) String() string {
+	switch d {
+	case DirNorth:
+		return "North"
+	case DirEast:
+		return "East"
+	case DirSouth:
+		return "South"
+	case DirWest:
+		return "West"
+	default:
+		return "Unknown"
+	}
+}
+
+// IsOpposite vérifie si deux directions sont strictement opposées
+func (d Direction) IsOpposite(other Direction) bool {
+	return (d == DirNorth && other == DirSouth) ||
+		(d == DirSouth && other == DirNorth) ||
+		(d == DirEast && other == DirWest) ||
+		(d == DirWest && other == DirEast)
+}
+
+// ToVector convertit une direction cardinale en vecteur de position relative
+func (d Direction) ToVector() Position {
+	switch d {
+	case DirNorth:
+		return Position{X: 0, Y: -1}
+	case DirEast:
+		return Position{X: 1, Y: 0}
+	case DirSouth:
+		return Position{X: 0, Y: 1}
+	case DirWest:
+		return Position{X: -1, Y: 0}
+	}
+	return Position{X: 0, Y: 0}
+}
+
+// TransformDirection applique une transformation D4 à une direction cardinale
+func TransformDirection(d Direction, t Transformation) Direction {
+	// 1. Convertit Direction en vecteur local
+	v := d.ToVector()
+
+	// 2. Applique la transformation D4 au vecteur
+	// (x, y) après transformation
+	var nx, ny int
+	switch t {
+	case TransIdentity: // (x, y)
+		nx, ny = v.X, v.Y
+	case TransRot90: // (-y, x)
+		nx, ny = -v.Y, v.X
+	case TransRot180: // (-x, -y)
+		nx, ny = -v.X, -v.Y
+	case TransRot270: // (y, -x)
+		nx, ny = v.Y, -v.X
+	case TransMirrorH: // (-x, y) - Médiane verticale
+		nx, ny = -v.X, v.Y
+	case TransMirrorV: // (x, -y) - Médiane horizontale
+		nx, ny = v.X, -v.Y
+	case TransMirrorD1: // (y, x) - Diagonale \
+		nx, ny = v.Y, v.X
+	case TransMirrorD2: // (-y, -x) - Diagonale /
+		nx, ny = -v.Y, -v.X
+	default:
+		nx, ny = v.X, v.Y
+	}
+
+	// 3. Reconvertit le vecteur transformé en Direction
+	if nx == 0 && ny < 0 {
+		return DirNorth
+	}
+	if nx > 0 && ny == 0 {
+		return DirEast
+	}
+	if nx == 0 && ny > 0 {
+		return DirSouth
+	}
+	if nx < 0 && ny == 0 {
+		return DirWest
+	}
+
+	return d // Fallback si non cardinal (ne devrait pas arriver avec les transformations 90°)
+}
+
 // FlipDirection représente la direction de flip d'une tuile lors du reveal
 // Cette information est purement visuelle et n'impacte pas la logique métier
 type FlipDirection int

@@ -69,6 +69,29 @@ const (
 	BorderTopLeft
 )
 
+func (b BorderPosition) String() string {
+	switch b {
+	case BorderTop:
+		return "Top"
+	case BorderTopRight:
+		return "TopRight"
+	case BorderRight:
+		return "Right"
+	case BorderBottomRight:
+		return "BottomRight"
+	case BorderBottom:
+		return "Bottom"
+	case BorderBottomLeft:
+		return "BottomLeft"
+	case BorderLeft:
+		return "Left"
+	case BorderTopLeft:
+		return "TopLeft"
+	default:
+		return "Unknown"
+	}
+}
+
 // Skills regroupe les capacités passives et les bonus débloqués.
 type Skills struct {
 	UnlockedAssociations []string       // Types d'associations autorisées
@@ -397,12 +420,83 @@ func (p *Player) LevelUp() {
 	p.Stats.Mana = p.Stats.MaxMana
 }
 
+// GetFlipDirection retourne la direction de bascule d'une tuile basée sur l'ancrage du joueur.
+func (b BorderPosition) GetFlipDirection() entity.FlipDirection {
+	switch b {
+	case BorderTop:
+		return entity.FlipTop
+	case BorderBottom:
+		return entity.FlipBottom
+	case BorderLeft:
+		return entity.FlipLeft
+	case BorderRight:
+		return entity.FlipRight
+	case BorderTopLeft:
+		return entity.FlipTopLeft
+	case BorderTopRight:
+		return entity.FlipTopRight
+	case BorderBottomLeft:
+		return entity.FlipBottomLeft
+	case BorderBottomRight:
+		return entity.FlipBottomRight
+	default:
+		return entity.FlipCenter
+	}
+}
+
+// GetInwardDirection convertit l'ancre du joueur en direction cardinale vers l'intérieur du plateau.
+func (b BorderPosition) GetInwardDirection() entity.Direction {
+	switch b {
+	case BorderTop:
+		return entity.DirSouth
+	case BorderBottom:
+		return entity.DirNorth
+	case BorderLeft:
+		return entity.DirEast
+	case BorderRight:
+		return entity.DirWest
+	default:
+		return entity.DirNorth
+	}
+}
+
+// IsLookingAt vérifie si le joueur regarde vers une position donnée.
+func (p *Player) IsLookingAt(target entity.Position) bool {
+	dir := p.anchor.GetInwardDirection()
+	playerPos := p.Position
+
+	dx := target.X - playerPos.X
+	dy := target.Y - playerPos.Y
+
+	switch dir {
+	case entity.DirNorth:
+		return dy < 0
+	case entity.DirSouth:
+		return dy > 0
+	case entity.DirEast:
+		return dx > 0
+	case entity.DirWest:
+		return dx < 0
+	}
+	return false
+}
+
 // UnlockAssociation débloque une nouvelle règle d'association si pas déjà connue.
 func (p *Player) UnlockAssociation(assocType string) {
 	if p.CanAssociate(assocType) {
 		return
 	}
 	p.Skills.UnlockedAssociations = append(p.Skills.UnlockedAssociations, assocType)
+}
+
+// GetAnchor retourne l'ancrage actuel du joueur.
+func (p *Player) GetAnchor() BorderPosition {
+	return p.anchor
+}
+
+// SetAnchor définit l'ancrage du joueur.
+func (p *Player) SetAnchor(anchor BorderPosition) {
+	p.anchor = anchor
 }
 
 // CanAssociate vérifie si un type d'association est débloqué.
