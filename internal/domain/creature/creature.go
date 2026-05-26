@@ -307,7 +307,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic:         AcousticSilent, // Pas de bruit
 				TelegraphsIntent: true,           // ajoute des traces de griffures sur les tuiles autour de lui
 			},
-			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 2},
+			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
 			Orientation: Orientation{Direction: DirNorth},
 			Collision:   CollisionHandler{Type: CollideBounce},
 		})
@@ -347,7 +347,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic:      AcousticSilent,
 				LeavesTracks:  true,
 				TrackType:     "mud",
-				TrackDuration: 2,
+				TrackDuration: 3,
 			},
 			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
 			Orientation: Orientation{Direction: DirNorth},

@@ -154,6 +154,12 @@ func NewApplication() (*Application, error) {
 			// 			_ = app.World.Player.Inventory.AddItem(loot)
 			_ = app.World.Player.Inventory.AddItem(player.NewDreamberryItem())
 			_ = app.World.Player.Inventory.AddItem(player.NewEchoHoundItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewMoonstoneItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewWhisperingHerbItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewCrystalShardItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewSpecterItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewBurrowerItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
 		}
 	}
 
@@ -1087,13 +1093,6 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), color.RGBA{40, 40, 40, 255}, true)
 	vector.StrokeRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
 	text.Draw(screen, "MENU", basicfont.Face7x13, bx2+60, by+25, color.White)
-}
-
-// drawVictory dessine l'écran de victoire de la version 0.2
-func (app *Application) drawVictory(screen *ebiten.Image) {
-	screen.Fill(color.Black)
-	text.Draw(screen, "Victory", basicfont.Face7x13, 350, 300, color.White)
-	text.Draw(screen, "Chemin vers l'enveloppe corporel introuvable. Appuyez sur Echap pour recommencer.", basicfont.Face7x13, 200, 350, color.Gray{180})
 }
 
 // findEmptyPosition trouve une position vide aléatoire sur le grid

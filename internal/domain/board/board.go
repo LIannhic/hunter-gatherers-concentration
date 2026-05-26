@@ -303,6 +303,7 @@ type Grid struct {
 	ExitsState            map[Direction][2]entity.TileState
 	ExitsTransform        map[Direction][2]entity.Transformation
 	NavigationForcedOpen  bool
+	MatchedTargetsCount   int
 }
 
 // NewGrid instancie et configure les logiques de pentes selon le biome choisi

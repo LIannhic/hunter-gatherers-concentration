@@ -114,48 +114,37 @@ func (w *World) CreateGrid(id string, width, height int, biome board.BiomeType) 
 	return grid
 }
 
-// GetCompletionRatio calcule le pourcentage de paires trouvées sur une grille
-func (w *World) GetCompletionRatio(gridID string) float64 {
-	grid, ok := w.GetGrid(gridID)
-	if !ok || grid.InitialMatchableCount == 0 {
-		return 1.0 // Toujours ouvert si pas de contenu matchable
-	}
-
-	// Compte les entités matchables restantes
-	currentMatchable := 0
-	for _, e := range w.Entities.GetAllActive() {
-		// On compte ressources, créatures et pièges comme éléments à appairer
-		if e.GetGridID() == gridID && (e.GetType() == entity.TypeResource ||
-			e.GetType() == entity.TypeCreature) {
-			currentMatchable++
-		}
-	}
-
-	matched := grid.InitialMatchableCount - currentMatchable
-	if matched < 0 {
-		matched = 0
-	}
-	return float64(matched) / float64(grid.InitialMatchableCount)
-}
-
-// IsNavigationOpen vérifie si le seuil de complétion permet de quitter la zone
 func (w *World) IsNavigationOpen(gridID string) bool {
 	grid, ok := w.GetGrid(gridID)
 	if !ok {
 		return false
 	}
 
-	// Cheat flag
 	if grid.NavigationForcedOpen {
 		return true
 	}
-
-	// V0.2: Les zones de portail (Départ/Arrivée) sont toujours ouvertes à la navigation
 	if w.DreamPlane != nil && (gridID == w.DreamPlane.StartZoneID || gridID == w.DreamPlane.EndZoneID) {
 		return true
 	}
 
-	ratio := w.GetCompletionRatio(gridID)
+	activeEntities := w.Entities.GetAllActive()
+
+	remaining := 0
+	for _, ent := range activeEntities {
+		if ent.GetGridID() != gridID {
+			continue
+		}
+		if ent.GetType() == entity.TypeCreature || ent.GetType() == entity.TypeResource {
+			remaining++
+		}
+	}
+
+	total := remaining + grid.MatchedTargetsCount
+	if total == 0 {
+		return true
+	}
+
+	ratio := float64(grid.MatchedTargetsCount) / float64(total)
 	return ratio >= w.Difficulty.NavThreshold
 }
 

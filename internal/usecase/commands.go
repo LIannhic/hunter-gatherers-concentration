@@ -224,6 +224,13 @@ func (c *MatchTilesCommand) Execute() error {
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
 
+		// Si ce sont des ressources ou créatures, on incrémente le compteur de paires trouvées pour ouvrir les sorties
+		if entity1.GetType() == entity.TypeCreature || entity1.GetType() == entity.TypeResource {
+			if grid, ok := c.World.GetGrid(c.GridID); ok {
+				grid.MatchedTargetsCount += 2
+			}
+		}
+
 		// On récupère le nom pour le loot AVANT la suppression
 		name := "unknown"
 		if r, ok := entity1.(*domain.Resource); ok {
