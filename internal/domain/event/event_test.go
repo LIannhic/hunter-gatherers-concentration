@@ -3,7 +3,6 @@ package event
 import (
 	"testing"
 
-	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
@@ -166,7 +165,7 @@ func TestNewCreatureMovedEvent(t *testing.T) {
 	from := entity.Position{X: 0, Y: 0}
 	to := entity.Position{X: 1, Y: 1}
 
-	e := NewCreatureMovedEvent("creature1", from, to)
+	e := NewCreatureMovedEvent("creature1", from, to, "manifest", false, false)
 
 	if e.Type != CreatureMoved {
 		t.Error("Wrong event type")
@@ -219,7 +218,7 @@ func TestNewAssociationMadeEvent(t *testing.T) {
 
 func TestNewTileRevealedEvent(t *testing.T) {
 	pos := entity.Position{X: 2, Y: 3}
-	flipDir := board.FlipCenter
+	flipDir := entity.FlipCenter
 	e := NewEntityRevealedEvent(pos, "entity1", "test_grid", flipDir)
 
 	if e.Type != TileRevealed {

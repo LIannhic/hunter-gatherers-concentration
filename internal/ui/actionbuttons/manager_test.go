@@ -13,6 +13,8 @@ func TestNewManager(t *testing.T) {
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0 },
 		func() bool { return false },
+		func() float64 { return 0 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 	if len(states) != 4 {
@@ -24,6 +26,8 @@ func TestButtonActivationAtRest(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
 		func() *player.Player { return player.New("test") },
+		func() float64 { return 0 },
+		func() bool { return false },
 		func() float64 { return 0 },
 		func() bool { return false },
 	)
@@ -51,6 +55,8 @@ func TestButtonActivationWhenTwoTilesRevealed(t *testing.T) {
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0.5 },
 		func() bool { return false },
+		func() float64 { return 0 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -66,6 +72,8 @@ func TestBaseCoordinates(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
 		func() *player.Player { return player.New("test") },
+		func() float64 { return 0 },
+		func() bool { return false },
 		func() float64 { return 0 },
 		func() bool { return false },
 	)
@@ -95,6 +103,8 @@ func TestImpairmentScrambling(t *testing.T) {
 		func() *player.Player { return p },
 		func() float64 { return 0 },
 		func() bool { return false },
+		func() float64 { return 0 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -116,6 +126,8 @@ func TestHitTest(t *testing.T) {
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0.3 },
 		func() bool { return false },
+		func() float64 { return 0 },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -131,5 +143,89 @@ func TestHitTest(t *testing.T) {
 	_, ok = m.HitTest(0, 0, states)
 	if ok {
 		t.Error("HitTest should not detect anything at (0,0)")
+	}
+}
+
+func TestVictoryEndTurn(t *testing.T) {
+	m := NewManager(
+		func() int { return 0 },
+		func() *player.Player { return player.New("test") },
+		func() float64 { return 0 },
+		func() bool { return false },
+		func() float64 { return 0.7 },
+		func() bool { return true },
+	)
+	states := m.ComputeStates()
+	if states[BtnEndTurn].Label != "END GAME" {
+		t.Errorf("Expected EndTurn label to be END GAME, got %s", states[BtnEndTurn].Label)
+	}
+	if states[BtnEndTurn].FillProgress != 0.7 {
+		t.Errorf("Expected EndTurn FillProgress 0.7, got %v", states[BtnEndTurn].FillProgress)
+	}
+	if !states[BtnEndTurn].FillAlert {
+		t.Error("Expected EndTurn FillAlert to be true when victory is active")
+	}
+}
+
+func TestTimerPanicSetsSkipAlert(t *testing.T) {
+	m := NewManager(
+		func() int { return 2 },
+		func() *player.Player { return player.New("test") },
+		func() float64 { return 0.2 },
+		func() bool { return true },
+		func() float64 { return 0 },
+		func() bool { return false },
+	)
+	states := m.ComputeStates()
+	if !states[BtnSkip].FillAlert {
+		t.Error("Expected Skip FillAlert to be true when timer panic is active")
+	}
+}
+
+func TestAgnosiaSetsAllScrambled(t *testing.T) {
+	p := player.New("test")
+	p.StatusEffects.AddImpairment(player.ImpairmentAgnosia)
+
+	m := NewManager(
+		func() int { return 2 },
+		func() *player.Player { return p },
+		func() float64 { return 0 },
+		func() bool { return false },
+		func() float64 { return 0 },
+		func() bool { return false },
+	)
+	states := m.ComputeStates()
+	for i := 0; i < 4; i++ {
+		if !states[i].Scrambled {
+			t.Errorf("Expected button %d to be scrambled under Agnosia", i)
+		}
+	}
+}
+
+func TestAphasiaAltersLabels(t *testing.T) {
+	p := player.New("test")
+	p.StatusEffects.AddImpairment(player.ImpairmentAphasia)
+
+	m := NewManager(
+		func() int { return 0 },
+		func() *player.Player { return p },
+		func() float64 { return 0 },
+		func() bool { return false },
+		func() float64 { return 0 },
+		func() bool { return false },
+	)
+	states := m.ComputeStates()
+
+	// Ensure at least one label differs from the base label at the same index
+	diff := false
+	base := [4]string{"MATCH", "SKIP", "TURN", "MENU"}
+	for i := 0; i < 4; i++ {
+		if states[i].Label != base[i] {
+			diff = true
+			break
+		}
+	}
+	if !diff {
+		t.Error("Expected at least one label to be altered under Aphasia")
 	}
 }

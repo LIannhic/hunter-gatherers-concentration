@@ -167,7 +167,7 @@ func TestOrientationRelativeDirections(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		vec := o.GetRelativeDirection(tc.rel)
+		vec := GetRelativeDirection(&o, tc.rel)
 		if vec != tc.expected {
 			t.Errorf("%s from North: expected %v, got %v", tc.rel, tc.expected, vec)
 		}
@@ -202,7 +202,7 @@ func TestMovementFrequencyDelay(t *testing.T) {
 	// Avec un delay de 2, le compteur doit atteindre 2 pour déclencher
 	// Tour 0: compteur=1, pas de mouvement
 	// Tour 1: compteur=2, mouvement et reset
-	
+
 	// Premier appel: compteur passe à 1, pas de mouvement
 	if freq.CanMove() {
 		t.Error("First turn should not allow move (counter=1)")
@@ -216,6 +216,24 @@ func TestMovementFrequencyDelay(t *testing.T) {
 	// Après reset, le compteur est à 0, donc pas de mouvement
 	if freq.CanMove() {
 		t.Error("After reset, should not allow move immediately")
+	}
+}
+
+func TestMovementFrequencyTracksLastMoveTurn(t *testing.T) {
+	freq := MovementFrequency{Type: FreqVelocity, Velocity: 1}
+
+	if freq.HasMovedThisTurn(1) {
+		t.Error("Expected no move recorded for turn 1")
+	}
+
+	freq.MarkMoved(1)
+
+	if !freq.HasMovedThisTurn(1) {
+		t.Error("Expected move recorded for turn 1")
+	}
+
+	if freq.HasMovedThisTurn(2) {
+		t.Error("Expected move not recorded for turn 2")
 	}
 }
 
@@ -261,8 +279,8 @@ func TestDefaultMovementProfile(t *testing.T) {
 		t.Errorf("Default navigation should be Wander, got %s", profile.Navigation.Type)
 	}
 
-	if profile.Mode.Type != ModeBento {
-		t.Errorf("Default mode should be Bento, got %s", profile.Mode.Type)
+	if profile.Mode.Type != ModeNormal {
+		t.Errorf("Default mode should be Normal, got %s", profile.Mode.Type)
 	}
 
 	if profile.Collision.Type != CollideStop {
@@ -278,26 +296,6 @@ func TestPassiveProfile(t *testing.T) {
 	}
 }
 
-func TestHunterProfile(t *testing.T) {
-	profile := HunterProfile()
-
-	if profile.Navigation.Type != NavAttraction {
-		t.Errorf("Hunter navigation should be Attraction, got %s", profile.Navigation.Type)
-	}
-
-	if profile.Navigation.Target != TargetPlayer {
-		t.Errorf("Hunter target should be Player, got %s", profile.Navigation.Target)
-	}
-
-	if profile.Mode.Type != ModeBento {
-		t.Errorf("Hunter mode should be Bento, got %s", profile.Mode.Type)
-	}
-
-	if profile.Frequency.Velocity != 2 {
-		t.Errorf("Hunter velocity should be 2, got %d", profile.Frequency.Velocity)
-	}
-}
-
 func TestFleeingProfile(t *testing.T) {
 	profile := FleeingProfile()
 
@@ -305,8 +303,8 @@ func TestFleeingProfile(t *testing.T) {
 		t.Errorf("Fleeing navigation should be Repulsion, got %s", profile.Navigation.Type)
 	}
 
-	if profile.Mode.Type != ModeShadow {
-		t.Errorf("Fleeing mode should be Shadow, got %s", profile.Mode.Type)
+	if profile.Mode.Type != ModeNormal {
+		t.Errorf("Fleeing mode should be Normal, got %s", profile.Mode.Type)
 	}
 }
 
@@ -317,8 +315,8 @@ func TestSpecterProfile(t *testing.T) {
 		t.Errorf("Specter trigger should be OnEcho, got %s", profile.Trigger.Type)
 	}
 
-	if profile.Mode.Type != ModeShadow {
-		t.Errorf("Specter mode should be Shadow, got %s", profile.Mode.Type)
+	if profile.Mode.Type != ModeUnder {
+		t.Errorf("Specter mode should be Under, got %s", profile.Mode.Type)
 	}
 
 	if profile.Collision.Type != CollidePhase {
@@ -359,9 +357,9 @@ func TestCreatureWithMovementProfile(t *testing.T) {
 		expectedTrigger TriggerType
 		expectedMode    MoveMode
 	}{
-		{"specter", TriggerOnEcho, ModeShadow},
-		{"echo_hound", TriggerOnEcho, ModeBento},
-		{"fleeing_sprite", TriggerProximity, ModeShadow},
+		{"specter", TriggerOnEcho, ModeUnder},
+		{"echo_hound", TriggerOnEcho, ModeNormal},
+		{"fleeing_sprite", TriggerProximity, ModeNormal},
 	}
 
 	for _, tc := range tests {

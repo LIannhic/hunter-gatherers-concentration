@@ -6,8 +6,10 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/creature"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 )
 
 // DefaultFlipDirection est la direction par défaut si non spécifiée
@@ -49,7 +51,18 @@ func (c *RevealTileCommand) CanExecute() bool {
 
 	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 	ent, ok := c.World.Entities.Get(entity.ID(topID))
-	if !ok || ent.GetState()&entity.Hidden == 0 {
+	if !ok {
+		return false
+	}
+
+	state := ent.GetState()
+	// Si c'est un piège révélé, on peut toujours le recacher (flip inverse)
+	if ent.GetType() == entity.TypeTrap && state&entity.Revealed != 0 {
+		return state&entity.Matched == 0
+	}
+
+	// Sinon (caché), ne peut pas révéler une tuile déjà révélée ou appairée
+	if state&entity.Revealed != 0 || state&entity.Matched != 0 {
 		return false
 	}
 
@@ -63,19 +76,67 @@ func (c *RevealTileCommand) CanExecute() bool {
 
 func (c *RevealTileCommand) Execute() error {
 	if c.World.CurrentGridID != c.GridID {
-		fmt.Println("Player is not on this grid")
-		fmt.Printf("Player on %s but tried %s\n", c.World.CurrentGridID, c.GridID)
-		return errors.New("player is not on this grid")
+		fmt.Println("Le joueur n'est pas sur cette grille")
+		fmt.Printf("Joueur sur %s mais a tenté %s\n", c.World.CurrentGridID, c.GridID)
+		return errors.New("le joueur n'est pas sur cette grille")
 	}
 
 	if !c.CanExecute() {
-		return errors.New("cannot reveal this tile")
+		return errors.New("impossible de révéler cette tuile")
+	}
+
+	// Calcule la position réelle du joueur en périphérie de la tuile et son ancrage
+	offset, border := flipToPlayerState(c.FlipDirection)
+	playerPos := entity.Position{
+		X: c.Position.X + offset.X,
+		Y: c.Position.Y + offset.Y,
+	}
+
+	// Met à jour l'état du joueur
+	c.World.Player.SetAnchor(border)
+	c.World.SetPlayerPosition(playerPos)
+
+	// Déplace les shadowstalkers d'une case vers le joueur (comportement pré-révélation)
+	if c.World != nil {
+		c.World.MoveSpeciesOneStepTowards("shadowstalker", c.World.GetPlayerPosition())
 	}
 
 	// Révèle l'entité via le world
-	ent, err := c.World.RevealTile(c.GridID, c.Position)
+	ent, err := c.World.RevealTile(c.GridID, c.Position, c.FlipDirection)
 	if err != nil {
 		return err
+	}
+
+	// --- NOUVEAU : Logique de Confrontation (Zone de Menace) ---
+	if cre, ok := ent.(*creature.Creature); ok {
+		isThreatened := cre.IsPositionThreatened(playerPos)
+
+		fmt.Printf("[DEBUG] Reveal Créature: %s en %v (Transformation: %s)\n", cre.Species, cre.GetPosition(), cre.GetTransformation().String())
+		fmt.Printf("[DEBUG] Joueur en %v (Ancre: %v) | Menacé ? %v\n", playerPos, border, isThreatened)
+
+		activeThreats := cre.GetActiveThreatDirections()
+		fmt.Printf("[DEBUG] Zones de menace actives: %v\n", activeThreats)
+
+		if isThreatened {
+			fmt.Printf("[COMBAT] Confrontation ! La créature %s attaque le joueur en %v\n", cre.Species, playerPos)
+			c.World.Player.TakeDamage(10, "physical")
+
+			// Feedback visuel de l'attaque (demi-cercle rouge)
+			track := entity.NewTrack("intent_beam", 2, entity.Position{X: c.Position.X, Y: c.Position.Y}, playerPos)
+			track.SetGridID(c.GridID)
+			c.World.Entities.Register(track)
+
+			// Publie un événement de dégâts pour l'UI
+			c.World.EventBus.Publish(event.Event{
+				Type:     event.PlayerDamaged,
+				SourceID: string(cre.GetID()),
+				Payload: map[string]interface{}{
+					"damage": 10,
+					"type":   "physical",
+					"reason": "confrontation",
+				},
+			})
+		}
 	}
 
 	// Track this flipped tile for the current turn
@@ -148,7 +209,7 @@ func (c *MatchTilesCommand) CanExecute() bool {
 
 func (c *MatchTilesCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("cannot match these tiles")
+		return errors.New("impossible d'appairer ces tuiles")
 	}
 
 	// Consomme 1 point de mana par tentative
@@ -192,10 +253,26 @@ func (c *MatchTilesCommand) Execute() error {
 		}
 	}
 
+	// Cas 3 : Deux pièges - ils s'annulent
+	if !isMatch && entity1.GetType() == entity.TypeTrap && entity2.GetType() == entity.TypeTrap {
+		isMatch = true
+		matchType = "trap_neutralization"
+	}
+
 	if isMatch {
 		// Succès : les entités sont marquées comme appairées
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
+
+		// --- NOUVEAU : Logique de Match Valide (0 dégât) ---
+		// (Déjà implicite car on ne fait rien ici, mais on pourrait loguer)
+
+		// Si ce sont des ressources ou créatures, on incrémente le compteur de paires trouvées pour ouvrir les sorties
+		if entity1.GetType() == entity.TypeCreature || entity1.GetType() == entity.TypeResource {
+			if grid, ok := c.World.GetGrid(c.GridID); ok {
+				grid.MatchedTargetsCount += 2
+			}
+		}
 
 		// On récupère le nom pour le loot AVANT la suppression
 		name := "unknown"
@@ -230,17 +307,45 @@ func (c *MatchTilesCommand) Execute() error {
 
 		return nil
 	} else {
-		// Échec : Appliquer les pénalités de santé si des créatures sont impliquées
+		// Échec : Association invalide
+		// --- NOUVEAU : Logique de Match Invalide (Dégâts par créature) ---
+		creatureCount := 0
 		if isCre1 {
-			c.World.Player.TakeDamage(1, "creature_fail")
+			creatureCount++
 		}
 		if isCre2 {
-			c.World.Player.TakeDamage(1, "creature_fail")
+			creatureCount++
 		}
 
-		// Recacher les entités
-		entity1.SetState(entity.Hidden)
-		entity2.SetState(entity.Hidden)
+		if creatureCount > 0 {
+			damage := creatureCount * 10
+			fmt.Printf("[COMBAT] Match invalide avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
+			c.World.Player.TakeDamage(damage, "creature_fail")
+
+			c.World.EventBus.Publish(event.Event{
+				Type:     event.PlayerDamaged,
+				SourceID: "system",
+				Payload: map[string]interface{}{
+					"damage": damage,
+					"type":   "creature_fail",
+					"reason": "invalid_match",
+				},
+			})
+		}
+
+		// Recacher les entités avec animation basée sur la pente (Slope)
+		grid, _ := c.World.GetGrid(c.GridID)
+		plot1, _ := grid.Get(c.Pos1)
+		plot2, _ := grid.Get(c.Pos2)
+
+		_, _ = c.World.FlipTile(c.GridID, c.Pos1, plot1.Tilt.ToFlipDirection())
+		_, _ = c.World.FlipTile(c.GridID, c.Pos2, plot2.Tilt.ToFlipDirection())
+
+		// Publie les événements pour le renderer (Immediate pour éviter les délais)
+		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(c.Pos1), string(entity1.GetID()), c.GridID, plot1.Tilt.ToFlipDirection()))
+		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(c.Pos2), string(entity2.GetID()), c.GridID, plot2.Tilt.ToFlipDirection()))
 
 		if c.OnFailure != nil {
 			c.OnFailure()
@@ -248,6 +353,55 @@ func (c *MatchTilesCommand) Execute() error {
 
 		return errors.New("association échouée")
 	}
+}
+
+type DiscardTrapCommand struct {
+	World     *domain.World
+	GridID    string
+	Position  board.Position
+	OnSuccess func()
+}
+
+func (c *DiscardTrapCommand) CanExecute() bool {
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
+		return false
+	}
+	plot, err := grid.Get(c.Position)
+	if err != nil || len(plot.EntitiesID) == 0 {
+		return false
+	}
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	ent, ok := c.World.Entities.Get(entity.ID(topID))
+	if !ok {
+		return false
+	}
+	// On ne peut défausser qu'un piège révélé
+	return ent.GetType() == entity.TypeTrap && ent.GetState()&entity.Revealed != 0
+}
+
+func (c *DiscardTrapCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("impossible de défausser ce piège")
+	}
+
+	// Consomme 1 point de mana (compte comme un tour/match)
+	c.World.Player.ConsumeMana(1)
+
+	grid, _ := c.World.GetGrid(c.GridID)
+	plot, _ := grid.Get(c.Position)
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+
+	// Supprime l'entité du monde (défausse)
+	c.World.RemoveEntity(entity.ID(topID))
+
+	// Note: On pourrait émettre un événement spécifique si besoin
+
+	if c.OnSuccess != nil {
+		c.OnSuccess()
+	}
+
+	return nil
 }
 
 type EndTurnCommand struct {
@@ -314,7 +468,7 @@ func (c *ClearBoardCommand) CanExecute() bool {
 func (c *ClearBoardCommand) Execute() error {
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
-		return errors.New("grid not found")
+		return errors.New("grille non trouvée")
 	}
 
 	// Supprime toutes les entités de ce grid
@@ -347,7 +501,7 @@ func (c *UsePortablePortalCommand) CanExecute() bool {
 
 func (c *UsePortablePortalCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("cannot deploy portable portal")
+		return errors.New("impossible de déployer le portail portable")
 	}
 
 	if c.Center.X < 0 || c.Center.Y < 0 {
@@ -360,111 +514,242 @@ func (c *UsePortablePortalCommand) Execute() error {
 }
 
 type UseScannerItemCommand struct {
-    World     *domain.World
-    GridID    string
-    ItemIndex int // L'index de l'objet dans la liste d'inventaire du joueur
+	World     *domain.World
+	GridID    string
+	ItemIndex int // L'index de l'objet dans la liste d'inventaire du joueur
 }
 
 func (c *UseScannerItemCommand) CanExecute() bool {
-    if c.World == nil || c.World.Player == nil {
-       return false
-    }
+	if c.World == nil || c.World.Player == nil {
+		return false
+	}
 
-    // 1. Vérifie si l'index est valide dans l'inventaire
-    inv := &c.World.Player.Inventory
-    if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
-       return false
-    }
+	// 1. Vérifie si l'index est valide dans l'inventaire
+	inv := &c.World.Player.Inventory
+	if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
+		return false
+	}
 
-    // 2. Récupère l'objet sans le supprimer pour vérification
-    item, err := inv.GetItem(c.ItemIndex)
-    if err != nil {
-       return false
-    }
+	// 2. Récupère l'objet sans le supprimer pour vérification
+	item, err := inv.GetItem(c.ItemIndex)
+	if err != nil {
+		return false
+	}
 
-    if item.Name != "echo_hound" || !item.IsUsable {
-       return false
-    }
+	if item.Name != "echo_hound" || !item.IsUsable {
+		return false
+	}
 
-    return true
+	return true
 }
 
 func (c *UseScannerItemCommand) Execute() error {
-    if !c.CanExecute() {
-       return errors.New("impossible d'utiliser le scanner (item invalide ou inutilisable)")
-    }
+	if !c.CanExecute() {
+		return errors.New("impossible d'utiliser le scanner (item invalide ou inutilisable)")
+	}
 
-    // 4. 🛠️ AJUSTEMENT : Utilise c.GridID s'il est fourni, sinon replie-toi sur c.World.CurrentGridID
-    targetGrid := c.GridID
-    if targetGrid == "" {
-        targetGrid = c.World.CurrentGridID
-    }
+	// 4. 🛠️ AJUSTEMENT : Utilise c.GridID s'il est fourni, sinon replie-toi sur c.World.CurrentGridID
+	targetGrid := c.GridID
+	if targetGrid == "" {
+		targetGrid = c.World.CurrentGridID
+	}
 
-    // Déclenche l'effet de scan dans le monde
-    err := c.World.TriggerScannerEffect(targetGrid)
-    if err != nil {
-       return fmt.Errorf("échec de l'effet de scan : %w", err)
-    }
+	// Déclenche l'effet de scan dans le monde
+	err := c.World.TriggerScannerEffect(targetGrid)
+	if err != nil {
+		return fmt.Errorf("échec de l'effet de scan : %w", err)
+	}
 
-    // Si le scan a fonctionné, on consomme l'objet en le retirant de l'inventaire
-    inv := &c.World.Player.Inventory
-    err = inv.RemoveItem(c.ItemIndex)
-    if err != nil {
-       return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
-    }
+	// Si le scan a fonctionné, on consomme l'objet en le retirant de l'inventaire
+	inv := &c.World.Player.Inventory
+	err = inv.RemoveItem(c.ItemIndex)
+	if err != nil {
+		return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
+	}
 
-    fmt.Printf("[ITEM] Le joueur a utilisé le cri de l'Echo Hound depuis l'emplacement %d\n", c.ItemIndex)
+	fmt.Printf("[ITEM] Le joueur a utilisé le cri de l'Echo Hound depuis l'emplacement %d\\n", c.ItemIndex)
 
-    return nil
+	return nil
+}
+
+type UseLootItemCommand struct {
+	World     *domain.World
+	ItemIndex int // L'index de l'objet dans l'inventaire
+}
+
+func (c *UseLootItemCommand) CanExecute() bool {
+	if c.World == nil || c.World.Player == nil {
+		return false
+	}
+
+	inv := &c.World.Player.Inventory
+	if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
+		return false
+	}
+
+	item, err := inv.GetItem(c.ItemIndex)
+	if err != nil {
+		return false
+	}
+
+	if !item.IsUsable {
+		return false
+	}
+
+	switch item.Name {
+	case player.DreamberryItemName,
+		player.MoonstoneItemName,
+		player.CrystalShardItemName,
+		player.WhisperingHerbItemName,
+		player.SpecterItemName,
+		player.BurrowerItemName:
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *UseLootItemCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("impossible d'utiliser cet objet de butin")
+	}
+
+	inv := &c.World.Player.Inventory
+	item, err := inv.GetItem(c.ItemIndex)
+	if err != nil {
+		return err
+	}
+
+	var message string
+
+	switch item.Name {
+	case player.DreamberryItemName:
+		const healthRestoration = 5
+		c.World.Player.Heal(healthRestoration)
+		message = fmt.Sprintf("Dreamberry consommée : +%d santé.", healthRestoration)
+
+	case player.MoonstoneItemName:
+		const sanityRestoration = 5
+		c.World.Player.RestoreSanity(sanityRestoration)
+		message = fmt.Sprintf("Moonstone consommée : +%d sanité.", sanityRestoration)
+
+	case player.CrystalShardItemName:
+		const manaRestoration = 5
+		c.World.Player.RestoreMana(manaRestoration)
+		message = fmt.Sprintf("Crystal Shard consommée : +%d mana.", manaRestoration)
+
+	case player.WhisperingHerbItemName:
+		message = "Une herbe chuchotante murmure un secret apaisant..."
+
+	case player.SpecterItemName:
+		gridID := c.World.CurrentGridID
+		creatures := c.World.Entities.GetByType(entity.TypeCreature)
+		removed := 0
+		for _, e := range creatures {
+			if e.GetGridID() != gridID {
+				continue
+			}
+			c.World.RemoveEntity(e.GetID())
+			removed++
+			if removed >= 2 {
+				break
+			}
+		}
+		if removed < 2 {
+			return errors.New("spectre inutilisable : moins de deux créatures disponibles")
+		}
+		message = "Spectre utilisé : une paire de créatures a disparu du plateau."
+
+	case player.BurrowerItemName:
+		gridID := c.World.CurrentGridID
+		creatures := c.World.Entities.GetByType(entity.TypeCreature)
+		marked := false
+		for _, e := range creatures {
+			if e.GetGridID() != gridID {
+				continue
+			}
+			creatureEnt, ok := e.(*creature.Creature)
+			if !ok {
+				continue
+			}
+			if creatureEnt.MovementProfile == nil {
+				continue
+			}
+			creatureEnt.MovementProfile.Perception.LeavesTracks = true
+			creatureEnt.MovementProfile.Perception.TrackType = "mud"
+			creatureEnt.MovementProfile.Perception.TrackDuration = 3
+			marked = true
+			break
+		}
+		if !marked {
+			return errors.New("burrower inutilisable : aucune créature sur la grille")
+		}
+		message = "Burrower activé : une créature laissera bientôt des traces de boue."
+
+	default:
+		return errors.New("objet de butin non pris en charge")
+	}
+
+	err = inv.RemoveItem(c.ItemIndex)
+	if err != nil {
+		return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
+	}
+
+	if message != "" {
+		c.World.EventBus.PublishImmediate(event.NewItemMessageEvent(message))
+	}
+
+	fmt.Printf("[ITEM] %s utilisé depuis l'emplacement %d\n", item.Name, c.ItemIndex)
+	return nil
 }
 
 // --- COMMANDE DÉDIÉE À LA DREAMBERRY ---
 type UseDreamberryItemCommand struct {
-    World     *domain.World
-    ItemIndex int // L'index de l'objet dans l'inventaire
+	World     *domain.World
+	ItemIndex int // L'index de l'objet dans l'inventaire
 }
 
 func (c *UseDreamberryItemCommand) CanExecute() bool {
-    if c.World == nil || c.World.Player == nil {
-       return false
-    }
+	if c.World == nil || c.World.Player == nil {
+		return false
+	}
 
-    inv := &c.World.Player.Inventory
-    if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
-       return false
-    }
+	inv := &c.World.Player.Inventory
+	if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
+		return false
+	}
 
-    item, err := inv.GetItem(c.ItemIndex)
-    if err != nil {
-       return false
-    }
+	item, err := inv.GetItem(c.ItemIndex)
+	if err != nil {
+		return false
+	}
 
-    // La commande ne s'occupe QUE de la dreamberry utilisable
-    if item.Name != "dreamberry" || !item.IsUsable {
-       return false
-    }
+	// La commande ne s'occupe QUE de la dreamberry utilisable
+	if item.Name != "dreamberry" || !item.IsUsable {
+		return false
+	}
 
-    return true
+	return true
 }
 
 func (c *UseDreamberryItemCommand) Execute() error {
-    if !c.CanExecute() {
-       return errors.New("impossible d'utiliser la dreamberry (item invalide ou inutilisable)")
-    }
+	if !c.CanExecute() {
+		return errors.New("impossible d'utiliser la dreamberry (item invalide ou inutilisable)")
+	}
 
-    // 1. Applique l'effet de restauration de mana
-    const manaRestorationAmount = 5 // À ajuster selon l'équilibrage
-    c.World.Player.RestoreMana(manaRestorationAmount)
+	// 1. Applique l'effet de restauration de mana
+	const manaRestorationAmount = 5 // À ajuster selon l'équilibrage
+	c.World.Player.RestoreMana(manaRestorationAmount)
 
-    // 2. Consomme l'objet en le retirant de l'inventaire
-    inv := &c.World.Player.Inventory
-    err := inv.RemoveItem(c.ItemIndex)
-    if err != nil {
-       return fmt.Errorf("erreur lors de la suppression de la dreamberry : %w", err)
-    }
+	// 2. Consomme l'objet en le retirant de l'inventaire
+	inv := &c.World.Player.Inventory
+	err := inv.RemoveItem(c.ItemIndex)
+	if err != nil {
+		return fmt.Errorf("erreur lors de la suppression de la dreamberry : %w", err)
+	}
 
-    fmt.Printf("[ITEM] Le joueur a consommé une Dreamberry (Mana +%d) depuis l'emplacement %d\n", manaRestorationAmount, c.ItemIndex)
-    return nil
+	fmt.Printf("[ITEM] Le joueur a consommé une Dreamberry (Mana +%d) depuis l'emplacement %d\\n", manaRestorationAmount, c.ItemIndex)
+	return nil
 }
 
 type ClearAllBoardsCommand struct {
@@ -496,7 +781,7 @@ func (c *SwitchGridCommand) CanExecute() bool {
 
 func (c *SwitchGridCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("grid not found")
+		return errors.New("grille non trouvée")
 	}
 	c.World.SetCurrentGrid(c.GridID)
 
@@ -521,17 +806,17 @@ func (c *UnlockNavigationCommand) CanExecute() bool {
 func (c *UnlockNavigationCommand) Execute() error {
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
-		return errors.New("grid not found")
+		return errors.New("grille non trouvée")
 	}
 
 	grid.NavigationForcedOpen = true
-	fmt.Printf("[DEBUG] Navigation forcée pour la zone %s\n", c.GridID)
+	fmt.Printf("[DEBUG] Navigation forcée pour la zone %s\\n", c.GridID)
 	return nil
 }
 
 type SwitchZoneCommand struct {
 	World     *domain.World
-	Direction board.Direction
+	Direction entity.Direction
 }
 
 func (c *SwitchZoneCommand) CanExecute() bool {
@@ -568,16 +853,57 @@ func (c *SwitchZoneCommand) Execute() error {
 	newPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
 
 	switch c.Direction {
-	case board.North:
+	case entity.DirNorth:
 		newPos = entity.Position{X: grid.Width / 2, Y: grid.Height - 1}
-	case board.South:
+	case entity.DirSouth:
 		newPos = entity.Position{X: grid.Width / 2, Y: 0}
-	case board.East:
+	case entity.DirEast:
 		newPos = entity.Position{X: 0, Y: grid.Height / 2}
-	case board.West:
+	case entity.DirWest:
 		newPos = entity.Position{X: grid.Width - 1, Y: grid.Height / 2}
 	}
 	c.World.SetPlayerPosition(newPos)
 
 	return nil
+}
+
+type RotateGridCommand struct {
+	World  *domain.World
+	GridID string
+}
+
+func (c *RotateGridCommand) CanExecute() bool {
+	_, ok := c.World.GetGrid(c.GridID)
+	return ok
+}
+
+func (c *RotateGridCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("grille non trouvée")
+	}
+	return c.World.RotateGrid(c.GridID)
+}
+
+// flipToPlayerState convertit une direction de flip en offset de position et en ancrage pour le joueur.
+func flipToPlayerState(f domain.FlipDirection) (entity.Position, player.BorderPosition) {
+	switch f {
+	case domain.FlipTop:
+		return entity.Position{X: 0, Y: -1}, player.BorderTop
+	case domain.FlipTopRight:
+		return entity.Position{X: 1, Y: -1}, player.BorderTopRight
+	case domain.FlipRight:
+		return entity.Position{X: 1, Y: 0}, player.BorderRight
+	case domain.FlipBottomRight:
+		return entity.Position{X: 1, Y: 1}, player.BorderBottomRight
+	case domain.FlipBottom:
+		return entity.Position{X: 0, Y: 1}, player.BorderBottom
+	case domain.FlipBottomLeft:
+		return entity.Position{X: -1, Y: 1}, player.BorderBottomLeft
+	case domain.FlipLeft:
+		return entity.Position{X: -1, Y: 0}, player.BorderLeft
+	case domain.FlipTopLeft:
+		return entity.Position{X: -1, Y: -1}, player.BorderTopLeft
+	default:
+		return entity.Position{X: 0, Y: 0}, player.BorderTop // Fallback
+	}
 }

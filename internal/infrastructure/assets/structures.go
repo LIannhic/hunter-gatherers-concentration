@@ -100,15 +100,24 @@ func generateTileObelisk(size int, theme TileTheme) *ebiten.Image {
 	vector.DrawFilledRect(img, centerX-w/2, centerY-h/2, w, h, patternColor, true)
 
 	// Sommet (Pyramidion)
-	p3x, p3y := centerX, centerY-h/2-w/2
-	vector.DrawFilledCircle(img, p3x, p3y, 2, patternColor, true) // Placeholder pointu
-
-	// On dessine un triangle manuellement avec des lignes car vector n'a pas DrawFilledTriangle simple
-	for i := float32(0); i <= w/2; i += 0.5 {
-		vector.StrokeLine(img, centerX-i, centerY-h/2, centerX+i, centerY-h/2, 1, patternColor, true)
-	}
 	// On utilise plutôt DrawFilledCircle pour le sommet pour rester simple et propre
 	vector.DrawFilledCircle(img, centerX, centerY-h/2, w/2, patternColor, true)
+
+	return img
+}
+
+// generateTileExit crée une tuile de navigation avec un motif de demi-flèche
+func generateTileExit(size int, theme TileTheme) *ebiten.Image {
+	img := generateTileRevealed(size, theme)
+
+	centerX, centerY := float32(size)/2, float32(size)/2
+	patternColor := theme.RevealedPattern
+
+	// On dessine la moitié DROITE d'une flèche pointant vers le haut
+	// Tête de flèche (moitié)
+	vector.StrokeLine(img, centerX, centerY-float32(size)*0.3, centerX+float32(size)*0.2, centerY-float32(size)*0.1, 3, patternColor, true)
+	// Corps de flèche (moitié)
+	vector.StrokeLine(img, centerX, centerY-float32(size)*0.3, centerX, centerY+float32(size)*0.2, 3, patternColor, true)
 
 	return img
 }

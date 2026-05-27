@@ -52,9 +52,289 @@ const (
 	TypeCreature
 	TypeStructure
 	TypeArtefact
-	TypeTrap // Changé de TypeEmptyTile à TypeTrap
+	TypeTrap
 	TypeLoot
+	TypeTrack
 )
+
+// Direction représente les orientations cardinales
+type Direction int
+
+const (
+	DirNorth Direction = iota
+	DirEast
+	DirSouth
+	DirWest
+	DirNorthEast
+	DirSouthEast
+	DirSouthWest
+	DirNorthWest
+)
+
+func (d Direction) String() string {
+	switch d {
+	case DirNorth:
+		return "North"
+	case DirEast:
+		return "East"
+	case DirSouth:
+		return "South"
+	case DirWest:
+		return "West"
+	case DirNorthEast:
+		return "North-East"
+	case DirSouthEast:
+		return "South-East"
+	case DirSouthWest:
+		return "South-West"
+	case DirNorthWest:
+		return "North-West"
+	default:
+		return "Unknown"
+	}
+}
+
+// IsOpposite vérifie si deux directions sont strictement opposées
+func (d Direction) IsOpposite(other Direction) bool {
+	return (d == DirNorth && other == DirSouth) ||
+		(d == DirSouth && other == DirNorth) ||
+		(d == DirEast && other == DirWest) ||
+		(d == DirWest && other == DirEast)
+}
+
+// ToVector convertit une direction en vecteur de position relative
+func (d Direction) ToVector() Position {
+	switch d {
+	case DirNorth:
+		return Position{X: 0, Y: -1}
+	case DirEast:
+		return Position{X: 1, Y: 0}
+	case DirSouth:
+		return Position{X: 0, Y: 1}
+	case DirWest:
+		return Position{X: -1, Y: 0}
+	case DirNorthEast:
+		return Position{X: 1, Y: -1}
+	case DirSouthEast:
+		return Position{X: 1, Y: 1}
+	case DirSouthWest:
+		return Position{X: -1, Y: 1}
+	case DirNorthWest:
+		return Position{X: -1, Y: -1}
+	}
+	return Position{X: 0, Y: 0}
+}
+
+// TransformDirection applique une transformation D4 à une direction cardinale
+func TransformDirection(d Direction, t Transformation) Direction {
+	// 1. Convertit Direction en vecteur local
+	v := d.ToVector()
+
+	// 2. Applique la transformation D4 au vecteur
+	// (x, y) après transformation
+	var nx, ny int
+	switch t {
+	case TransIdentity: // (x, y)
+		nx, ny = v.X, v.Y
+	case TransRot90: // (-y, x)
+		nx, ny = -v.Y, v.X
+	case TransRot180: // (-x, -y)
+		nx, ny = -v.X, -v.Y
+	case TransRot270: // (y, -x)
+		nx, ny = v.Y, -v.X
+	case TransMirrorH: // (-x, y) - Médiane verticale
+		nx, ny = -v.X, v.Y
+	case TransMirrorV: // (x, -y) - Médiane horizontale
+		nx, ny = v.X, -v.Y
+	case TransMirrorD1: // (y, x) - Diagonale \
+		nx, ny = v.Y, v.X
+	case TransMirrorD2: // (-y, -x) - Diagonale /
+		nx, ny = -v.Y, -v.X
+	default:
+		nx, ny = v.X, v.Y
+	}
+
+	// 3. Reconvertit le vecteur transformé en Direction
+	// Note : on gère les 8 directions cardinales et ordinales
+	if nx == 0 && ny < 0 {
+		return DirNorth
+	}
+	if nx > 0 && ny < 0 {
+		return DirNorthEast
+	}
+	if nx > 0 && ny == 0 {
+		return DirEast
+	}
+	if nx > 0 && ny > 0 {
+		return DirSouthEast
+	}
+	if nx == 0 && ny > 0 {
+		return DirSouth
+	}
+	if nx < 0 && ny > 0 {
+		return DirSouthWest
+	}
+	if nx < 0 && ny == 0 {
+		return DirWest
+	}
+	if nx < 0 && ny < 0 {
+		return DirNorthWest
+	}
+
+	return d
+}
+
+// FlipDirection représente la direction de flip d'une tuile lors du reveal
+// Cette information est purement visuelle et n'impacte pas la logique métier
+type FlipDirection int
+
+const (
+	FlipTop FlipDirection = iota
+	FlipTopRight
+	FlipRight
+	FlipBottomRight
+	FlipBottom
+	FlipBottomLeft
+	FlipLeft
+	FlipTopLeft
+	FlipCenter // Flip direct (clic au centre)
+)
+
+func (f FlipDirection) String() string {
+	switch f {
+	case FlipTop:
+		return "top"
+	case FlipTopRight:
+		return "top-right"
+	case FlipRight:
+		return "right"
+	case FlipBottomRight:
+		return "bottom-right"
+	case FlipBottom:
+		return "bottom"
+	case FlipBottomLeft:
+		return "bottom-left"
+	case FlipLeft:
+		return "left"
+	case FlipTopLeft:
+		return "top-left"
+	case FlipCenter:
+		return "center"
+	}
+	return "unknown"
+}
+
+// ToRotationAngles retourne les angles de rotation (X, Y) pour l'animation de flip
+// en degrés, selon la direction. Utilisé par le renderer pour l'animation.
+func (f FlipDirection) ToRotationAngles() (rotateX, rotateY float64) {
+	switch f {
+	case FlipTop:
+		return -90, 0
+	case FlipTopRight:
+		return -45, 45
+	case FlipRight:
+		return 0, 90
+	case FlipBottomRight:
+		return 45, 45
+	case FlipBottom:
+		return 90, 0
+	case FlipBottomLeft:
+		return 45, -45
+	case FlipLeft:
+		return 0, -90
+	case FlipTopLeft:
+		return -45, -45
+	case FlipCenter:
+		return 0, 0
+	}
+	return 0, 0
+}
+
+// CalculateFlipDirection détermine la direction de flip basée sur la position
+// du clic dans une tuile. tileSize est la taille de la tuile, localX et localY
+// sont les coordonnées du clic relatives à la tuile (0,0 = coin supérieur gauche).
+// Retourne une des 8 directions périphériques (le côté opposé au curseur se déplace vers le curseur).
+func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
+	// On divise en 3x3 zones
+	centerStart := tileSize * 33 / 100
+	centerEnd := tileSize * 66 / 100
+
+	var vertical int // 0 = top, 1 = center, 2 = bottom
+	if localY < centerStart {
+		vertical = 0
+	} else if localY > centerEnd {
+		vertical = 2
+	} else {
+		vertical = 1
+	}
+
+	var horizontal int // 0 = left, 1 = center, 2 = right
+	if localX < centerStart {
+		horizontal = 0
+	} else if localX > centerEnd {
+		horizontal = 2
+	} else {
+		horizontal = 1
+	}
+
+	// Gestion du centre : on force vers le bord le plus proche pour garder 8 animations
+	if vertical == 1 && horizontal == 1 {
+		mid := tileSize / 2
+		dx := localX - mid
+		dy := localY - mid
+		if abs(dx) > abs(dy) {
+			if dx < 0 {
+				horizontal = 0
+			} else {
+				horizontal = 2
+			}
+		} else {
+			if dy < 0 {
+				vertical = 0
+			} else {
+				vertical = 2
+			}
+		}
+	}
+
+	// Combine pour obtenir la direction
+	switch vertical {
+	case 0: // top
+		switch horizontal {
+		case 0:
+			return FlipTopLeft
+		case 1:
+			return FlipTop
+		case 2:
+			return FlipTopRight
+		}
+	case 1: // center (normalement impossible ici suite au forçage)
+		switch horizontal {
+		case 0:
+			return FlipLeft
+		case 2:
+			return FlipRight
+		}
+	case 2: // bottom
+		switch horizontal {
+		case 0:
+			return FlipBottomLeft
+		case 1:
+			return FlipBottom
+		case 2:
+			return FlipBottomRight
+		}
+	}
+
+	return FlipTop // Fallback
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
 
 func (t Type) String() string {
 	switch t {
@@ -70,6 +350,8 @@ func (t Type) String() string {
 		return "trap"
 	case TypeLoot:
 		return "loot"
+	case TypeTrack:
+		return "track"
 	}
 	return "unknown"
 }
@@ -95,6 +377,10 @@ func (p Position) Distance(other Position) int {
 	return dx + dy // Distance de Manhattan
 }
 
+func (p Position) String() string {
+	return fmt.Sprintf("(%d,%d)", p.X, p.Y)
+}
+
 // Entity est l'interface de base pour tous les éléments du jeu
 type Entity interface {
 	GetID() ID
@@ -107,32 +393,100 @@ type Entity interface {
 	Deactivate()
 	GetState() TileState
 	SetState(TileState)
+	GetTransformation() Transformation
+	SetTransformation(Transformation)
+	GetOrientation() Direction // Gardé pour compatibilité, déduit de la Transformation
+	SetOrientation(Direction)
 	AddTag(string)
 	HasTag(string) bool
 	RemoveTag(string)
 }
 
+// Transformation représente une des 8 symétries du carré (groupe diédrique D4)
+type Transformation uint8
+
+const (
+	TransIdentity Transformation = iota // 0: e
+	TransRot90                          // 1: r
+	TransRot180                         // 2: r^2
+	TransRot270                         // 3: r^3
+	TransMirrorH                        // 4: s (Miroir Horizontal - Médiane Verticale)
+	TransMirrorD1                       // 5: sr (Miroir Diagonale \)
+	TransMirrorV                        // 6: sr^2 (Miroir Vertical - Médiane Horizontale)
+	TransMirrorD2                       // 7: sr^3 (Miroir Diagonale /)
+)
+
+var d4Table = [8][8]Transformation{
+	{0, 1, 2, 3, 4, 5, 6, 7}, // e
+	{1, 2, 3, 0, 7, 4, 5, 6}, // r
+	{2, 3, 0, 1, 6, 7, 4, 5}, // r^2
+	{3, 0, 1, 2, 5, 6, 7, 4}, // r^3
+	{4, 5, 6, 7, 0, 1, 2, 3}, // s
+	{5, 6, 7, 4, 3, 0, 1, 2}, // sr
+	{6, 7, 4, 5, 2, 3, 0, 1}, // sr^2
+	{7, 4, 5, 6, 1, 2, 3, 0}, // sr^3
+}
+
+// Compose combine deux transformations (base * apply)
+func Compose(base, apply Transformation) Transformation {
+	if base > 7 || apply > 7 {
+		return base
+	}
+	return d4Table[base][apply]
+}
+
+// ToTransformation convertit une direction de flip en transformation D4
+func (f FlipDirection) ToTransformation() Transformation {
+	switch f {
+	case FlipLeft, FlipRight:
+		return TransMirrorH
+	case FlipTop, FlipBottom:
+		return TransMirrorV
+	case FlipTopRight, FlipBottomLeft:
+		return TransMirrorD1
+	case FlipTopLeft, FlipBottomRight:
+		return TransMirrorD2
+	default:
+		return TransIdentity
+	}
+}
+
 // BaseEntity implémentation commune
 type BaseEntity struct {
-	ID       ID
-	EType    Type
-	Pos      Position
-	GridID   string // ID du grid sur lequel se trouve l'entité
-	Active   bool
-	State    TileState // L'état appartient maintenant à l'entité
-	Tags     []string
-	Metadata map[string]interface{}
+	ID        ID
+	EType     Type
+	Pos       Position
+	GridID    string // ID du grid sur lequel se trouve l'entité
+	Active    bool
+	State     TileState // L'état appartient maintenant à l'entité
+	Transform Transformation
+	Tags      []string
+	Metadata  map[string]interface{}
+}
+
+func NewTrap(pos Position) *BaseEntity {
+	return &BaseEntity{
+		ID:        NewID(),
+		EType:     TypeTrap,
+		Pos:       pos,
+		Active:    true,
+		State:     Hidden,
+		Transform: TransIdentity,
+		Tags:      []string{"trap"},
+		Metadata:  make(map[string]interface{}),
+	}
 }
 
 func NewBaseEntity(etype Type) BaseEntity {
 	return BaseEntity{
-		ID:       NewID(),
-		EType:    etype,
-		GridID:   "", // Doit être défini après création
-		Active:   true,
-		State:    Hidden, // Par défaut caché
-		Tags:     make([]string, 0),
-		Metadata: make(map[string]interface{}),
+		ID:        NewID(),
+		EType:     etype,
+		GridID:    "", // Doit être défini après création
+		Active:    true,
+		State:     Hidden, // Par défaut caché
+		Transform: TransIdentity,
+		Tags:      make([]string, 0),
+		Metadata:  make(map[string]interface{}),
 	}
 }
 
@@ -154,6 +508,38 @@ func (e *BaseEntity) IsActive() bool         { return e.Active }
 func (e *BaseEntity) Deactivate()            { e.Active = false }
 func (e *BaseEntity) GetState() TileState    { return e.State }
 func (e *BaseEntity) SetState(s TileState)   { e.State = s }
+
+func (e *BaseEntity) GetTransformation() Transformation  { return e.Transform }
+func (e *BaseEntity) SetTransformation(t Transformation) { e.Transform = t }
+
+func (e *BaseEntity) GetOrientation() Direction {
+	// Déduit une direction simplifiée pour la compatibilité (ex: pour le pathfinding)
+	switch e.Transform {
+	case TransIdentity:
+		return DirNorth
+	case TransRot90:
+		return DirEast
+	case TransRot180:
+		return DirSouth
+	case TransRot270:
+		return DirWest
+	default:
+		return DirNorth // Fallback
+	}
+}
+
+func (e *BaseEntity) SetOrientation(o Direction) {
+	switch o {
+	case DirNorth:
+		e.Transform = TransIdentity
+	case DirEast:
+		e.Transform = TransRot90
+	case DirSouth:
+		e.Transform = TransRot180
+	case DirWest:
+		e.Transform = TransRot270
+	}
+}
 
 func (e *BaseEntity) AddTag(tag string) {
 	for _, t := range e.Tags {
@@ -278,4 +664,49 @@ func (m *Manager) Count() int {
 
 func (m *Manager) CountByType(t Type) int {
 	return len(m.byType[t])
+}
+
+func (t Transformation) String() string {
+	switch t {
+	case TransIdentity:
+		return "Identity (0°)"
+	case TransRot90:
+		return "Rot90 (90°)"
+	case TransRot180:
+		return "Rot180 (180°)"
+	case TransRot270:
+		return "Rot270 (270°)"
+	case TransMirrorH:
+		return "MirrorH (Flip G/D)"
+	case TransMirrorV:
+		return "MirrorV (Flip H/B)"
+	case TransMirrorD1:
+		return "MirrorD1 (Diago \\)"
+	case TransMirrorD2:
+		return "MirrorD2 (Diago /)"
+	default:
+		return "Unknown"
+	}
+}
+
+type Track struct {
+	BaseEntity
+	Kind     string   // "mud", "claws", "broken_grass", etc.
+	Duration int      // Nombre de tours restants avant disparition
+	FromPos  Position // Case de départ (équivaut à e.Pos)
+	ToPos    Position // Case d'arrivée du monstre
+}
+
+func NewTrack(kind string, duration int, from, to Position) *Track {
+	t := &Track{
+		BaseEntity: NewBaseEntity(TypeTrack),
+		Kind:       kind,
+		Duration:   duration,
+		FromPos:    from,
+		ToPos:      to,
+	}
+	t.SetPosition(from) // Par défaut on le lie à la case de départ
+	t.AddTag("track")
+	t.AddTag(kind)
+	return t
 }

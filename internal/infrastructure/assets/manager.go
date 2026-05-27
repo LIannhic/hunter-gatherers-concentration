@@ -90,6 +90,11 @@ func (m *Manager) generateAllAssets() {
 	defaultImg.Fill(color.RGBA{100, 100, 100, 255})
 	m.images["default"] = defaultImg
 
+	// Image blanche (pour les triangles colorés)
+	whiteImg := ebiten.NewImage(1, 1)
+	whiteImg.Fill(color.White)
+	m.images["white"] = whiteImg
+
 	// === TUILES AVEC THEMES ===
 	for themeName, theme := range m.themes {
 		// Tuile cachée avec motif décoratif
@@ -123,16 +128,16 @@ func (m *Manager) generateAllAssets() {
 		m.images["tile_structure_"+themeName] = structImg
 
 		// Tuile dolmen
-		dolmenImg := generateTileDolmen(size, theme)
-		m.images["tile_dolmen_"+themeName] = dolmenImg
+		m.images["tile_dolmen_"+themeName] = generateTileDolmen(size, theme)
 
 		// Tuile obélisque
-		obeliskImg := generateTileObelisk(size, theme)
-		m.images["tile_obelisk_"+themeName] = obeliskImg
+		m.images["tile_obelisk_"+themeName] = generateTileObelisk(size, theme)
 
 		// Tuile portail
-		portalImg := generateTilePortal(size, theme)
-		m.images["tile_portal_"+themeName] = portalImg
+		m.images["tile_portal_"+themeName] = generateTilePortal(size, theme)
+
+		// Tuile de sortie (navigation)
+		m.images["tile_exit_"+themeName] = generateTileExit(size, theme)
 	}
 
 	// Tuiles par défaut (sans suffixe de thème)
@@ -146,11 +151,10 @@ func (m *Manager) generateAllAssets() {
 	m.images["tile_dolmen"] = m.images["tile_dolmen_default"]
 	m.images["tile_obelisk"] = m.images["tile_obelisk_default"]
 	m.images["tile_portal"] = m.images["tile_portal_default"]
+	m.images["tile_exit"] = m.images["tile_exit_default"]
 
-	// Image pour case vide (sol nu sombre)
-	emptyImg := ebiten.NewImage(size, size)
-	emptyImg.Fill(color.RGBA{20, 20, 25, 255})
-	m.images["square_empty"] = emptyImg
+	// Image pour case vide (sol nu avec quadrillage)
+	m.images["square_empty"] = generateEmptySquare(size)
 
 	// Compatibilité
 	m.images["tile_empty"] = m.images["tile_trap"]
@@ -210,6 +214,13 @@ func (m *Manager) generateAllAssets() {
 	m.images["direction_bottom"] = generateDirectionIndicator(size, "bottom")
 	m.images["direction_left"] = generateDirectionIndicator(size, "left")
 	m.images["direction_right"] = generateDirectionIndicator(size, "right")
+
+	// === TRACES (TRACKS) ===
+	m.images["mud"] = GenerateTrackAsset("mud", size)
+	m.images["claws"] = GenerateTrackAsset("claws", size)
+	m.images["broken_grass"] = GenerateTrackAsset("broken_grass", size)
+	m.images["footprints"] = GenerateTrackAsset("footprints", size)
+	m.images["intent_beam"] = GenerateTrackAsset("intent_beam", size)
 
 	// === ICÔNES DE COMPORTEMENT ===
 	m.generateBehaviorIcons(size)

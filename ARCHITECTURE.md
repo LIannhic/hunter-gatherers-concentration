@@ -77,16 +77,20 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Un état (TileState : Hidden, Revealed, Matched, Blocked)
   - Des tags dynamiques pour le comportement ou le rendu (ex: `moss_lure`, `dangerous_on_reveal`)
   - Des composants optionnels (Lifecycle, Matchable, CreatureAI, etc.)
+  - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (face, côtés, etc.).
 
 - **Board/Grid** : Gère la géométrie du plateau
   - Chaque tuile contient une référence optionnelle à une entité
   - Les tuiles ne portent plus d'état ; c'est l'entité qui le porte
   - Permet la recherche rapide des entités par position
+  - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles.
 
 - **Systems** : Mettent à jour l'état du monde
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
   - **ResourceLifecycleSystem** : Gère la maturation des ressources
+  - **LootSystem** : Transforme les matches réussis en objets d'inventaire
+  - **TrackSystem** : Gère la décomposition temporelle des traces
 
 - **TurnTimer** (`timer.go`) : Compte à rebours temps réel par tour
   - Décrémente à chaque frame (60 fps)
@@ -100,7 +104,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
 
 - **Types d'entités** :
   - `TypeResource` : Ressources récoltables
-  - `TypeCreature` : Créatures avec IA
+  - `TypeCreature` : Créatures avec IA. Supporte **8 directions cardinales et ordinales** pour la détection de menace précise.
   - `TypeStructure` : Structures fixes (terriers, etc.)
   - `TypeArtefact` : Objets spéciaux
   - `TypeTrap` : Pièges / tuiles vides
@@ -130,9 +134,9 @@ if revealCmd.CanExecute() {
 ```
 
 **Commandes principales :**
-- `RevealTileCommand` : Révèle une entité (passe son état de Hidden à Revealed)
-- `MatchTilesCommand` : Appaire deux entités (passe leur état à Matched)
-- `SwitchGridCommand` : Change de grille active
+- `RevealTileCommand` : Révèle une entité, met à jour la position périphérique du joueur et vérifie la **Confrontation** (dégâts si dans la `ThreatZone`).
+- `MatchTilesCommand` : Tente d'appairer deux entités et applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide).
+- `SwitchGridCommand` : Change de grille active.
 - `UsePortablePortalCommand` : Active un portail portable pour créer une zone de dégagement et extraire le joueur du plan
 
 ### 3. Infrastructure
@@ -197,7 +201,12 @@ Le jeu utilise une résolution logique fixe de **1280x720**. L'interface est div
 - **Minimap** (270x270) : Carte interactive du Plan de Rêve.
 
 Séparation des responsabilités :
-- **Renderer**: Dessine le plateau central avec espacement dynamique (remplit toujours l'espace de 525x525 quelle que soit la taille de la grille).
+- **Renderer**: Dessine le plateau central avec espacement dynamique (remplit toujours l'espace de 525x525 quelle que soit la taille de la grille). 
+  - **Système de Calques (Depth Illusion)** : Utilise trois strates conceptuelles (**Under**, **Normal**, **Over**) pour gérer l'ordre d'affichage des traces, des tuiles et des entités en mouvement.
+  - **Calcul Dynamique** : Utilise `getTileCenter` pour aligner parfaitement les strates et les traces dans les interstices, supportant la rotation globale et les variations d'espacement (3x3 à 6x6).
+  - **Espaces de Coordonnées** :
+    - **Plateau (Board)** : 525x525. Contient les tuiles et les traces.
+    - **Tapis de Jeu (Playmat)** : 700x700. Contient le plateau, les boutons et les **Effets Plein Écran** (ex: Scanner de l'Echo Hound).
 - **Input**: Capture les événements, gère la navigation entre les zones et les raccourcis clavier.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
 - **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip.
@@ -349,33 +358,43 @@ type MovementProfile struct {
 
 #### Bestiaire (Exemples)
 
-| Créature | Déclencheur | Navigation | Mode | Description |
-|----------|-------------|------------|------|-------------|
-| **Lumifly** | Auto | Errance | Over | Luciole lumineuse volante |
-| **Shadowstalker** | Proximité | Attraction | Shadow | Prédateur discret |
-| **Echo Hound** | Echo | Attraction | Bento | Réagit aux révélations |
-| **Moss Monkey** | Proximité | Target Empty | Bento | Saboteur de cases vides (fuit si saturé) |
-| **Fleeing Sprite** | Proximité | Répulsion | Shadow | Esprit fuyard |
+| Créature | Déclencheur | Navigation | Perception | Mode |
+|----------|-------------|------------|------------|------|
+| **Lumifly** | Auto | Errance | Manifest | Over |
+| **Shadowstalker** | Proximité | Attraction | Cloaked | Normal |
+| **Echo Hound** | Echo | Attraction | Manifest | Normal |
+| **Burrower** | Vue | Errance | Manifest | Under |
+| **Specter** | Echo | Errance | Cloaked | Under |
 
 #### Types de navigation
 
 | Type | Description |
 |------|-------------|
-| `NavWander` | Errance aléatoire |
+| `NavWander` | Errance directionnelle |
 | `NavPatrol` | Suit un itinéraire prédéfini |
+| `NavRelative` | Par rapport à sa position et son orientation |
 | `NavOrientation` | Selon la direction du regard |
-| `NavAttraction` | Vise une cible (joueur, ressource...) |
-| `NavRepulsion` | S'éloigne d'une cible |
+| `NavAttraction` | Vise une cible spécifique |
+| `NavRepulsion` | S'éloigne de la cible |
 
 #### Modes de déplacement
 
-| Mode | Description |
-|------|-------------|
-| `ModeBento` | Déplacement visible (glissement) |
-| `ModeShadow` | Déplacement invisible (face cachée) |
-| `ModeSwap` | Échange de position avec la cible |
-| `ModeOver` | Au-dessus des tuiles (vole) |
-| `ModeUnder` | Sous les tuiles (terrier) |
+| Mode         | Description |
+|--------------|-------------|
+| `ModeNormal` | Déplacement standard au sol |
+| `ModeSwap`   | Interversion physique de deux tuiles |
+| `ModeOver`   | Passe au-dessus des autres tuiles (Tag "flying") |
+| `ModeUnder`  | Passe en dessous des autres tuiles (Tag "burrowed") |
+
+#### NOUVEAU : Règles de Perception
+
+Régit comment le monde/joueur perçoit les actions d'une entité via son `PerceptionProfile`.
+
+| Paramètre | Options | Description |
+|-----------|---------|-------------|
+| **Stealth** | `Manifest`, `Cloaked` | Visibilité de la translation (Bento vs Shadow) |
+| **Acoustic** | `Silent`, `Echo` | Émission d'un stimulus sonore lors du mouvement |
+| **Traces** | `LeavesTracks` | Si `true`, génère des entités `TypeTrack` |
 
 #### Gestion des collisions
 

@@ -23,6 +23,27 @@ L'expérience propose une profondeur stratégique s'appuyant sur une double bouc
 Le gameplay repose sur une gestion rigoureuse des ressources et du temps, dictée par un système en tour par tour. Chaque interaction, qu’il s’agisse de retourner une tuile ou d’utiliser un objet, consomme une unité de ressource (temps ou mana), forçant le joueur à planifier ses mouvements au sein d’une limite de tours impartis. La survie dépend de la gestion d'une barre de santé, physique ou mentale, qui s’érode au fil des erreurs ou des confrontations.
 L’aspect central de l’association étendue enrichit la mécanique de mémoire classique : le joueur doit identifier des paires dont la corrélation peut être identique, logique (clé et serrure), élémentaire ou narrative. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
 
+### Matrice de Dégâts (MATCH vs SKIP)
+
+Le jeu punit l'inattention et la précipitation via une matrice de décision stricte lors de l'interaction avec des paires de créatures :
+
+| État de la paire | Action: **MATCH** | Action: **SKIP** |
+| :--- | :--- | :--- |
+| **VALIDE** | 0 Dégât (Succès) | Dégâts de groupe (Erreur) |
+| **INVALIDE** | Dégâts de groupe (Échec) | 0 Dégât (Prudence) |
+
+- **Dégâts de groupe** : `nombre de créatures révélées * 10`.
+- **Match Valide** : Les créatures sont capturées (Loot).
+- **Match Invalide** : Les tuiles se referment violemment.
+- **Skip** : Permet de refermer les tuiles sagement si aucune paire n'est identifiée.
+
+### Confrontation et Zones de Menace
+
+Chaque créature possède une **Zone de Menace** (directions qu'elle attaque).
+- **Placement Périphérique** : Le joueur agit depuis le bord du plateau. Sa position (`entity.Position`) et son ancrage (`BorderPosition`) sont déterminés par l'endroit où il clique pour révéler une tuile.
+- **Calcul de Confrontation** : Lors du dévoilement, si le joueur se trouve dans la zone de menace de la créature (après application de la transformation D4/Flip), il subit **10 points de dégâts physiques**.
+- **Esquive** : En choisissant de "tirer" la tuile depuis un angle mort de la créature, le joueur peut éviter l'attaque lors de la révélation.
+
 ### Compte à rebours temps réel (Turn Timer)
 
 Pour rompre le rythme classique du Memory et simuler l'urgence de la survie en plan onirique, chaque tour est soumis à une **pression temporelle dynamique** :
@@ -114,8 +135,19 @@ Les créatures disposent d'un système de mouvement configurable avec les param�
 - **Bento** : Déplacement visible (le joueur voit le mouvement)
 - **Shadow** : Déplacement invisible (face cachée, le joueur doit deviner)
 - **Swap** : Échange de place avec la cible
-- **Over** : Au-dessus des tuiles (vole)
-- **Under** : Sous les tuiles (terrier)
+- **Over** : Calque supérieur (vol, effets de surface)
+- **Under** : Calque inférieur (fouissage, traces profondes)
+
+### Traces et Indices Environnementaux
+
+Les créatures laissent derrière elles des traces qui respectent des règles de placement précises sur les calques de rendu :
+
+- **Boue (Mud)** : Rendu sur le calque **Under**, positionné exactement entre deux cases (interstice) et orienté selon la direction du mouvement.
+- **Herbe Brisée (Broken Grass)** : Rendu sur le calque **Under**, marquant la case d'origine du déplacement.
+- **Griffures (Claws)** : Rendu sur le calque **Over**, marquant la case de destination (impact).
+- **Empreintes (Footprints)** : Rendu sur le calque **Normal**, apparaissant sous les tuiles physiques pour simuler le passage au sol.
+
+Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il s'agisse d'un plateau 3x3 ou 6x6.
 
 ### Bestiaire
 

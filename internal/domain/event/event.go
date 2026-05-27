@@ -3,7 +3,6 @@ package event
 import (
 	"time"
 
-	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
@@ -28,7 +27,12 @@ const (
 	EntityRemoved      Type = "entity_removed"
 	DifficultyChanged  Type = "difficulty_changed"
 	GridEntered        Type = "grid_entered"
+	WorldGenerated     Type = "world_generated"
 	CreatureFled       Type = "creature_fled"
+	ItemMessage        Type = "item_message"
+	// Animation events pour l'UI
+	AnimationStarted Type = "animation_started"
+	AnimationEnded   Type = "animation_ended"
 )
 
 // Event structure de base
@@ -133,13 +137,16 @@ func (b *Bus) QueueSize() int {
 
 // --- Événements spécifiques ---
 
-func NewCreatureMovedEvent(creatureID string, from, to entity.Position) Event {
+func NewCreatureMovedEvent(creatureID string, from, to entity.Position, mode string, hidden bool, audible bool) Event {
 	return Event{
 		Type:     CreatureMoved,
 		SourceID: creatureID,
 		Payload: map[string]interface{}{
-			"from": from,
-			"to":   to,
+			"from":    from,
+			"to":      to,
+			"mode":    mode,
+			"hidden":  hidden,
+			"audible": audible,
 		},
 		Timestamp: time.Now(),
 	}
@@ -168,7 +175,7 @@ func NewAssociationMadeEvent(playerID string, assocType string, success bool) Ev
 	}
 }
 
-func NewEntityRevealedEvent(tilePos entity.Position, entityID string, gridID string, flipDir board.FlipDirection) Event {
+func NewEntityRevealedEvent(tilePos entity.Position, entityID string, gridID string, flipDir entity.FlipDirection) Event {
 	return Event{
 		Type:     TileRevealed,
 		SourceID: entityID,
@@ -204,6 +211,17 @@ func NewLootAcquiredEvent(itemID string, name string, entityType entity.Type) Ev
 			"item_id":     itemID,
 			"name":        name,
 			"entity_type": entityType,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewItemMessageEvent(message string) Event {
+	return Event{
+		Type:     ItemMessage,
+		SourceID: "item_message",
+		Payload: map[string]interface{}{
+			"message": message,
 		},
 		Timestamp: time.Now(),
 	}
@@ -281,6 +299,17 @@ func NewCreatureFledEvent(creatureID string, species string, gridID string, posi
 			"species":  species,
 			"grid_id":  gridID,
 			"position": position,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewWorldGeneratedEvent(planeID string, zoneCount int) Event {
+	return Event{
+		Type:     WorldGenerated,
+		SourceID: planeID,
+		Payload: map[string]interface{}{
+			"zone_count": zoneCount,
 		},
 		Timestamp: time.Now(),
 	}

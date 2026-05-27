@@ -3,10 +3,12 @@ package input
 import (
 	"fmt"
 	"image/color"
+	"math"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
@@ -22,6 +24,8 @@ type Renderer interface {
 	ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool)
 	RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, color color.Color, world *domain.World)
 	RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World)
+	NotifyHover(entityID string, dir entity.FlipDirection)
+	DecayHoverStates(activeThisFrame map[string]bool)
 }
 
 type Handler struct {
@@ -45,12 +49,15 @@ type Handler struct {
 	OnExitToMenu          func()                                     // Callback pour retourner au menu
 	OnToggleDetails       func()                                     // Callback pour afficher les détails
 	OnToggleInvDetails    func()                                     // Callback pour afficher l'inventaire détaillé
+	OnToggleAssetsDetails func()                                     // T: Callback pour afficher l'atlas des assets
 	OnFillInventory       func()                                     // Callback pour remplir l'inventaire (debug)
 	OnRevealAll           func(gridID string)                        // F5: Cheat - révéler tout
 	OnHideAll             func(gridID string)                        // F6: Cheat - cacher tout
 	OnUnlockNavigation    func(gridID string)                        // F7: Cheat - désceller sorties
+	OnClearBlocked        func(gridID string)                        // F8: Cheat - retirer état bloqué
 	OnUsePortablePortal   func(gridID string, center board.Position) // P / grid placement: Déployer le portail portable
-	OnForceTurn           func()                                     // F3: Forcer le prochain tour
+	OnVictory             func()                                     // Callback déclenché lors de l'activation du portail final
+	OnForceTurn           func()                                     // KeySpace: Forcer le prochain tour
 	OnToggleAutoMove      func()                                     // F10: Toggle mouvement auto
 
 	// Gestionnaire réactif des boutons d'action
@@ -62,13 +69,36 @@ type Handler struct {
 
 	isTransitioning bool // Bloque les entrées pendant le changement de zone
 	transitionTimer int  // Frames restantes pour le blocage
+	// Indique qu'un Skip a été demandé et qu'on attend la fin des animations
+	skipPending bool
+
+	// Victory timer (V0.2 : Déclenché par le déploiement du portail portable)
+	victoryTimer *domain.TurnTimer
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
-	return &Handler{
+	h := &Handler{
 		world:       world,
 		assocEngine: assocEng,
 	}
+
+	// Bloque l'input pendant les animations (start/end)
+	if world != nil && world.EventBus != nil {
+		world.EventBus.SubscribeFunc(event.AnimationStarted, func(e event.Event) {
+			h.isProcessing = true
+		})
+		world.EventBus.SubscribeFunc(event.AnimationEnded, func(e event.Event) {
+			h.isProcessing = false
+			// Si un skip était en attente, on reset le timer maintenant
+			if h.skipPending {
+				if h.world != nil && h.world.TurnTimer != nil {
+					h.world.TurnTimer.Reset()
+				}
+				h.skipPending = false
+			}
+		})
+	}
+	return h
 }
 
 func (h *Handler) SetRenderer(r Renderer) {
@@ -88,11 +118,92 @@ func (h *Handler) Update() error {
 		return nil
 	}
 
+	// Mise à jour du victory timer
+	if h.victoryTimer != nil && h.victoryTimer.Running {
+		if h.victoryTimer.Update(1.0 / 60.0) {
+			if h.OnVictory != nil {
+				h.OnVictory()
+			}
+			h.victoryTimer = nil // Stop after trigger
+		}
+	}
+
+	// Gestion du survol (Hover) pour les animations avancées
+	h.updateHover()
+
 	if err := h.handleMouse(); err != nil {
 		return err
 	}
 	h.handleKeyboard()
 	return nil
+}
+
+func (h *Handler) updateHover() {
+	if h.renderer == nil {
+		return
+	}
+
+	activeThisFrame := make(map[string]bool)
+	mx, my := ebiten.CursorPosition()
+	localX, localY, gridID, ok := h.renderer.ScreenToLocalTile(mx, my, h.world)
+
+	if ok {
+		grid, _ := h.world.GetGrid(gridID)
+		pos, _, _ := h.renderer.ScreenToGrid(mx, my, h.world)
+		if grid != nil {
+			plot, err := grid.Get(pos)
+			if err == nil && len(plot.EntitiesID) > 0 {
+				topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+				if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok && ent.GetState()&entity.Blocked == 0 {
+					activeThisFrame[topID] = true
+
+					tileSize := h.renderer.GetTileSize()
+					dir := entity.CalculateFlipDirection(tileSize, localX, localY)
+					h.renderer.NotifyHover(topID, dir)
+				}
+			}
+		}
+	} else {
+		// Vérification survol des sorties (Navigation)
+		if dir, index, ok := h.getClickedExit(); ok {
+			gridID := h.world.CurrentGridID
+			if grid, ok := h.world.GetGrid(gridID); ok {
+				state := grid.ExitsState[dir][index]
+				if state&entity.Blocked == 0 {
+					// Identifiant virtuel pour le hover
+					id := fmt.Sprintf("exit_%s_%d", directionToName(dir), index)
+					activeThisFrame[id] = true
+
+					// Pour les sorties, on utilise une direction de flip simplifiée vers le centre de la sortie
+					px := float64(mx) - ui.PlaymatX
+					py := float64(my) - ui.PlaymatY
+					fDir := h.calculateExitFlipDirection(px, py, dir)
+					h.renderer.NotifyHover(id, fDir)
+				}
+			}
+		}
+	}
+
+	h.renderer.DecayHoverStates(activeThisFrame)
+}
+
+func directionToName(dir entity.Direction) string {
+	switch dir {
+	case entity.DirNorth:
+		return "north"
+	case entity.DirEast:
+		return "east"
+	case entity.DirSouth:
+		return "south"
+	case entity.DirWest:
+		return "west"
+	}
+	return "unknown"
+}
+
+func (h *Handler) calculateExitFlipDirection(px, py float64, dir entity.Direction) entity.FlipDirection {
+	// Détermine la direction de flip vers l'extérieur du plateau ou vers le curseur
+	return entity.CalculateFlipDirection(int(88), int(math.Mod(px, 88)), int(math.Mod(py, 88)))
 }
 
 func (h *Handler) Draw(screen *ebiten.Image) {
@@ -113,7 +224,20 @@ func (h *Handler) getEntityInfo(ent entity.Entity) string {
 	case *domain.Resource:
 		return fmt.Sprintf("Ressource:%s", e.ResourceType)
 	default:
-		return ent.GetType().String()
+		switch ent.GetType() {
+		case entity.TypeTrap:
+			return "Piège"
+		case entity.TypeTrack:
+			return "Trace"
+		case entity.TypeStructure:
+			return "Structure"
+		case entity.TypeArtefact:
+			return "Artefact"
+		case entity.TypeLoot:
+			return "Butin"
+		default:
+			return ent.GetType().String()
+		}
 	}
 }
 
@@ -142,6 +266,28 @@ func (h *Handler) handleMouse() error {
 	}
 
 	if h.isProcessing {
+		// EXCEPTION : On autorise le clic sur un portail déjà révélé pour la victoire
+		// (sinon le verrouillage du mode memory bloque la fin de partie)
+		if pos, gridID, ok := h.getHoveredTile(); ok {
+			grid, _ := h.world.GetGrid(gridID)
+			if grid != nil {
+				if plot, err := grid.Get(pos); err == nil && len(plot.EntitiesID) > 0 {
+					topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+					if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
+						if ent.GetState()&entity.Revealed != 0 {
+							isFinish := ent.HasTag("finish_portal")
+							isPortable := ent.HasTag("portable_portal")
+							if isFinish || isPortable {
+								// On traite le clic ici car il est bloqué plus bas
+								h.handlePortalClick(ent, gridID, pos)
+								return nil
+							}
+						}
+					}
+				}
+			}
+		}
+
 		fmt.Println("[INPUT] Traitement en cours, veuillez patienter...")
 		return nil
 	}
@@ -179,10 +325,27 @@ func (h *Handler) handleMouse() error {
 
 		// 2. Sinon, on révèle la tuile si elle est cachée
 		if currentState&entity.Hidden != 0 {
+			mx, my := ebiten.CursorPosition()
+			px := float64(mx) - ui.PlaymatX
+			py := float64(my) - ui.PlaymatY
+			flipDir := h.calculateExitFlipDirection(px, py, dir)
+
 			// Révélation de la première moitié
 			states[index] = (currentState & ^entity.Hidden) | entity.Revealed
 			fmt.Printf("[NAVIGATION] Tuile de sortie %v #%d révélée\n", dir, index)
 			grid.ExitsState[dir] = states
+
+			// Publie l'événement pour l'animation
+			h.world.EventBus.Publish(event.Event{
+				Type:     event.TileRevealed,
+				SourceID: "player",
+				Payload: map[string]interface{}{
+					"position":       entity.Position{}, // Position virtuelle
+					"entity_id":      fmt.Sprintf("exit_%s_%d", directionToName(dir), index),
+					"grid_id":        h.world.CurrentGridID,
+					"flip_direction": flipDir,
+				},
+			})
 
 			// 3. Vérification de l'association via le DOMAINE
 			otherIndex := 1 - index
@@ -287,26 +450,73 @@ func (h *Handler) handleMouse() error {
 		}
 
 	} else if state&entity.Revealed != 0 {
+		// On délègue à une méthode dédiée pour gérer la victoire et les logs
+		if h.handlePortalClick(ent, gridID, pos) {
+			return nil
+		}
+
 		if ent.GetType() == entity.TypeTrap {
-			fmt.Printf("[ACTION] Suppression du piège en %v\n", pos)
-			h.world.RemoveEntity(ent.GetID())
-			for i, p := range h.revealedTiles {
-				if p == pos {
-					h.revealedTiles = append(h.revealedTiles[:i], h.revealedTiles[i+1:]...)
-					break
+			// NOUVELLE LOGIQUE : Si c'est le seul révélé, on peut s'en débarrasser (Match)
+			if len(h.revealedTiles) == 1 && h.revealedTiles[0] == pos {
+				fmt.Printf("[ACTION] Défausse du piège en %v (Compte comme un match)\n", pos)
+				cmd := &usecase.DiscardTrapCommand{
+					World:    h.world,
+					GridID:   gridID,
+					Position: pos,
+					OnSuccess: func() {
+						h.revealedTiles = nil
+						h.isProcessing = false
+						h.ClearSelection()
+						if h.OnTurnEnd != nil {
+							h.OnTurnEnd()
+						}
+					},
+				}
+				if err := cmd.Execute(); err != nil {
+					fmt.Printf("[ACTION] Erreur défausse : %v\n", err)
+				}
+				return nil
+			}
+
+			// Sinon (si 0 ou 2 déjà révélés, ou clic sur un autre), flip normal pour recacher
+			flipDir := h.calculateFlipDirection(gridID)
+			cmd := &usecase.RevealTileCommand{
+				World:         h.world,
+				GridID:        gridID,
+				Position:      pos,
+				FlipDirection: flipDir,
+			}
+			if err := cmd.Execute(); err == nil {
+				fmt.Printf("[ACTION] Piège en %v recaché\n", pos)
+				for i, p := range h.revealedTiles {
+					if p == pos {
+						h.revealedTiles = append(h.revealedTiles[:i], h.revealedTiles[i+1:]...)
+						break
+					}
+				}
+				if h.selectedTile != nil && *h.selectedTile == pos {
+					h.ClearSelection()
 				}
 			}
 			return nil
 		}
 
 		if h.selectedTile != nil && h.selectedGridID == gridID && *h.selectedTile == pos {
-			fmt.Printf("[SÉLECTION] Tuile en %v désélectionnée\n", pos)
-			h.ClearSelection()
+			// Déjà sélectionnée : on ne fait rien (le clic gauche ne peut pas désélectionner)
+			info := h.getEntityInfo(ent)
+			fmt.Printf("[SÉLECTION] Tuile en %v déjà sélectionnée : %s\n", pos, info)
 		} else {
 			info := h.getEntityInfo(ent)
 			fmt.Printf("[SÉLECTION] Tuile en %v sur %s sélectionnée : %s\n", pos, gridID, info)
 			h.selectedTile = &pos
 			h.selectedGridID = gridID
+
+			// Réinitialise le timer si on clique sur une structure révélée
+			// (Dolmen, Obélisque, Portail)
+			if ent.GetType() == entity.TypeStructure && h.world.TurnTimer != nil {
+				fmt.Println("[ACTION] Structure activée : Timer réinitialisé")
+				h.world.TurnTimer.Reset()
+			}
 		}
 	}
 	return nil
@@ -323,12 +533,28 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 		}
 	case actionbuttons.BtnSkip:
 		fmt.Println("[ACTION] Bouton Skip activé")
+		h.skipPending = true
+		h.isProcessing = true
 		h.processSkip()
+		// Si aucune animation n'est lancée immédiatement, on reset tout de suite
 		if h.world.TurnTimer != nil {
-			h.world.TurnTimer.Reset()
+			if len(h.world.Components.QueryByComponent("moving_animation")) == 0 {
+				h.world.TurnTimer.Reset()
+				h.skipPending = false
+				h.isProcessing = false
+			}
 		}
 	case actionbuttons.BtnEndTurn:
 		fmt.Println("[ACTION] Bouton End Turn activé")
+		// Si le portail est déployé, ce bouton agit comme un instant victory
+		if h.victoryTimer != nil && h.victoryTimer.Running {
+			if h.OnVictory != nil {
+				h.OnVictory()
+			}
+			h.victoryTimer = nil
+			return
+		}
+
 		// Si des tuiles sont révélées mais non matchées, on les recache d'abord
 		if len(h.revealedTiles) > 0 {
 			h.hideRevealedTiles()
@@ -349,13 +575,84 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 
 // processSkip recache les tuiles révélées et termine le tour.
 func (h *Handler) processSkip() {
+	// Si rien à cacher, on se contente d'appeler OnTurnEnd (le reset du timer est géré ailleurs)
 	if len(h.revealedTiles) == 0 {
-		h.isProcessing = false
+		if h.OnTurnEnd != nil {
+			h.OnTurnEnd()
+		}
 		return
 	}
 
-	h.hideRevealedTiles()
-	h.isProcessing = false
+	// --- NOUVEAU : Logique de Skip (Pénalité si Match Valide manqué) ---
+	if len(h.revealedTiles) == 2 {
+		pos1 := h.revealedTiles[0]
+		pos2 := h.revealedTiles[1]
+		gridID := h.selectedGridID
+		if gridID == "" {
+			gridID = h.world.CurrentGridID
+		}
+
+		grid, ok := h.world.GetGrid(gridID)
+		if ok {
+			tile1, _ := grid.Get(pos1)
+			tile2, _ := grid.Get(pos2)
+
+			if len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
+				id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+				id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+				e1, _ := h.world.Entities.Get(entity.ID(id1))
+				e2, _ := h.world.Entities.Get(entity.ID(id2))
+
+				if e1 != nil && e2 != nil {
+					// On vérifie si c'était un match valide
+					isMatch := false
+					res1, isRes1 := e1.(*domain.Resource)
+					res2, isRes2 := e2.(*domain.Resource)
+					cre1, isCre1 := e1.(*domain.Creature)
+					cre2, isCre2 := e2.(*domain.Creature)
+
+					if isRes1 && isRes2 {
+						res, err := h.assocEngine.TryAssociate(res1, res2)
+						if err == nil && res.Success {
+							isMatch = true
+						}
+					} else if isCre1 && isCre2 && cre1.Species == cre2.Species {
+						isMatch = true
+					}
+
+					if isMatch {
+						creatureCount := 0
+						if isCre1 {
+							creatureCount++
+						}
+						if isCre2 {
+							creatureCount++
+						}
+
+						if creatureCount > 0 {
+							fmt.Printf("[DEBUG] SKIP d'une paire valide contenant des créatures (Pos: %v, %v)\n", pos1, pos2)
+							damage := creatureCount * 10
+							fmt.Printf("[COMBAT] Skip d'un match VALIDE avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
+							h.world.Player.TakeDamage(damage, "creature_fail")
+
+							h.world.EventBus.Publish(event.Event{
+								Type:     event.PlayerDamaged,
+								SourceID: "system",
+								Payload: map[string]interface{}{
+									"damage": damage,
+									"type":   "creature_fail",
+									"reason": "skipped_valid_match",
+								},
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// On cache les tuiles révélées puis déclenche la fin de tour.
+	h.hideAllTilesInGrid()
 	h.ClearSelection()
 
 	if h.OnTurnEnd != nil {
@@ -363,7 +660,7 @@ func (h *Handler) processSkip() {
 	}
 }
 
-// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles.
+// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles avec animation basée sur la pente.
 func (h *Handler) hideRevealedTiles() {
 	gridID := h.selectedGridID
 	if gridID == "" {
@@ -382,9 +679,51 @@ func (h *Handler) hideRevealedTiles() {
 		}
 		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
 		if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
-			ent.SetState(entity.Hidden)
+			// On ne flip que si elle est déjà révélée
+			if ent.GetState()&entity.Revealed != 0 {
+				// On utilise la pente (Tilt) de la parcelle pour une fermeture "naturelle"
+				flipDir := plot.Tilt.ToFlipDirection()
+				_, _ = h.world.FlipTile(gridID, pos, flipDir)
+
+				// Notification immédiate pour déclencher l'animation dans le renderer
+				h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+					entity.Position(pos), topID, gridID, flipDir))
+			}
 		}
 	}
+	h.revealedTiles = nil
+}
+
+// HideAllTilesInGrid parcourt toute la grille et passe TOUTES les entités révélées en état Hidden avec animation basée sur la pente.
+func (h *Handler) hideAllTilesInGrid() {
+	gridID := h.selectedGridID
+	if gridID == "" {
+		gridID = h.world.CurrentGridID
+	}
+	grid, ok := h.world.GetGrid(gridID)
+	if !ok {
+		h.revealedTiles = nil
+		return
+	}
+
+	// On parcourt toutes les positions de la grille
+	for _, plot := range grid.Plots {
+		if len(plot.EntitiesID) == 0 {
+			continue
+		}
+		// On ne flip que l'entité au sommet si elle est révélée
+		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+		if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
+			if ent.GetState()&entity.Revealed != 0 {
+				flipDir := plot.Tilt.ToFlipDirection()
+				_, _ = h.world.FlipTile(gridID, plot.Position, flipDir)
+
+				h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+					entity.Position(plot.Position), topID, gridID, flipDir))
+			}
+		}
+	}
+	// On réinitialise les tuiles révélées puisque tout est masqué
 	h.revealedTiles = nil
 }
 
@@ -432,6 +771,23 @@ func (h *Handler) processMatchAttempt() {
 		return
 	}
 
+	// CAS VICTOIRE PAR MATCH : Tout duo de portails révélés (Même grille)
+	isP1Portal := e1.HasTag("finish_portal") || e1.HasTag("portable_portal")
+	isP2Portal := e2.HasTag("finish_portal") || e2.HasTag("portable_portal")
+
+	if isP1Portal && isP2Portal {
+		// On autorise : Finish + Portable OU Finish + Finish (si duplicata) OU Portable + Portable (si duplicata)
+		// L'important est d'avoir deux portails "actifs" ensemble.
+		fmt.Println("[MATCH] ✅ La paire de portails est réunie ! VICTOIRE.")
+		if h.OnVictory != nil {
+			h.OnVictory()
+		}
+		h.revealedTiles = nil
+		h.isProcessing = false
+		h.ClearSelection()
+		return
+	}
+
 	if e1.GetType() == entity.TypeTrap && e2.GetType() == entity.TypeTrap {
 		fmt.Println("[MATCH] ✅ Deux pièges appairés ! Ils sont supprimés.")
 		h.world.RemoveEntity(e1.GetID())
@@ -446,15 +802,27 @@ func (h *Handler) processMatchAttempt() {
 	}
 
 	// CAS ÉCHEC : Un piège et autre chose (Ressource ou Créature)
-	if e1.GetType() == entity.TypeTrap || e2.GetType() == entity.TypeTrap {
-		fmt.Printf("[MATCH] ❌ Échec : %s ne peut pas être appairé avec un Piège.\n", h.getEntityInfo(e1))
+	if (e1.GetType() == entity.TypeTrap || e2.GetType() == entity.TypeTrap) &&
+		(e1.GetType() != entity.TypeTrap || e2.GetType() != entity.TypeTrap) {
+		fmt.Printf("[MATCH] ❌ Échec : %s et %s ne peuvent pas être appairés.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
 		h.revealedTiles = nil
 		h.isProcessing = false
 		h.ClearSelection()
 
-		// On recache les entités
-		e1.SetState(entity.Hidden)
-		e2.SetState(entity.Hidden)
+		// On recache les entités avec animation basée sur la pente (Slope)
+		p1, _ := grid.Get(pos1)
+		p2, _ := grid.Get(pos2)
+		fDir1 := p1.Tilt.ToFlipDirection()
+		fDir2 := p2.Tilt.ToFlipDirection()
+
+		_, _ = h.world.FlipTile(gridID, pos1, fDir1)
+		_, _ = h.world.FlipTile(gridID, pos2, fDir2)
+
+		h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(pos1), string(e1.GetID()), gridID, fDir1))
+		h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(pos2), string(e2.GetID()), gridID, fDir2))
+
 		if h.OnTurnEnd != nil {
 			h.OnTurnEnd()
 		}
@@ -506,6 +874,12 @@ func (h *Handler) handleKeyboard() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
 		if h.OnToggleInvDetails != nil {
 			h.OnToggleInvDetails()
+		}
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyT) {
+		if h.OnToggleAssetsDetails != nil {
+			h.OnToggleAssetsDetails()
 		}
 	}
 
@@ -610,6 +984,13 @@ func (h *Handler) handleKeyboard() {
 		}
 	}
 
+	// F8: Cheat - retirer l'état bloqué des tuiles
+	if inpututil.IsKeyJustPressed(ebiten.KeyF8) {
+		if h.OnClearBlocked != nil {
+			h.OnClearBlocked(h.GetCurrentGridID())
+		}
+	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeyC) {
 		fmt.Println("[KEY] C : Nettoyage du plateau")
 		if h.OnClearBoard != nil {
@@ -642,20 +1023,25 @@ func (h *Handler) handleKeyboard() {
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		fmt.Println("[ACTION] Réinitialisation de la rotation")
-		if h.OnResetRotation != nil {
-			h.OnResetRotation()
+		if grid, ok := h.world.GetCurrentGrid(); ok {
+			for int(grid.MainBearing) != 0 {
+				_ = h.world.RotateGrid(grid.ID)
+			}
 		}
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyEqual) || inpututil.IsKeyJustPressed(ebiten.KeyKPEqual) {
-		if h.OnRotateBoard != nil {
-			h.OnRotateBoard(15)
-		}
+		fmt.Println("[ACTION] Rotation horaire (+90°)")
+		cmd := &usecase.RotateGridCommand{World: h.world, GridID: h.GetCurrentGridID()}
+		_ = cmd.Execute()
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyMinus) || inpututil.IsKeyJustPressed(ebiten.KeyKPSubtract) {
-		if h.OnRotateBoard != nil {
-			h.OnRotateBoard(-15)
+		fmt.Println("[ACTION] Rotation anti-horaire (-90°)")
+		// 3 rotations horaires = 1 rotation anti-horaire
+		for i := 0; i < 3; i++ {
+			cmd := &usecase.RotateGridCommand{World: h.world, GridID: h.GetCurrentGridID()}
+			_ = cmd.Execute()
 		}
 	}
 
@@ -668,7 +1054,7 @@ func (h *Handler) handleKeyboard() {
 }
 
 func (h *Handler) handleNavigationKeys() {
-	var dir board.Direction
+	var dir entity.Direction
 	var pressed bool
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
@@ -786,7 +1172,7 @@ func (h *Handler) getHoveredTile() (board.Position, string, bool) {
 	return h.renderer.ScreenToGrid(x, y, h.world)
 }
 
-func (h *Handler) getClickedExit() (board.Direction, int, bool) {
+func (h *Handler) getClickedExit() (entity.Direction, int, bool) {
 	x, y := ebiten.CursorPosition()
 	// Coordonnées relatives au Playmat
 	px := float64(x) - ui.PlaymatX
@@ -795,7 +1181,7 @@ func (h *Handler) getClickedExit() (board.Direction, int, bool) {
 	return h.checkExitClick(px, py)
 }
 
-func (h *Handler) checkExitClick(px, py float64) (board.Direction, int, bool) {
+func (h *Handler) checkExitClick(px, py float64) (entity.Direction, int, bool) {
 	if px >= ui.ExitNorthX && px < ui.ExitNorthX+ui.ExitNorthW && py >= ui.ExitNorthY && py < ui.ExitNorthY+ui.ExitNorthH {
 		index := 0
 		if px >= ui.ExitNorthX+ui.TileSize {
@@ -841,7 +1227,7 @@ func (h *Handler) calculateFlipDirection(gridID string) domain.FlipDirection {
 	}
 
 	tileSize := h.renderer.GetTileSize()
-	return board.CalculateFlipDirection(tileSize, localX, localY)
+	return entity.CalculateFlipDirection(tileSize, localX, localY)
 }
 
 func (h *Handler) renderHighlights(screen *ebiten.Image) {
@@ -925,8 +1311,91 @@ func (h *Handler) SetPortablePortalMode(active bool) {
 	h.portablePortalMode = active
 }
 
+func (h *Handler) StartVictoryTimer(duration float64) {
+	h.victoryTimer = domain.NewTurnTimer(duration)
+	h.victoryTimer.Reset()
+}
+
+func (h *Handler) GetVictoryTimerProgress() float64 {
+	if h.victoryTimer == nil {
+		return 0
+	}
+	return h.victoryTimer.Progress()
+}
+
+func (h *Handler) IsVictoryTimerActive() bool {
+	return h.victoryTimer != nil && h.victoryTimer.Running
+}
+
 func (h *Handler) IsPortablePortalMode() bool {
 	return h.portablePortalMode
+}
+
+// handlePortalClick gère les interactions avec les portails révélés.
+// Retourne true si l'entrée a été consommée (victoire).
+func (h *Handler) handlePortalClick(ent entity.Entity, gridID string, pos board.Position) bool {
+	state := ent.GetState()
+
+	// --- LOGS CONSOLE POUR LES PORTAILS ---
+	if ent.HasTag("start_portal") {
+		fmt.Println("[PORTAIL] Les portails de départ ne peuvent pas être utilisés.")
+	} else if ent.HasTag("portable_portal") {
+		stateStr := h.formatState(state)
+		fmt.Printf("[PORTAIL] Zone: %s, Position: (%d,%d), Etat: %s\n", gridID, pos.X, pos.Y, stateStr)
+	} else if ent.HasTag("finish_portal") {
+		stateStr := h.formatState(state)
+		fmt.Printf("[PORTAIL] Position: (%d,%d), Etat: %s\n", pos.X, pos.Y, stateStr)
+	}
+
+	// CAS VICTOIRE : Portail de fin ou Portail portable déployé
+	isFinish := ent.HasTag("finish_portal")
+	isPortable := ent.HasTag("portable_portal")
+
+	if isFinish || isPortable {
+		// On cherche l'autre partie du duo sur N'IMPORTE QUELLE grille
+		targetTag := "portable_portal"
+		if isPortable {
+			targetTag = "finish_portal"
+		}
+
+		foundOther := false
+		for _, e := range h.world.Entities.GetAllActive() {
+			// On vérifie que l'autre portail existe et est RÉVÉLÉ
+			if e.HasTag(targetTag) && e.GetState()&entity.Revealed != 0 {
+				foundOther = true
+				break
+			}
+		}
+
+		if foundOther {
+			fmt.Println("[VICTOIRE] Portail final activé !")
+			if h.OnVictory != nil {
+				h.OnVictory()
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Handler) formatState(state entity.TileState) string {
+	parts := []string{}
+	if state&entity.Hidden != 0 {
+		parts = append(parts, "Caché")
+	}
+	if state&entity.Revealed != 0 {
+		parts = append(parts, "Révélé")
+	}
+	if state&entity.Matched != 0 {
+		parts = append(parts, "Appairé")
+	}
+	if state&entity.Blocked != 0 {
+		parts = append(parts, "Bloqué")
+	}
+	if len(parts) == 0 {
+		return "Inconnu"
+	}
+	return "" + parts[0] // On retourne le premier état majeur pour la lisibilité
 }
 
 // ResetTimerSkip est appelé par l'app quand le timer temps réel expire.
@@ -948,6 +1417,7 @@ func (h *Handler) ResetGameState() {
 	h.selectedGridID = ""
 	h.revealedTiles = nil
 	h.isProcessing = false
+	h.victoryTimer = nil
 }
 
 // exitMatchable est un wrapper pour soumettre les sorties au moteur d'association

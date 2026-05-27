@@ -3,10 +3,11 @@ package meta
 type DifficultyLevel string
 
 const (
-	LevelEasy   DifficultyLevel = "Easy"   // Révèle tout au début
-	LevelNormal DifficultyLevel = "Normal" // Révèle une tuile sur deux
-	LevelHard   DifficultyLevel = "Hard"   // Rien n'est révélé
-	LevelInsane DifficultyLevel = "Insane" // Révèle, mais se recache très vite
+	LevelEasy     DifficultyLevel = "Easy"     // Révèle tout au début
+	LevelNormal   DifficultyLevel = "Normal"   // Révèle une tuile sur deux
+	LevelHard     DifficultyLevel = "Hard"     // Rien n'est révélé
+	LevelInsane   DifficultyLevel = "Insane"   // Révèle, mais se recache très vite
+	LevelPlaytest DifficultyLevel = "Playtest" // Mode de test dense
 )
 
 type DifficultySettings struct {
@@ -20,13 +21,13 @@ type DifficultySettings struct {
 func GetSettings(level DifficultyLevel) DifficultySettings {
 	switch level {
 	case LevelEasy:
-		return DifficultySettings{Level: LevelEasy, PreviewDuration: 5.0, PreviewRatio: 1.0, NavThreshold: 0.25, TurnTimerDuration: 10.0}
+		return DifficultySettings{Level: LevelEasy, PreviewDuration: 1.3, PreviewRatio: 1.0, NavThreshold: 0.5, TurnTimerDuration: 15.0}
 	case LevelNormal:
-		return DifficultySettings{Level: LevelNormal, PreviewDuration: 3.0, PreviewRatio: 0.5, NavThreshold: 0.50, TurnTimerDuration: 8.0}
+		return DifficultySettings{Level: LevelNormal, PreviewDuration: 0.8, PreviewRatio: 0.5, NavThreshold: 0.6, TurnTimerDuration: 10.0}
 	case LevelHard:
-		return DifficultySettings{Level: LevelHard, PreviewDuration: 0.0, PreviewRatio: 0.0, NavThreshold: 0.75, TurnTimerDuration: 5.0}
+		return DifficultySettings{Level: LevelHard, PreviewDuration: 0.3, PreviewRatio: 0.8, NavThreshold: 0.7, TurnTimerDuration: 5.0}
 	case LevelInsane:
-		return DifficultySettings{Level: LevelInsane, PreviewDuration: 1.0, PreviewRatio: 1.0, NavThreshold: 1.00, TurnTimerDuration: 4.0}
+		return DifficultySettings{Level: LevelInsane, PreviewDuration: 0.1, PreviewRatio: 1.0, NavThreshold: 0.8, TurnTimerDuration: 5.0}
 	default:
 		return GetSettings(LevelNormal)
 	}

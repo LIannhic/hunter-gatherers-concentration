@@ -27,6 +27,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font/basicfont"
 )
 
@@ -92,6 +93,7 @@ func NewApplication() (*Application, error) {
 	app.SaveMenu = renderer.NewSaveMenu()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
+	app.HUD.SetAssetsManager(app.Assets)
 
 	// Subscribe renderer to scanner events
 	app.Renderer.SubscribeToEvents(app.World)
@@ -112,6 +114,8 @@ func NewApplication() (*Application, error) {
 			}
 			return false
 		},
+		func() float64 { return app.Input.GetVictoryTimerProgress() },
+		func() bool { return app.Input.IsVictoryTimerActive() },
 	)
 	app.Renderer.ActionButtons = btnManager
 	app.Input.SetActionButtonsManager(btnManager)
@@ -136,19 +140,26 @@ func NewApplication() (*Application, error) {
 	app.Input.SetRenderer(app.Renderer)
 	app.Input.OnToggleDetails = app.HUD.ToggleDetails
 	app.Input.OnToggleInvDetails = app.HUD.ToggleInventoryDetails
+	app.Input.OnToggleAssetsDetails = app.HUD.ToggleAssetsDetails
 	app.Input.OnFillInventory = func() {
 		fmt.Println("[DEBUG] Remplissage de l'inventaire avec des dreamberries et des limiers écho")
 		for i := 0; i < 15; i++ {
-// 			loot := &player.LootItem{
-// 				ID:          string(entity.NewID()),
-// 				Name:        "bulle de savon",
-// 				Type:        entity.TypeResource,
-// 				SourceID:    "debug",
-// 				IsDeletable: true,
-// 			}
-// 			_ = app.World.Player.Inventory.AddItem(loot)
-        _ = app.World.Player.Inventory.AddItem(player.NewDreamberryItem())
-        _ = app.World.Player.Inventory.AddItem(player.NewEchoHoundItem())
+			// 			loot := &player.LootItem{
+			// 				ID:          string(entity.NewID()),
+			// 				Name:        "bulle de savon",
+			// 				Type:        entity.TypeResource,
+			// 				SourceID:    "debug",
+			// 				IsDeletable: true,
+			// 			}
+			// 			_ = app.World.Player.Inventory.AddItem(loot)
+			_ = app.World.Player.Inventory.AddItem(player.NewDreamberryItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewEchoHoundItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewMoonstoneItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewWhisperingHerbItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewCrystalShardItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewSpecterItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewBurrowerItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
 		}
 	}
 
@@ -161,10 +172,17 @@ func NewApplication() (*Application, error) {
 		if err := cmd.Execute(); err != nil {
 			fmt.Printf("[ERROR] Impossible de déployer le portail portable : %v\n", err)
 		} else {
-			fmt.Println("[SUCCESS] Portail portable déployé.")
+			fmt.Println("[SUCCESS] Portail portable déployé. Démarrage du timer de victoire.")
 			app.HUD.ClearActiveLootSelection()
 			app.Input.SetPortablePortalMode(false)
+
+			// Démarre le timer de victoire de 5 secondes
+			app.Input.StartVictoryTimer(5.0)
 		}
+	}
+
+	app.Input.OnVictory = func() {
+		app.HUD.ShowVictory()
 	}
 
 	// 7. Configure les callbacks
@@ -308,12 +326,12 @@ func (app *Application) setupCallbacks() {
 			species string
 			desc    string
 		}{
-			{"lumifly", "Volant (Over)"},
-			{"shadowstalker", "Chasseur (Shadow)"},
-			{"burrower", "Fouisseur (Under)"},
-			{"specter", "Fantôme (Phase)"},
-			{"echo_hound", "Rapide (Echo)"},
-			{"fleeing_sprite", "Fuyard (Repulsion)"},
+			{"lumifly", "Flying (Over)"},
+			{"shadowstalker", "Hunter (Shadow)"},
+			{"burrower", "Burrower (Under)"},
+			{"specter", "Ghost (Phase)"},
+			{"echo_hound", "Fast (Echo)"},
+			{"fleeing_sprite", "Fleeing (Repulsion)"},
 		}
 
 		spawned := 0
@@ -379,6 +397,17 @@ func (app *Application) setupCallbacks() {
 	// Callback switch grid
 	app.Input.OnSwitchGrid = func(gridID string) {
 		fmt.Printf("[ACTION] Switching to grid %s\n", gridID)
+
+		// Extraction et affichage du biome pour le diagnostic
+		if app.World != nil {
+			// Syntaxe Go avec vérification directe de la présence (booléen)
+			if g, ok := app.World.GetGrid(gridID); ok && g != nil {
+				fmt.Printf("[DEBUG-BIOME] Grid: %s | Biome Type: %s\n", gridID, g.Biome)
+			} else {
+				fmt.Printf("[DEBUG-BIOME] Impossible de lire le biome pour la grille %s\n", gridID)
+			}
+		}
+
 		cmd := &usecase.SwitchGridCommand{
 			World:  app.World,
 			GridID: gridID,
@@ -417,7 +446,9 @@ func (app *Application) setupDebugCallbacks() {
 
 	// F5: Révéler toutes les tuiles (cheat)
 	app.Input.OnRevealAll = func(gridID string) {
-		fmt.Println("[CHEAT] Révélation de TOUTES les tuiles du plateau")
+		fmt.Println("[CHEAT] Révélation instantanée de TOUTES les tuiles")
+		app.Renderer.ClearAnimations()
+
 		for _, gID := range app.World.GridOrder {
 			if grid, ok := app.World.GetGrid(gID); ok {
 				for _, tile := range grid.Plots {
@@ -426,19 +457,9 @@ func (app *Application) setupDebugCallbacks() {
 					}
 					topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
-						if e.GetState() == entity.Hidden {
+						if e.GetState()&entity.Hidden != 0 {
 							e.SetState(entity.Revealed)
-
-							// NOUVEAU : Enregistre l'activité pour les créatures
 							app.Engine.TrackTileReveal(tile.Position)
-
-							// Publie un événement pour forcer le renderer à mettre à jour les animations/états
-							app.World.EventBus.Publish(event.NewEntityRevealedEvent(
-								entity.Position{X: tile.Position.X, Y: tile.Position.Y},
-								string(e.GetID()),
-								gID,
-								board.FlipCenter,
-							))
 						}
 					}
 				}
@@ -448,7 +469,9 @@ func (app *Application) setupDebugCallbacks() {
 
 	// F6: Cacher toutes les tuiles (cheat)
 	app.Input.OnHideAll = func(gridID string) {
-		fmt.Println("[CHEAT] Masquage de TOUTES les tuiles du plateau")
+		fmt.Println("[CHEAT] Masquage instantané de TOUTES les tuiles")
+		app.Renderer.ClearAnimations()
+
 		for _, gID := range app.World.GridOrder {
 			if grid, ok := app.World.GetGrid(gID); ok {
 				for _, tile := range grid.Plots {
@@ -458,13 +481,6 @@ func (app *Application) setupDebugCallbacks() {
 					topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
 						e.SetState(entity.Hidden)
-						// Publie un événement pour forcer le renderer
-						app.World.EventBus.Publish(event.NewEntityRevealedEvent(
-							entity.Position{X: tile.Position.X, Y: tile.Position.Y},
-							string(e.GetID()),
-							gID,
-							board.FlipCenter,
-						))
 					}
 				}
 			}
@@ -482,6 +498,43 @@ func (app *Application) setupDebugCallbacks() {
 		}
 		if err := cmd.Execute(); err == nil {
 			fmt.Println("[CHEAT] Sorties déscellées pour la zone actuelle")
+		}
+	}
+
+	// F8: Retirer état bloqué (cheat)
+	app.Input.OnClearBlocked = func(gridID string) {
+		if gridID == "" {
+			gridID = app.World.CurrentGridID
+		}
+
+		if grid, ok := app.World.GetGrid(gridID); ok {
+			count := 0
+			// On décide de l'action à faire basé sur la première entité trouvée
+			shouldBlock := true
+			first := true
+
+			for _, tile := range grid.Plots {
+				for _, id := range tile.EntitiesID {
+					if ent, ok := app.World.Entities.Get(entity.ID(id)); ok {
+						if first {
+							shouldBlock = (ent.GetState()&entity.Blocked == 0)
+							first = false
+						}
+						state := ent.GetState()
+						if shouldBlock {
+							ent.SetState(state | entity.Blocked)
+						} else {
+							ent.SetState(state & ^entity.Blocked)
+						}
+						count++
+					}
+				}
+			}
+			action := "appliqué à"
+			if !shouldBlock {
+				action = "retiré de"
+			}
+			fmt.Printf("[CHEAT] État bloqué %s %d tuile(s) dans la zone %s\n", action, count, gridID)
 		}
 	}
 
@@ -503,57 +556,78 @@ func (app *Application) setupEventSubscriptions() {
 		position, ok1 := e.Payload["position"].(entity.Position)
 		entityID, ok3 := e.Payload["entity_id"].(string)
 		gridID, ok4 := e.Payload["grid_id"].(string)
-		flipDir, ok5 := e.Payload["flip_direction"].(board.FlipDirection)
+		flipDir, ok5 := e.Payload["flip_direction"].(entity.FlipDirection)
 
 		if ok1 && ok3 && ok4 && ok5 {
 			// Enregistre la révélation pour les triggers de créatures
 			app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y})
 
+			var entState entity.TileState
+			var startTrans, endTrans entity.Transformation
+
+			// CAS 1 : Entité réelle (Ressource, Créature, Piège, Structure)
 			if ent, ok := app.World.Entities.Get(entity.ID(entityID)); ok {
-				// Démarre l'animation de flip
+				entState = ent.GetState()
+				endTrans = ent.GetTransformation()
+				applyTrans := flipDir.ToTransformation()
+				startTrans = entity.Compose(endTrans, applyTrans)
+			} else if strings.HasPrefix(entityID, "exit_") {
+				// CAS 2 : Tuile de sortie (Navigation)
+				// Format attendu: exit_north_0
+				parts := strings.Split(entityID, "_")
+				if len(parts) == 3 {
+					dirName := parts[1]
+					idx := 0
+					if parts[2] == "1" {
+						idx = 1
+					}
+
+					var dir entity.Direction
+					switch dirName {
+					case "north":
+						dir = entity.DirNorth
+					case "east":
+						dir = entity.DirEast
+					case "south":
+						dir = entity.DirSouth
+					case "west":
+						dir = entity.DirWest
+					}
+
+					if grid, ok := app.World.GetGrid(gridID); ok {
+						entState = grid.ExitsState[dir][idx]
+						endTrans = grid.ExitsTransform[dir][idx]
+						applyTrans := flipDir.ToTransformation()
+						startTrans = entity.Compose(endTrans, applyTrans)
+					}
+				}
+			}
+
+			// Démarre l'animation de flip si on a récupéré les infos
+			if entState != 0 {
 				app.Renderer.StartFlipAnimation(
 					gridID,
 					board.Position{X: position.X, Y: position.Y},
 					flipDir,
 					entityID,
-					ent.GetState(),
+					entState,
+					startTrans,
+					endTrans,
 				)
 			}
 		}
 	})
 }
 
-// spawnInitialEntities crée quelques entités au démarrage sur différents grids
+// spawnInitialEntities crée les entités de base au démarrage
 func (app *Application) spawnInitialEntities() {
-	fmt.Println("[INIT] Populating dream plane...")
+	fmt.Println("=== Spawning initial entities ===")
+	// 1. Délègue au domaine la création des structures fixes (dolmens, portails)
+	app.World.PopulateInitialStructures()
+
+	// 2. Remplissage aléatoire du reste (seulement les zones qui ne sont pas des portails)
 	for _, gridID := range app.World.GridOrder {
-		grid, ok := app.World.GetGrid(gridID)
-		if !ok {
-			continue
-		}
-
-		isPortalZone := gridID == app.World.DreamPlane.StartZoneID || gridID == app.World.DreamPlane.EndZoneID
-
-		// 1. Spawner les structures marquées par le générateur
-		for pos, plot := range grid.Plots {
-			if plot.StructureID != "" {
-				stype := "unknown"
-				if plot.StructureID == "commencement_portal" || plot.StructureID == "finish_portal" {
-					stype = plot.StructureID
-				} else if strings.HasPrefix(plot.StructureID, "struct_") {
-					parts := strings.Split(plot.StructureID, "_")
-					if len(parts) >= 2 {
-						stype = parts[1]
-					}
-				}
-
-				if stype != "unknown" {
-					app.World.SpawnStructure(gridID, stype, entity.Position{X: pos.X, Y: pos.Y})
-				}
-			}
-		}
-
-		// 2. Remplissage aléatoire du reste (seulement si ce n'est pas une zone de portail)
+		isPortalZone := app.World.DreamPlane != nil && (gridID == app.World.DreamPlane.StartZoneID || gridID == app.World.DreamPlane.EndZoneID)
 		if !isPortalZone {
 			app.FillGridRandomly(gridID)
 		}
@@ -617,13 +691,12 @@ func (app *Application) updateMenu() error {
 				app.SaveMenu.UpdateMetas(metas)
 				app.SaveMenu.SetVisible(true)
 			}
-		} else if app.hasSaves {
-			// Bouton "Changer de profil" (situé sous le bouton démarrer)
-			if y > 410 && y < 450 && x > 300 && x < 500 {
-				metas, _ := app.Persistence.GetSaveSummaries()
-				app.SaveMenu.UpdateMetas(metas)
-				app.SaveMenu.SetVisible(true)
-			}
+		} else if app.TitleScreen.IsPlaytestButtonClicked(x, y) {
+			app.StartPlaytestGame()
+		} else if app.hasSaves && app.TitleScreen.IsProfileButtonClicked(x, y) {
+			metas, _ := app.Persistence.GetSaveSummaries()
+			app.SaveMenu.UpdateMetas(metas)
+			app.SaveMenu.SetVisible(true)
 		}
 	}
 	return nil
@@ -631,12 +704,54 @@ func (app *Application) updateMenu() error {
 
 // updatePlaying gère le jeu en cours
 func (app *Application) updatePlaying() error {
+	// Vérification Victoire
+	if app.HUD.IsVictoryVisible() {
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+			app.HUD.HideVictory()
+			app.ReturnToMenu()
+			return nil
+		}
+
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+			mx, my := ebiten.CursorPosition()
+			action := app.HUD.HandleVictoryClick(mx, my)
+			switch action {
+			case "replay":
+				app.HUD.HideVictory()
+				app.StartGameWithSlot(0)
+			case "menu":
+				app.HUD.HideVictory()
+				app.ReturnToMenu()
+			}
+		}
+		return nil
+	}
+
 	// Met à jour les processus temps réel (comme les timers de preview)
 	app.Engine.UpdateFrame()
 
 	// Mise à jour du compte à rebours temps réel (60 fps fixe)
 	if app.World.TurnTimer != nil {
-		expired := app.World.TurnTimer.Update(1.0 / 60.0)
+		dt := 1.0 / 60.0
+
+		// 1. ARRÊT DU TIMER : zones de départ et de fin
+		isPortalZone := app.World.DreamPlane != nil && (app.World.CurrentGridID == app.World.DreamPlane.StartZoneID || app.World.CurrentGridID == app.World.DreamPlane.EndZoneID)
+		if isPortalZone {
+			dt = 0 // Stoppe l'écoulement
+		}
+
+		// 2. RALENTISSEMENT : pendant la prévisualisation (mode portail portable)
+		if app.Input.IsPortablePortalMode() {
+			dt /= 5.0 // 5x plus lent
+		}
+
+		// 3. RALENTISSEMENT : pendant les animations de déplacement (UI)
+		if len(app.World.Components.QueryByComponent("moving_animation")) > 0 {
+			// Ralentit le timer pour que les animations soient visibles (x4 slower)
+			dt /= 4.0
+		}
+
+		expired := app.World.TurnTimer.Update(dt)
 		if expired {
 			fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
 			// Simule un Skip : recache les tuiles et consomme le tour
@@ -666,63 +781,63 @@ func (app *Application) updatePlaying() error {
 
 	// Gère les entrées HUD (ex: fermer fenêtre détails)
 	mx, my := ebiten.CursorPosition()
-if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-    // On mémorise l'index sélectionné AVANT le clic pour détecter le double-clic (usage)
-    prevSelectedIdx := app.HUD.GetSelectedLootIndex()
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		// On mémorise l'index sélectionné AVANT le clic pour détecter le double-clic (usage)
+		prevSelectedIdx := app.HUD.GetSelectedLootIndex()
 
-    if app.HUD.HandleClick(mx, my) {
-       newSelectedIdx := app.HUD.GetSelectedLootIndex()
+		if app.HUD.HandleClick(mx, my) {
+			newSelectedIdx := app.HUD.GetSelectedLootIndex()
 
-       app.Input.SetPortablePortalMode(app.HUD.IsPortablePortalSelected())
+			app.Input.SetPortablePortalMode(app.HUD.IsPortablePortalSelected())
 
-       // Si on a un double-clic valide sur un objet de l'inventaire
-       if prevSelectedIdx == newSelectedIdx && newSelectedIdx != -1 {
-          selectedItem := app.HUD.GetSelectedLootItem()
+			// Si on a un double-clic valide sur un objet de l'inventaire
+			if prevSelectedIdx == newSelectedIdx && newSelectedIdx != -1 {
+				selectedItem := app.HUD.GetSelectedLootItem()
 
-          if selectedItem != nil {
-             // 1. FACTORISATION : On cherche l'index réel dans l'inventaire une seule fois
-             inventoryIdx := -1
-             for i, item := range app.World.Player.Inventory.Items {
-                if item.ID == selectedItem.ID {
-                   inventoryIdx = i
-                   break
-                }
-             }
+				if selectedItem != nil {
+					// 1. FACTORISATION : On cherche l'index réel dans l'inventaire une seule fois
+					inventoryIdx := -1
+					for i, item := range app.World.Player.Inventory.Items {
+						if item.ID == selectedItem.ID {
+							inventoryIdx = i
+							break
+						}
+					}
 
-             // 2. DISPATCHER DE COMMANDES
-             if inventoryIdx >= 0 {
-                var cmd interface{ Execute() error } // Interface temporaire pour lier nos commandes
+					// 2. DISPATCHER DE COMMANDES
+					if inventoryIdx >= 0 {
+						var cmd interface{ Execute() error } // Interface temporaire pour lier nos commandes
 
-                switch selectedItem.Name {
-                case "echo_hound":
-                   cmd = &usecase.UseScannerItemCommand{
-                      World:     app.World,
-                      GridID:    app.World.CurrentGridID,
-                      ItemIndex: inventoryIdx,
-                   }
+						switch selectedItem.Name {
+						case "echo_hound":
+							cmd = &usecase.UseScannerItemCommand{
+								World:     app.World,
+								GridID:    app.World.CurrentGridID,
+								ItemIndex: inventoryIdx,
+							}
 
-                case "dreamberry":
-                   cmd = &usecase.UseDreamberryItemCommand{
-                      World:     app.World,
-                      ItemIndex: inventoryIdx,
-                   }
-                }
+						case "dreamberry", "moonstone", "crystal_shard", "whispering_herb", "specter", "burrower":
+							cmd = &usecase.UseLootItemCommand{
+								World:     app.World,
+								ItemIndex: inventoryIdx,
+							}
+						}
 
-                // 3. EXÉCUTION DE LA COMMANDE
-                if cmd != nil {
-                   if err := cmd.Execute(); err != nil {
-                      fmt.Printf("[ERROR] Échec de l'utilisation de %s : %v\n", selectedItem.Name, err)
-                   } else {
-                      fmt.Printf("[SUCCESS] %s utilisé avec succès.\n", selectedItem.Name)
-                      app.HUD.ClearActiveLootSelection()
-                   }
-                }
-             }
-          }
-       }
-       return nil
-    }
-}
+						if cmd != nil {
+							fmt.Printf("[ACTION] Tentative d'utilisation de %s...\n", selectedItem.Name)
+							if err := cmd.Execute(); err != nil {
+								fmt.Printf("[ERROR] Échec de l'utilisation de %s : %v\n", selectedItem.Name, err)
+							} else {
+								fmt.Printf("[SUCCESS] %s utilisé avec succès.\n", selectedItem.Name)
+								app.HUD.ClearActiveLootSelection()
+							}
+						}
+					}
+				}
+			}
+			return nil
+		}
+	}
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		if app.HUD.HandleRightClick(mx, my) {
 			return nil
@@ -738,9 +853,20 @@ if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 
 // updateGameOver gère l'écran de fin
 func (app *Application) updateGameOver() error {
-	// Retour au menu si on appuie sur une touche
-	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		app.ReturnToMenu()
+		return nil
+	}
+
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		mx, my := ebiten.CursorPosition()
+		action := app.HUD.HandleGameOverClick(mx, my)
+		switch action {
+		case "replay":
+			app.StartGameWithSlot(0)
+		case "menu":
+			app.ReturnToMenu()
+		}
 	}
 	return nil
 }
@@ -782,6 +908,21 @@ func (app *Application) StartGameWithSlot(slotID int) {
 
 		app.StartGame()
 	}
+}
+
+// StartPlaytestGame démarre une session de test dense
+func (app *Application) StartPlaytestGame() {
+	fmt.Println("[PLAYTEST] Starting playtest session")
+	app.sessionStartTime = time.Now()
+
+	app.World.Hub = meta.NewHub()
+	app.World.Player = player.New("playtest_player")
+	app.World.Difficulty = meta.GetSettings(meta.LevelPlaytest)
+
+	// Utilise le layout de test
+	app.World.GeneratePlaytestLayout("playtest_plane")
+
+	app.StartGame()
 }
 
 // StartGame démarre le jeu depuis le menu (logique commune)
@@ -831,6 +972,9 @@ func (app *Application) StartGame() {
 
 // ReturnToMenu retourne au menu principal
 func (app *Application) ReturnToMenu() {
+	// Cache les fenêtres de fin
+	app.HUD.HideVictory()
+
 	// Arrête le timer temps réel
 	if app.World.TurnTimer != nil {
 		app.World.TurnTimer.Stop()
@@ -887,7 +1031,7 @@ func (app *Application) Draw(screen *ebiten.Image) {
 
 // drawMenu dessine l'écran titre
 func (app *Application) drawMenu(screen *ebiten.Image) {
-	app.TitleScreen.Render(screen)
+	app.TitleScreen.Render(screen, app.hasSaves)
 
 	if app.hasSaves {
 		text.Draw(screen, "[ CHANGER DE PROFIL ]", basicfont.Face7x13, 335, 430, color.RGBA{150, 150, 255, 255})
@@ -923,8 +1067,32 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 // drawGameOver dessine l'écran de fin
 func (app *Application) drawGameOver(screen *ebiten.Image) {
 	screen.Fill(color.Black)
-	text.Draw(screen, "GAME OVER", basicfont.Face7x13, 350, 300, color.White)
-	text.Draw(screen, "Statistiques epuisees. Appuyez sur Echap pour recommencer.", basicfont.Face7x13, 200, 350, color.Gray{180})
+
+	winW, winH := 600, 400
+	x := (ui.ScreenWidth - winW) / 2
+	y := (ui.ScreenHeight - winH) / 2
+
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{40, 20, 20, 255}, true)
+	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 3, color.RGBA{255, 100, 100, 255}, true)
+
+	text.Draw(screen, "GAME OVER", basicfont.Face7x13, x+250, y+50, color.RGBA{255, 100, 100, 255})
+	text.Draw(screen, "Statistiques épuisées. Votre voyage s'arrête ici.", basicfont.Face7x13, x+120, y+100, color.White)
+
+	// Boutons
+	btnW, btnH := 160, 40
+
+	// Bouton REJOUER
+	bx1 := x + 100
+	by := y + 300
+	vector.DrawFilledRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), color.RGBA{80, 40, 40, 255}, true)
+	vector.StrokeRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
+	text.Draw(screen, "REJOUER", basicfont.Face7x13, bx1+50, by+25, color.White)
+
+	// Bouton MENU
+	bx2 := x + 340
+	vector.DrawFilledRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), color.RGBA{40, 40, 40, 255}, true)
+	vector.StrokeRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
+	text.Draw(screen, "MENU", basicfont.Face7x13, bx2+60, by+25, color.White)
 }
 
 // findEmptyPosition trouve une position vide aléatoire sur le grid

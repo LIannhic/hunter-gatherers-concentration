@@ -163,12 +163,12 @@ func TestConstants(t *testing.T) {
 		t.Error("TypeCreature constant mismatch")
 	}
 
-	if Hidden != 0 {
-		t.Error("Hidden constant mismatch")
+	if Hidden != 1 {
+		t.Errorf("Hidden constant mismatch: got %d, want 1", Hidden)
 	}
 
-	if Revealed != 1 {
-		t.Error("Revealed constant mismatch")
+	if Revealed != 2 {
+		t.Errorf("Revealed constant mismatch: got %d, want 2", Revealed)
 	}
 
 	if North != 0 {

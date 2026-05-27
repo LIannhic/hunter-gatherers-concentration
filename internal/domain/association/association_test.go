@@ -220,9 +220,9 @@ func (s *alwaysMatchStrategy) Resolve(a, b Matchable) (Result, error) {
 func TestGetStrategies(t *testing.T) {
 	engine := NewEngine()
 	strategies := engine.GetStrategies()
-	
-	// Should have 4 default strategies
-	if len(strategies) != 4 {
-		t.Errorf("Expected 4 strategies, got %d", len(strategies))
+
+	// Should have 5 default strategies
+	if len(strategies) != 5 {
+		t.Errorf("Expected 5 strategies, got %d", len(strategies))
 	}
 }

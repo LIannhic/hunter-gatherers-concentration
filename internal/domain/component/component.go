@@ -2,6 +2,8 @@ package component
 
 import (
 	"time"
+
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
 // Component est l'interface marqueur pour l'ECS
@@ -81,9 +83,9 @@ type Lifecycle struct {
 	TurnsInStage     int
 	TurnsToNext      int // -1 pour infini
 	CanPropagate     bool
-	PropagationCount int  // Nombre de nouvelles entités créées lors de la propagation par cycle
-	MaxPropagations  int  // Nombre total de cycles de propagation possibles (-1 pour infini)
-	PropagationsDone int  // Nombre de cycles déjà effectués
+	PropagationCount int // Nombre de nouvelles entités créées lors de la propagation par cycle
+	MaxPropagations  int // Nombre total de cycles de propagation possibles (-1 pour infini)
+	PropagationsDone int // Nombre de cycles déjà effectués
 	PropagationLevel int // 0 pour au plus bas
 }
 
@@ -137,10 +139,10 @@ type Matchable struct {
 
 func (m Matchable) Type() string { return "matchable" }
 
-func (m Matchable) GetMatchID() string       { return m.MatchID }
-func (m Matchable) GetLogicKey() string      { return m.LogicKey }
-func (m Matchable) GetElement() string       { return m.Element }
-func (m Matchable) GetNarrativeTag() string  { return m.NarrativeTag }
+func (m Matchable) GetMatchID() string      { return m.MatchID }
+func (m Matchable) GetLogicKey() string     { return m.LogicKey }
+func (m Matchable) GetElement() string      { return m.Element }
+func (m Matchable) GetNarrativeTag() string { return m.NarrativeTag }
 func (m Matchable) GetMatchTypes() []string { return m.MatchTypes }
 
 // Mobility pour créatures
@@ -159,7 +161,7 @@ type Behavior struct {
 	Aggression     int    // 0-100
 	Territorial    bool
 	Transformation string // ex: "pollinize", "break", "fertilize"
-	LeavesTraces   bool
+	LeavesTracks   bool
 }
 
 func (b Behavior) Type() string { return "behavior" }
@@ -229,3 +231,45 @@ type Concealment struct {
 }
 
 func (c Concealment) Type() string { return "concealment" }
+
+// --- Types partagés pour le Domaine ---
+
+// Orientation est un composant qui stocke la direction actuelle
+type Orientation struct {
+	Direction entity.Direction
+}
+
+func (o Orientation) Type() string { return "orientation" }
+
+func (o *Orientation) ToVector() entity.Position {
+	switch o.Direction {
+	case entity.DirNorth:
+		return entity.Position{X: 0, Y: -1}
+	case entity.DirEast:
+		return entity.Position{X: 1, Y: 0}
+	case entity.DirSouth:
+		return entity.Position{X: 0, Y: 1}
+	case entity.DirWest:
+		return entity.Position{X: -1, Y: 0}
+	}
+	return entity.Position{X: 0, Y: 0}
+}
+
+func (o *Orientation) Rotate(degrees int) {
+	steps := (degrees / 90) % 4
+	if steps < 0 {
+		steps += 4
+	}
+	o.Direction = entity.Direction((int(o.Direction) + steps) % 4)
+}
+
+// MovingAnimation gère l'état d'un déplacement fluide dans le temps
+type MovingAnimation struct {
+	StartX, StartY           float64 // Position de départ (en pixels)
+	CurrentX, CurrentY       float64 // Position actuelle calculée (en pixels)
+	TargetGridX, TargetGridY int     // Case de destination (sur la grille)
+	CurrentTick              int     // Frame actuelle de l'animation
+	DurationTicks            int     // Durée totale souhaitée (ex: 15 ou 30 ticks)
+}
+
+func (m MovingAnimation) Type() string { return "moving_animation" }

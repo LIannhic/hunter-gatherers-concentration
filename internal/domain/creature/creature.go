@@ -8,6 +8,13 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
+const (
+	DirNorth = entity.DirNorth
+	DirEast  = entity.DirEast
+	DirSouth = entity.DirSouth
+	DirWest  = entity.DirWest
+)
+
 // Creature est une entité vivante avec comportement
 type Creature struct {
 	entity.BaseEntity
@@ -16,12 +23,14 @@ type Creature struct {
 	Mobility        component.Mobility
 	Visual          component.Visual
 	MovementProfile *MovementProfile // configuration complète du mouvement
+	ThreatZone      []entity.Direction
 }
 
 func New(species string, pos entity.Position) *Creature {
 	c := &Creature{
 		BaseEntity: entity.NewBaseEntity(entity.TypeCreature),
 		Species:    species,
+		ThreatZone: []entity.Direction{entity.DirNorth}, // Par défaut face à elle
 	}
 	c.SetPosition(pos)
 	c.AddTag("creature")
@@ -39,6 +48,20 @@ func (c *Creature) SetMobility(m component.Mobility) {
 
 func (c *Creature) SetMovementProfile(m *MovementProfile) {
 	c.MovementProfile = m
+}
+
+func (c *Creature) GetOrientation() entity.Direction {
+	if c.MovementProfile != nil {
+		return c.MovementProfile.Orientation.Direction
+	}
+	return c.BaseEntity.GetOrientation()
+}
+
+func (c *Creature) SetOrientation(o entity.Direction) {
+	if c.MovementProfile != nil {
+		c.MovementProfile.Orientation.Direction = o
+	}
+	c.BaseEntity.SetOrientation(o)
 }
 
 func (c *Creature) GetComponent(name string) interface{} {
@@ -75,9 +98,9 @@ type WorldState interface {
 	GetResources(pos entity.Position, radius int) []string
 	IsValidMove(pos entity.Position) bool
 	GetTileState(pos entity.Position) string
-	GetEmptyPlots() []entity.Position // Retourne les positions des cases strictement vides
-	GetGridTotalPlots() int          // Nombre total de cases dans la grille
-	IsGridSaturatedWithTraps() bool  // Vérifie si plus aucune ressource n'est présente
+	GetEmptyPlots() []entity.Position                       // Retourne les positions des cases strictement vides
+	GetGridTotalPlots() int                                 // Nombre total de cases dans la grille
+	IsGridSaturatedWithTraps() bool                         // Vérifie si plus aucune ressource n'est présente
 	HasActivityNearby(pos entity.Position, radius int) bool // Détecte mouvement/révélation
 }
 
@@ -89,29 +112,24 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 		return Action{Type: "idle"}
 	}
 
-	// Logique simple basée sur l'état
 	switch c.Behavior.State {
 	case "spreading_moss":
 		currentPos := c.GetPosition()
 		emptyPlots := world.GetEmptyPlots()
 		totalPlots := world.GetGridTotalPlots()
 
-		// 1. DÉPÔT PRIORITAIRE : Si on est seul sur une case vide, on pose d'abord la mousse
 		if world.GetTileState(currentPos) == "alone" {
 			return Action{Type: "spawn_trap", Metadata: map[string]interface{}{"trap_type": "moss_lure"}}
 		}
 
-		// 2. RÉACTIVITÉ : S'il n'y a aucune activité dans le rayon de 4 cases, on reste immobile
 		if !world.HasActivityNearby(currentPos, 4) {
 			return Action{Type: "idle"}
 		}
 
-		// 3. FUITE : S'il n'y a plus aucun vide ET que la grille est saturée de pièges
 		if len(emptyPlots) == 0 && world.IsGridSaturatedWithTraps() {
 			return Action{Type: "flee"}
 		}
 
-		// AGRESSIVITÉ : Max (100) quand la moitié des cases sont vides
 		if totalPlots > 0 {
 			c.Behavior.Aggression = (len(emptyPlots) * 200) / totalPlots
 			if c.Behavior.Aggression > 100 {
@@ -119,10 +137,7 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 			}
 		}
 
-		// 4. NAVIGATION DÉTERMINISTE (Anticipation joueur)
 		if len(emptyPlots) > 0 {
-			fmt.Printf("[MOSS MONKEY] %s à %v voit %d cases vides\n", c.GetID(), currentPos, len(emptyPlots))
-
 			var nearest entity.Position
 			minDist := 9999
 			for _, p := range emptyPlots {
@@ -131,16 +146,12 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 					minDist = d
 					nearest = p
 				} else if d == minDist {
-					// Priorité déterministe : Haut puis Gauche pour la prévisibilité
 					if p.Y < nearest.Y || (p.Y == nearest.Y && p.X < nearest.X) {
 						nearest = p
 					}
 				}
 			}
 
-			fmt.Printf("[MOSS MONKEY] Cible choisie : %v (distance: %d)\n", nearest, minDist)
-
-			// Déplacement d'une case vers la cible
 			dx, dy := nearest.X-currentPos.X, nearest.Y-currentPos.Y
 			var move entity.Position
 			if abs(dx) > abs(dy) {
@@ -156,20 +167,15 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 		return Action{Type: "idle"}
 
 	case "fleeing":
-		// S'éloigne du joueur
 		playerPos := world.GetPlayerPosition()
 		creaturePos := c.GetPosition()
 
 		var bestMove entity.Position
 		maxDist := -1
 
-		// Teste les 4 directions
 		directions := []entity.Position{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 		for _, dir := range directions {
-			newPos := entity.Position{
-				X: creaturePos.X + dir.X,
-				Y: creaturePos.Y + dir.Y,
-			}
+			newPos := entity.Position{X: creaturePos.X + dir.X, Y: creaturePos.Y + dir.Y}
 			if world.IsValidMove(newPos) {
 				dist := abs(newPos.X-playerPos.X) + abs(newPos.Y-playerPos.Y)
 				if dist > maxDist {
@@ -181,7 +187,6 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 		return Action{Type: "move", Direction: bestMove}
 
 	case "hunting":
-		// Approche le joueur
 		playerPos := world.GetPlayerPosition()
 		creaturePos := c.GetPosition()
 
@@ -195,18 +200,13 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 			move.Y = sign(dy)
 		}
 
-		newPos := entity.Position{
-			X: creaturePos.X + move.X,
-			Y: creaturePos.Y + move.Y,
-		}
-
+		newPos := entity.Position{X: creaturePos.X + move.X, Y: creaturePos.Y + move.Y}
 		if world.IsValidMove(newPos) {
 			return Action{Type: "move", Direction: move}
 		}
 		return Action{Type: "idle"}
 
 	case "pollinating":
-		// Cherche les ressources à transformer
 		resources := world.GetResources(c.GetPosition(), 2)
 		if len(resources) > 0 {
 			return Action{
@@ -215,10 +215,9 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 				Metadata: map[string]interface{}{"effect": "pollinate"},
 			}
 		}
-		// Mouvement aléatoire
 		return randomMove(world, c.GetPosition())
 
-	default: // idle
+	default:
 		return randomMove(world, c.GetPosition())
 	}
 }
@@ -251,7 +250,10 @@ func sign(x int) int {
 	return 0
 }
 
-// Factory pour créer des créatures préconfigurées
+// ============================================================================
+// FACTORY REFACTORISÉE (Intégration fine des règles de perception)
+// ============================================================================
+
 type Factory struct {
 	ai AI
 }
@@ -267,37 +269,23 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 	case "lumifly":
 		c.SetBehavior(component.Behavior{
 			State:          "pollinating",
-			Aggression:     0,
-			Territorial:    false,
 			Transformation: "pollinize",
-			LeavesTraces:   true,
 		})
 		c.SetMobility(component.Mobility{
-			CanMove:     true,
-			MovePattern: "random",
-			Speed:       1,
+			CanMove: true,
+			Speed:   1,
 		})
 		c.SetMovementProfile(&MovementProfile{
-			Trigger: MovementTrigger{
-				Type: TriggerAuto,
+			Trigger:    MovementTrigger{Type: TriggerAuto},
+			Navigation: NavigationLogic{Type: NavWander, WanderBias: entity.Position{X: 0, Y: -1}},
+			Mode:       MovementMode{Type: ModeOver}, // Couche supérieure (Z-sorting haut)
+			Perception: PerceptionProfile{
+				Stealth:  StealthManifest, // Glissement visible à l'écran
+				Acoustic: AcousticSilent,  // Vol silencieux
 			},
-			Navigation: NavigationLogic{
-				Type:       NavWander,
-				WanderBias: entity.Position{X: 0, Y: -1},
-			},
-			Mode: MovementMode{
-				Type: ModeOver,
-			},
-			Frequency: MovementFrequency{
-				Type:  FreqDelay,
-				Delay: 1,
-			},
-			Orientation: Orientation{
-				Direction: DirNorth,
-			},
-			Collision: CollisionHandler{
-				Type: CollideSlide,
-			},
+			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Orientation: Orientation{Direction: DirNorth},
+			Collision:   CollisionHandler{Type: CollideSlide},
 		})
 		c.AddTag("flying")
 		c.AddTag("passive")
@@ -309,32 +297,21 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Territorial: true,
 		})
 		c.SetMobility(component.Mobility{
-			CanMove:     true,
-			MovePattern: "hunter",
-			Speed:       2,
+			CanMove: true,
+			Speed:   1,
 		})
 		c.SetMovementProfile(&MovementProfile{
-			Trigger: MovementTrigger{
-				Type: TriggerProximity,
-				Radius: 4,
+			Trigger:    MovementTrigger{Type: TriggerProximity, Radius: 4},
+			Navigation: NavigationLogic{Type: NavAttraction, Target: TargetPlayer},
+			Mode:       MovementMode{Type: ModeSwap}, // échange de place avec une tuile adjacente pour surprendre le joueur
+			Perception: PerceptionProfile{
+				Stealth:          StealthCloaked, // Totalement invisible à l'œil nu lors du mouvement
+				Acoustic:         AcousticSilent, // Pas de bruit
+				TelegraphsIntent: true,           // ajoute des traces de griffures sur les tuiles autour de lui
 			},
-			Navigation: NavigationLogic{
-				Type:   NavAttraction,
-				Target: TargetPlayer,
-			},
-			Mode: MovementMode{
-				Type: ModeShadow,
-			},
-			Frequency: MovementFrequency{
-				Type:     FreqVelocity,
-				Velocity: 2,
-			},
-			Orientation: Orientation{
-				Direction: DirNorth,
-			},
-			Collision: CollisionHandler{
-				Type: CollideBounce,
-			},
+			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
+			Orientation: Orientation{Direction: DirNorth},
+			Collision:   CollisionHandler{Type: CollideBounce},
 		})
 		c.AddTag("dangerous")
 		c.AddTag("aggressive")
@@ -346,45 +323,50 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Territorial: false,
 		})
 		c.SetMobility(component.Mobility{
-			CanMove:     true,
-			MovePattern: "burrow",
-			Speed:       1,
+			CanMove: true,
+			Speed:   1,
 		})
+
+		// Pour dessiner et contourner un espace de 3x3 cases,
+		// il faut faire 2 pas (translations) par côté.
+		squarePattern3x3 := []entity.Position{
+			{X: 1, Y: 0},  // 1 pas à Droite
+			{X: 0, Y: 1},  // 1 pas en Bas
+			{X: -1, Y: 0}, // 1 pas à Gauche
+			{X: 0, Y: -1}, // 1 pas en Haut
+		}
+
 		c.SetMovementProfile(&MovementProfile{
-			Trigger: MovementTrigger{
-				Type: TriggerOnReveal,
-			},
+			Trigger: MovementTrigger{Type: TriggerAuto},
 			Navigation: NavigationLogic{
-				Type: NavWander,
+				Type:        NavRelative,
+				PatrolRoute: squarePattern3x3,
+				PatrolIndex: 0,
 			},
-			Mode: MovementMode{
-				Type: ModeUnder,
+			Mode: MovementMode{Type: ModeUnder},
+			Perception: PerceptionProfile{
+				Stealth:       StealthManifest,
+				Acoustic:      AcousticSilent,
+				LeavesTracks:  true,
+				TrackType:     "mud",
+				TrackDuration: 2,
 			},
-			Frequency: MovementFrequency{
-				Type:  FreqDelay,
-				Delay: 2,
-			},
-			Orientation: Orientation{
-				Direction: DirNorth,
-			},
-			Collision: CollisionHandler{
-				Type: CollidePhase,
-				CanPhaseThrough: []string{"dirt", "soil"},
-			},
+			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Orientation: Orientation{Direction: DirNorth},
+			Collision:   CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"dirt", "soil"}},
 		})
 		c.AddTag("elusive")
 
 	case "specter":
 		c.SetBehavior(component.Behavior{
-			State:       "haunting",
-			Aggression:  60,
-			Territorial: false,
+			State:      "haunting",
+			Aggression: 60,
 		})
 		c.SetMobility(component.Mobility{
-			CanMove:     true,
-			MovePattern: "phase",
-			Speed:       1,
+			CanMove: true,
+			Speed:   1,
 		})
+		// Utilise le profil global réécrit dans movement.go
 		c.SetMovementProfile(SpecterProfile())
 		c.AddTag("ethereal")
 		c.AddTag("dangerous")
@@ -396,59 +378,55 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Territorial: true,
 		})
 		c.SetMobility(component.Mobility{
-			CanMove:     true,
-			MovePattern: "patrol",
-			Speed:       1,
+			CanMove: true,
+			Speed:   1,
 		})
-		// Patrouille: doit être configurée après création
-		c.SetMovementProfile(PassiveProfile())
+		// Se déplace une fois quand révélée, puis commence une patrouille basée sur son orientation
+		c.SetMovementProfile(&MovementProfile{
+			Trigger:    MovementTrigger{Type: TriggerOnReveal},
+			Navigation: NavigationLogic{Type: NavOrientation},
+			Mode:       MovementMode{Type: ModeNormal},
+			Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
+			Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+			Collision:  CollisionHandler{Type: CollideStop},
+		})
 		c.AddTag("static")
 
 	case "echo_hound":
 		c.SetBehavior(component.Behavior{
-			State:       "echoing",
-			Aggression:  50,
-			Territorial: false,
+			State:      "echoing",
+			Aggression: 50,
 		})
 		c.SetMobility(component.Mobility{
-			CanMove:     true,
-			MovePattern: "echo",
-			Speed:       3,
+			CanMove: true,
+			Speed:   1,
 		})
 		c.SetMovementProfile(&MovementProfile{
-			Trigger: MovementTrigger{
-				Type: TriggerOnEcho,
+			Trigger: MovementTrigger{Type: TriggerOnEcho},
+			// Quand une tile est révélée, se dirige vers la ressource la plus proche (dreamberries)
+			Navigation: NavigationLogic{Type: NavAttraction, Target: TargetResource, TargetName: "dreamberry"},
+			Mode:       MovementMode{Type: ModeNormal},
+			Perception: PerceptionProfile{
+				Stealth:       StealthManifest, // On le voit courir à toute vitesse
+				Acoustic:      AcousticEcho,    // Il fait énormément de bruit (lourd)
+				LeavesTracks:  true,            // Laisse de grosses traces de griffes
+				TrackType:     "claws",
+				TrackDuration: 2,
 			},
-			Navigation: NavigationLogic{
-				Type:   NavAttraction,
-				Target: TargetCursor,
-			},
-			Mode: MovementMode{
-				Type: ModeBento,
-			},
-			Frequency: MovementFrequency{
-				Type:     FreqVelocity,
-				Velocity: 3,
-			},
-			Orientation: Orientation{
-				Direction: DirNorth,
-			},
-			Collision: CollisionHandler{
-				Type: CollideSlide,
-			},
+			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
+			Orientation: Orientation{Direction: DirNorth},
+			Collision:   CollisionHandler{Type: CollideSlide},
 		})
 		c.AddTag("fast")
 
 	case "fleeing_sprite":
 		c.SetBehavior(component.Behavior{
-			State:       "fleeing",
-			Aggression:  0,
-			Territorial: false,
+			State:      "fleeing",
+			Aggression: 0,
 		})
 		c.SetMobility(component.Mobility{
-			CanMove:     true,
-			MovePattern: "flee",
-			Speed:       2,
+			CanMove: true,
+			Speed:   2,
 		})
 		c.SetMovementProfile(FleeingProfile())
 		c.AddTag("passive")
@@ -464,31 +442,21 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Speed:   1,
 		})
 		c.SetMovementProfile(&MovementProfile{
-			Trigger: MovementTrigger{
-				Type:   TriggerProximity,
-				Radius: 4,
+			Trigger:    MovementTrigger{Type: TriggerProximity, Radius: 4},
+			Navigation: NavigationLogic{Type: NavAttraction, Target: TargetEmpty},
+			Mode:       MovementMode{Type: ModeNormal},
+			Perception: PerceptionProfile{
+				Stealth:      StealthManifest, // Glissement normal
+				Acoustic:     AcousticSilent,
+				LeavesTracks: false, // Le singe mousse ne laisse pas de traces, mais des pièges
 			},
-			Navigation: NavigationLogic{
-				Type:   NavAttraction,
-				Target: TargetEmpty,
-			},
-			Mode: MovementMode{
-				Type: ModeBento,
-			},
-			Frequency: MovementFrequency{
-				Type:  FreqDelay,
-				Delay: 1,
-			},
-			Orientation: Orientation{
-				Direction: DirSouth,
-			},
-			Collision: CollisionHandler{
-				Type: CollideSlide,
-			},
+			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Orientation: Orientation{Direction: DirSouth},
+			Collision:   CollisionHandler{Type: CollideSlide},
 		})
 		c.AddTag("territorial")
 		c.AddTag("dangerous_on_reveal")
-		c.AddTag("climb") // Permet de passer par-dessus les autres tuiles
+		c.AddTag("climb")
 
 	default:
 		return nil, fmt.Errorf("espèce inconnue: %s", species)
@@ -504,7 +472,6 @@ func (f *Factory) CreatePatroller(species string, pos entity.Position, route []e
 		return nil, err
 	}
 
-	// Remplace le profil par un profil de patrouille
 	c.SetMovementProfile(PatrollerProfile(route))
 	c.SetBehavior(component.Behavior{
 		State:       "patrolling",
@@ -512,19 +479,78 @@ func (f *Factory) CreatePatroller(species string, pos entity.Position, route []e
 		Territorial: true,
 	})
 	c.SetMobility(component.Mobility{
-		CanMove:     true,
-		MovePattern: "patrol",
-		Speed:       1,
+		CanMove: true,
+		Speed:   1,
 	})
 	c.AddTag("patroller")
 
 	return c, nil
 }
 
-func (f *Factory) GetAI() AI {
-	return f.ai
+func (f *Factory) GetAI() AI   { return f.ai }
+func (f *Factory) SetAI(ai AI) { f.ai = ai }
+
+// GetActiveThreatDirections retourne les directions menacées réelles après transformation D4
+func (c *Creature) GetActiveThreatDirections() []entity.Direction {
+	transform := c.GetTransformation()
+	activeThreats := make([]entity.Direction, len(c.ThreatZone))
+
+	for i, localDir := range c.ThreatZone {
+		activeThreats[i] = entity.TransformDirection(localDir, transform)
+	}
+
+	return activeThreats
 }
 
-func (f *Factory) SetAI(ai AI) {
-	f.ai = ai
+// IsPositionThreatened vérifie si une position cible est menacée par la créature
+func (c *Creature) IsPositionThreatened(target entity.Position) bool {
+	currentPos := c.GetPosition()
+
+	// 1. Calcule la direction relative (vecteur unitaire)
+	dx := target.X - currentPos.X
+	dy := target.Y - currentPos.Y
+
+	var relDir entity.Direction
+	found := false
+
+	// Recherche de la direction correspondante parmi les 8 possibles
+	if dx == 0 && dy < 0 {
+		relDir = entity.DirNorth
+		found = true
+	} else if dx > 0 && dy < 0 {
+		relDir = entity.DirNorthEast
+		found = true
+	} else if dx > 0 && dy == 0 {
+		relDir = entity.DirEast
+		found = true
+	} else if dx > 0 && dy > 0 {
+		relDir = entity.DirSouthEast
+		found = true
+	} else if dx == 0 && dy > 0 {
+		relDir = entity.DirSouth
+		found = true
+	} else if dx < 0 && dy > 0 {
+		relDir = entity.DirSouthWest
+		found = true
+	} else if dx < 0 && dy == 0 {
+		relDir = entity.DirWest
+		found = true
+	} else if dx < 0 && dy < 0 {
+		relDir = entity.DirNorthWest
+		found = true
+	}
+
+	if !found {
+		return false
+	}
+
+	// 2. Vérifie si cette direction est dans les zones de menace actives
+	activeThreats := c.GetActiveThreatDirections()
+	for _, threat := range activeThreats {
+		if threat == relDir {
+			return true
+		}
+	}
+
+	return false
 }

@@ -6,46 +6,156 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
-// Stats représente les caractéristiques du joueur
-type Stats struct {
-	Health     int
-	MaxHealth  int
-	Mana       int
-	MaxMana    int
-	Sanity     int // Santé mentale pour les plans oniriques
-	MaxSanity  int
-	Experience int
-	Level      int
-}
+// --- Constantes ---
 
-// PortablePortal constants
+// IDs de source et noms pour les objets et ressources
 const (
 	PortablePortalItemSourceID   = "portable_portal"
 	PortablePortalItemName       = "portail portable"
 	PortablePortalLootTaxPercent = 25
+
+	EchoHoundItemSourceID        = "echo_hound_source"
+	EchoHoundItemName            = "echo_hound"
+
+	DreamberryItemSourceID       = "dreamberry_source"
+	DreamberryItemName           = "dreamberry"
+	MoonstoneItemSourceID        = "moonstone_source"
+	MoonstoneItemName            = "moonstone"
+	CrystalShardItemSourceID     = "crystal_shard_source"
+	CrystalShardItemName         = "crystal_shard"
+	WhisperingHerbItemSourceID   = "whispering_herb_source"
+	WhisperingHerbItemName       = "whispering_herb"
+	SpecterItemSourceID          = "specter_source"
+	SpecterItemName              = "specter"
+	BurrowerItemSourceID         = "burrower_source"
+	BurrowerItemName             = "burrower"
 )
 
-// EchoHound constants
-const (
-	EchoHoundItemSourceID = "echo_hound_source"
-	EchoHoundItemName     = "echo_hound"
-)
+// --- Types de base ---
 
-// Dreamberry constants
-const (
-    DreamberryItemSourceID = "dreamberry_source"
-    DreamberryItemName     = "dreamberry"
-)
-
-// LootItem représente un objet récolté
-type LootItem struct {
-	ID          string
-	Name        string
-	Type        entity.Type
-	SourceID    string
-	IsUsable    bool
-	IsDeletable bool // Si faux, l'objet ne peut pas être supprimé par le joueur
+// Stats représente les caractéristiques de progression et d'état du joueur.
+type Stats struct {
+	Health     int // Points de vie actuels
+	MaxHealth  int // Maximum de points de vie
+	Mana       int // Mana actuel pour les compétences
+	MaxMana    int // Maximum de mana
+	Sanity     int // Santé mentale (utilisée dans les plans oniriques)
+	MaxSanity  int // Maximum de santé mentale
+	Experience int // Points d'expérience accumulés au niveau actuel
+	Level      int // Niveau actuel du joueur
 }
+
+// LootItem représente un objet physique ou une entité capturée dans l'inventaire.
+type LootItem struct {
+	ID          string      // Identifiant unique de l'instance
+	Name        string      // Nom affiché de l'objet
+	Type        entity.Type // Catégorie d'objet (Artefact, Créature, Ressource...)
+	SourceID    string      // ID de référence pour les données sources (ex: atlas)
+	IsUsable    bool        // Si l'objet possède une action d'utilisation
+	IsDeletable bool        // Si l'objet peut être supprimé manuellement par le joueur
+}
+
+// BorderPosition définit l'ancrage du joueur sur la périphérie du plateau.
+type BorderPosition int
+
+const (
+	BorderTop BorderPosition = iota
+	BorderTopRight
+	BorderRight
+	BorderBottomRight
+	BorderBottom
+	BorderBottomLeft
+	BorderLeft
+	BorderTopLeft
+)
+
+func (b BorderPosition) String() string {
+	switch b {
+	case BorderTop:
+		return "Top"
+	case BorderTopRight:
+		return "TopRight"
+	case BorderRight:
+		return "Right"
+	case BorderBottomRight:
+		return "BottomRight"
+	case BorderBottom:
+		return "Bottom"
+	case BorderBottomLeft:
+		return "BottomLeft"
+	case BorderLeft:
+		return "Left"
+	case BorderTopLeft:
+		return "TopLeft"
+	default:
+		return "Unknown"
+	}
+}
+
+// Skills regroupe les capacités passives et les bonus débloqués.
+type Skills struct {
+	UnlockedAssociations []string       // Types d'associations autorisées
+	Resistances          map[string]int // Réductions de dégâts par type
+	VisionRange          int            // Portée de dévoilement autour du joueur
+	RevealEfficiency     float64        // Multiplicateur d'efficacité
+}
+
+// Inventory gère le stockage des objets et le comptage des ressources.
+type Inventory struct {
+	Items          []*LootItem    // Liste des objets occupant des slots individuels
+	ResourceCounts map[string]int // Compteurs pour les ressources empilables
+	MaxSize        int            // Capacité maximale totale (objets + ressources)
+	ScrollOffset   float64        // Décalage pour le rendu de l'interface d'inventaire
+}
+
+// Player est la structure principale représentant le personnage joueur.
+type Player struct {
+	ID            string
+	Stats         Stats
+	Inventory     Inventory
+	Skills        Skills
+	StatusEffects *StatusEffects
+	Position      entity.Position
+	anchor        BorderPosition // Position sur la bordure du plateau
+}
+
+// --- Constructeurs ---
+
+// New crée un nouveau joueur avec les statistiques et compétences de départ.
+func New(id string) *Player {
+	return &Player{
+		ID: id,
+		Stats: Stats{
+			Health:    100,
+			MaxHealth: 100,
+			Mana:      50,
+			MaxMana:   50,
+			Sanity:    100,
+			MaxSanity: 100,
+			Level:     1,
+		},
+		Inventory:     *NewInventory(30),
+		StatusEffects: NewStatusEffects(),
+		Skills: Skills{
+			UnlockedAssociations: []string{"identical"},
+			Resistances:          make(map[string]int),
+			VisionRange:          1,
+			RevealEfficiency:     1.0,
+		},
+	}
+}
+
+// NewInventory initialise un inventaire avec une capacité spécifiée.
+func NewInventory(maxSize int) *Inventory {
+	return &Inventory{
+		Items:          make([]*LootItem, 0, maxSize),
+		ResourceCounts: make(map[string]int),
+		MaxSize:        maxSize,
+		ScrollOffset:   0,
+	}
+}
+
+// Constructeurs d'objets spécifiques
 
 func NewPortablePortalItem() *LootItem {
 	return &LootItem{
@@ -73,31 +183,71 @@ func NewDreamberryItem() *LootItem {
 	return &LootItem{
 		ID:          string(entity.NewID()),
 		Name:        DreamberryItemName,
-		Type:        entity.TypeCreature,
+		Type:        entity.TypeResource,
 		SourceID:    DreamberryItemSourceID,
 		IsUsable:    true,
 		IsDeletable: true,
 	}
 }
 
-// Inventory inventaire du joueur
-type Inventory struct {
-	Items          []*LootItem    // Liste ordonnée des objets (slots)
-	ResourceCounts map[string]int // Quantités de ressources stockées
-	MaxSize        int
-	ScrollOffset   float64 // Changé en float64 pour défilement fluide
-}
-
-func NewInventory(maxSize int) *Inventory {
-	return &Inventory{
-		Items:          make([]*LootItem, 0, maxSize),
-		ResourceCounts: make(map[string]int),
-		MaxSize:        maxSize,
-		ScrollOffset:   0,
+func NewMoonstoneItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        MoonstoneItemName,
+		Type:        entity.TypeResource,
+		SourceID:    MoonstoneItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
 	}
 }
 
-// AddItem ajoute un objet à l'inventaire dans le premier slot disponible
+func NewCrystalShardItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        CrystalShardItemName,
+		Type:        entity.TypeResource,
+		SourceID:    CrystalShardItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewWhisperingHerbItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        WhisperingHerbItemName,
+		Type:        entity.TypeResource,
+		SourceID:    WhisperingHerbItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewSpecterItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        SpecterItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    SpecterItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewBurrowerItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        BurrowerItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    BurrowerItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+// --- Méthodes de l'Inventaire ---
+
+// AddItem ajoute un objet unique dans le premier slot disponible.
 func (inv *Inventory) AddItem(item *LootItem) error {
 	if inv.GetTotalItemCount()+itemCountForLoot(item) > inv.MaxSize {
 		return errors.New("inventaire plein")
@@ -106,12 +256,7 @@ func (inv *Inventory) AddItem(item *LootItem) error {
 	return nil
 }
 
-func itemCountForLoot(_ *LootItem) int {
-	// Les artefacts comptent comme un slot unique
-	return 1
-}
-
-// RemoveItem retire un objet par son index
+// RemoveItem retire l'objet à l'index spécifié.
 func (inv *Inventory) RemoveItem(index int) error {
 	if index < 0 || index >= len(inv.Items) {
 		return errors.New("index invalide")
@@ -120,59 +265,60 @@ func (inv *Inventory) RemoveItem(index int) error {
 	return nil
 }
 
+// AddResource incrémente la quantité d'une ressource.
 func (inv *Inventory) AddResource(resourceType string, amount int) error {
 	if amount <= 0 {
 		return errors.New("quantité invalide")
 	}
-
 	if inv.GetTotalItemCount()+amount > inv.MaxSize {
 		return errors.New("inventaire plein")
 	}
-
 	inv.ResourceCounts[resourceType] += amount
 	return nil
 }
 
+// RemoveResource décrémente la quantité d'une ressource et nettoie l'entrée si nulle.
 func (inv *Inventory) RemoveResource(resourceType string, amount int) error {
 	if amount <= 0 {
 		return errors.New("quantité invalide")
 	}
-
 	current := inv.GetResourceCount(resourceType)
 	if amount > current {
 		return errors.New("quantité insuffisante")
 	}
-
 	newCount := current - amount
 	if newCount == 0 {
 		delete(inv.ResourceCounts, resourceType)
 	} else {
 		inv.ResourceCounts[resourceType] = newCount
 	}
-
 	return nil
 }
 
+// GetResourceCount retourne le nombre d'unités possédées pour une ressource.
 func (inv *Inventory) GetResourceCount(resourceType string) int {
 	return inv.ResourceCounts[resourceType]
 }
 
+// HasResource vérifie la présence d'au moins une unité d'une ressource.
 func (inv *Inventory) HasResource(resourceType string) bool {
 	return inv.GetResourceCount(resourceType) > 0
 }
 
-// GetItem renvoie un objet sans le supprimer
+// GetItem retourne l'objet à l'index donné sans le supprimer.
 func (inv *Inventory) GetItem(index int) (*LootItem, error) {
-    if index < 0 || index >= len(inv.Items) {
-       return nil, errors.New("index invalide")
-    }
-    return inv.Items[index], nil
+	if index < 0 || index >= len(inv.Items) {
+		return nil, errors.New("index invalide")
+	}
+	return inv.Items[index], nil
 }
 
+// GetTotalItems retourne le nombre de slots d'objets occupés.
 func (inv *Inventory) GetTotalItems() int {
 	return len(inv.Items)
 }
 
+// GetTotalResourceCount retourne le total cumulé de toutes les ressources.
 func (inv *Inventory) GetTotalResourceCount() int {
 	total := 0
 	for _, count := range inv.ResourceCounts {
@@ -181,73 +327,30 @@ func (inv *Inventory) GetTotalResourceCount() int {
 	return total
 }
 
+// GetTotalItemCount retourne l'occupation totale de l'inventaire.
 func (inv *Inventory) GetTotalItemCount() int {
 	return inv.GetTotalItems() + inv.GetTotalResourceCount()
 }
 
+// IsFull vérifie si l'inventaire est à capacité maximale.
 func (inv *Inventory) IsFull() bool {
 	return inv.GetTotalItemCount() >= inv.MaxSize
 }
 
-// Skills capacités débloquées
-type Skills struct {
-	UnlockedAssociations []string // Types d'association débloqués
-	Resistances          map[string]int
-	VisionRange          int
-	RevealEfficiency     float64 // Réduction du coût de révélation
+// itemCountForLoot retourne le poids en slots d'un objet.
+func itemCountForLoot(_ *LootItem) int {
+	// Les objets occupent actuellement tous 1 slot.
+	return 1
 }
 
-// Player entité joueur
-type Player struct {
-	ID            string
-	Stats         Stats
-	Inventory     Inventory
-	Skills        Skills
-	StatusEffects *StatusEffects
-	Position      struct{ X, Y int }
+// --- Méthodes du Joueur ---
+
+// IsAlive vérifie si le joueur est toujours en vie.
+func (p *Player) IsAlive() bool {
+	return p.Stats.Health > 0
 }
 
-func New(id string) *Player {
-	return &Player{
-		ID: id,
-		Stats: Stats{
-			Health:    100,
-			MaxHealth: 100,
-			Mana:      50,
-			MaxMana:   50,
-			Sanity:    100,
-			MaxSanity: 100,
-			Level:     1,
-		},
-		Inventory:     *NewInventory(30),
-		StatusEffects: NewStatusEffects(),
-		Skills: Skills{
-			UnlockedAssociations: []string{"identical"},
-			Resistances:          make(map[string]int),
-			VisionRange:          1,
-			RevealEfficiency:     1.0,
-		},
-	}
-}
-
-// ConsumeMana consomme du mana pour une action
-func (p *Player) ConsumeMana(amount int) bool {
-	if p.Stats.Mana >= amount {
-		p.Stats.Mana -= amount
-		return true
-	}
-	return false
-}
-
-// ConsumeSanity diminue la santé mentale
-func (p *Player) ConsumeSanity(amount int) {
-	p.Stats.Sanity -= amount
-	if p.Stats.Sanity < 0 {
-		p.Stats.Sanity = 0
-	}
-}
-
-// TakeDamage applique des dégâts
+// TakeDamage applique des dégâts après réduction par les résistances.
 func (p *Player) TakeDamage(amount int, damageType string) {
 	resistance := p.Skills.Resistances[damageType]
 	actual := amount - (amount * resistance / 100)
@@ -257,7 +360,7 @@ func (p *Player) TakeDamage(amount int, damageType string) {
 	}
 }
 
-// Heal soigne le joueur
+// Heal restaure des points de vie (borné au max).
 func (p *Player) Heal(amount int) {
 	p.Stats.Health += amount
 	if p.Stats.Health > p.Stats.MaxHealth {
@@ -265,7 +368,16 @@ func (p *Player) Heal(amount int) {
 	}
 }
 
-// RestoreMana restaure le mana
+// ConsumeMana consomme du mana pour une action (retourne faux si insuffisant).
+func (p *Player) ConsumeMana(amount int) bool {
+	if p.Stats.Mana >= amount {
+		p.Stats.Mana -= amount
+		return true
+	}
+	return false
+}
+
+// RestoreMana restaure du mana (borné au max).
 func (p *Player) RestoreMana(amount int) {
 	p.Stats.Mana += amount
 	if p.Stats.Mana > p.Stats.MaxMana {
@@ -273,7 +385,23 @@ func (p *Player) RestoreMana(amount int) {
 	}
 }
 
-// GainExperience ajoute de l'XP et gère les niveaux
+// ConsumeSanity réduit la santé mentale (borné à 0).
+func (p *Player) ConsumeSanity(amount int) {
+	p.Stats.Sanity -= amount
+	if p.Stats.Sanity < 0 {
+		p.Stats.Sanity = 0
+	}
+}
+
+// RestoreSanity restaure la santé mentale (borné au max).
+func (p *Player) RestoreSanity(amount int) {
+	p.Stats.Sanity += amount
+	if p.Stats.Sanity > p.Stats.MaxSanity {
+		p.Stats.Sanity = p.Stats.MaxSanity
+	}
+}
+
+// GainExperience gère l'ajout d'XP et le passage de niveau.
 func (p *Player) GainExperience(xp int) {
 	p.Stats.Experience += xp
 	threshold := p.Stats.Level * 100
@@ -283,6 +411,7 @@ func (p *Player) GainExperience(xp int) {
 	}
 }
 
+// LevelUp augmente le niveau et les statistiques de base.
 func (p *Player) LevelUp() {
 	p.Stats.Level++
 	p.Stats.MaxHealth += 10
@@ -291,22 +420,86 @@ func (p *Player) LevelUp() {
 	p.Stats.Mana = p.Stats.MaxMana
 }
 
-// IsAlive vérifie si le joueur est en vie
-func (p *Player) IsAlive() bool {
-	return p.Stats.Health > 0
+// GetFlipDirection retourne la direction de bascule d'une tuile basée sur l'ancrage du joueur.
+func (b BorderPosition) GetFlipDirection() entity.FlipDirection {
+	switch b {
+	case BorderTop:
+		return entity.FlipTop
+	case BorderBottom:
+		return entity.FlipBottom
+	case BorderLeft:
+		return entity.FlipLeft
+	case BorderRight:
+		return entity.FlipRight
+	case BorderTopLeft:
+		return entity.FlipTopLeft
+	case BorderTopRight:
+		return entity.FlipTopRight
+	case BorderBottomLeft:
+		return entity.FlipBottomLeft
+	case BorderBottomRight:
+		return entity.FlipBottomRight
+	default:
+		return entity.FlipCenter
+	}
 }
 
-// UnlockAssociation débloque un nouveau type d'association
+// GetInwardDirection convertit l'ancre du joueur en direction cardinale vers l'intérieur du plateau.
+func (b BorderPosition) GetInwardDirection() entity.Direction {
+	switch b {
+	case BorderTop:
+		return entity.DirSouth
+	case BorderBottom:
+		return entity.DirNorth
+	case BorderLeft:
+		return entity.DirEast
+	case BorderRight:
+		return entity.DirWest
+	default:
+		return entity.DirNorth
+	}
+}
+
+// IsLookingAt vérifie si le joueur regarde vers une position donnée.
+func (p *Player) IsLookingAt(target entity.Position) bool {
+	dir := p.anchor.GetInwardDirection()
+	playerPos := p.Position
+
+	dx := target.X - playerPos.X
+	dy := target.Y - playerPos.Y
+
+	switch dir {
+	case entity.DirNorth:
+		return dy < 0
+	case entity.DirSouth:
+		return dy > 0
+	case entity.DirEast:
+		return dx > 0
+	case entity.DirWest:
+		return dx < 0
+	}
+	return false
+}
+
+// UnlockAssociation débloque une nouvelle règle d'association si pas déjà connue.
 func (p *Player) UnlockAssociation(assocType string) {
-	for _, a := range p.Skills.UnlockedAssociations {
-		if a == assocType {
-			return
-		}
+	if p.CanAssociate(assocType) {
+		return
 	}
 	p.Skills.UnlockedAssociations = append(p.Skills.UnlockedAssociations, assocType)
 }
 
-// CanAssociate vérifie si le joueur peut faire ce type d'association
+// GetAnchor retourne l'ancrage actuel du joueur.
+func (p *Player) GetAnchor() BorderPosition {
+	return p.anchor
+}
+
+// SetAnchor définit l'ancrage du joueur.
+func (p *Player) SetAnchor(anchor BorderPosition) {
+	p.anchor = anchor
+}
+
+// CanAssociate vérifie si un type d'association est débloqué.
 func (p *Player) CanAssociate(assocType string) bool {
 	for _, a := range p.Skills.UnlockedAssociations {
 		if a == assocType {

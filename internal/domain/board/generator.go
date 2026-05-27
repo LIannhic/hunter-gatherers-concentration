@@ -48,14 +48,14 @@ func (g *LayoutGenerator) GenerateDreamPlane(id string, level meta.DifficultyLev
 	var pathZoneIDs []string
 
 	// Zone de départ (Toujours 6x6 pour la config Portail)
-	startGrid := NewGrid("zone_start", 6, 6, BiomeForest)
+	startGrid := NewGrid("zone_start", 6, 6, BiomeDefault)
 	plane.AddZone(startGrid)
 	plane.StartZoneID = startGrid.ID
 	plane.Coords[startGrid.ID] = Position{4, 4} // Centre du 9x9 (0..8)
 	pathZoneIDs = append(pathZoneIDs, startGrid.ID)
 
 	// Zones intermédiaires
-	biomes := []BiomeType{BiomeForest, BiomeCave, BiomeDesert}
+	biomes := []BiomeType{BiomeForest, BiomeCave, BiomeDesert, BiomeSwamp}
 	for i := 0; i < pathLength; i++ {
 		biome := biomes[rand.Intn(len(biomes))]
 		gridID := fmt.Sprintf("zone_%d", i+1)
@@ -80,7 +80,7 @@ func (g *LayoutGenerator) GenerateDreamPlane(id string, level meta.DifficultyLev
 	lastID := pathZoneIDs[len(pathZoneIDs)-1]
 	dir, coords, ok := g.findAvailableDirectionAndCoords(plane, lastID)
 	if ok {
-		endGrid := NewGrid("zone_end", 6, 6, BiomeCave)
+		endGrid := NewGrid("zone_end", 6, 6, BiomeDefault)
 		plane.AddZone(endGrid)
 		plane.EndZoneID = endGrid.ID
 		plane.Coords[endGrid.ID] = coords
@@ -120,6 +120,23 @@ func (g *LayoutGenerator) GenerateDreamPlane(id string, level meta.DifficultyLev
 	return plane
 }
 
+// GeneratePlaytestPlane génère un monde fixe et dense pour le test
+func (g *LayoutGenerator) GeneratePlaytestPlane(id string) *DreamPlane {
+	plane := NewDreamPlane(id)
+
+	// Une seule zone 6x6 dense
+	startGrid := NewGrid("zone_playtest", 6, 6, BiomeForest)
+	plane.AddZone(startGrid)
+	plane.StartZoneID = startGrid.ID
+	plane.EndZoneID = startGrid.ID // Départ = Fin pour le test simple
+	plane.Coords[startGrid.ID] = Position{4, 4}
+
+	// Setup structures
+	g.SetupPortalArea(startGrid, true)
+
+	return plane
+}
+
 func (g *LayoutGenerator) findAvailableDirectionAndCoords(plane *DreamPlane, zoneID string) (Direction, Position, bool) {
 	currentPos := plane.Coords[zoneID]
 	allDirs := []Direction{North, South, East, West}
@@ -134,7 +151,7 @@ func (g *LayoutGenerator) findAvailableDirectionAndCoords(plane *DreamPlane, zon
 		}
 
 		// Calcule les nouvelles coordonnées
-		vec := d.Vector()
+		vec := DirectionVector(d)
 		newPos := Position{X: currentPos.X + vec.X, Y: currentPos.Y + vec.Y}
 
 		// Vérifie les limites 9x9 (0..8)
@@ -161,37 +178,44 @@ func (g *LayoutGenerator) findAvailableDirectionAndCoords(plane *DreamPlane, zon
 
 // SetupPortalArea configure les dolmens/obélisques autour du portail
 func (g *LayoutGenerator) SetupPortalArea(grid *Grid, isStart bool) {
-	// Structure en 2x2 (4 coins) dans un grid 6x6
-	// Coordonnées B2, B5, E2, E5 -> (1,1), (1,4), (4,1), (4,4)
-	corners := []Position{
-		{1, 1}, {1, 4}, {4, 1}, {4, 4},
-	}
-
 	structureType := "obelisk"
 	if isStart {
 		structureType = "dolmen"
 	}
 
-	for _, pos := range corners {
-		if plot, err := grid.Get(pos); err == nil {
-			// On marque la parcelle avec l'ID de structure
-			// Note: On utilisera World pour spawner les entités réelles plus tard
-			// ou on peut mettre un tag/métadonnée ici.
-			plot.StructureID = fmt.Sprintf("struct_%s_%d_%d", structureType, pos.X, pos.Y)
-			plot.Modifier.Obstructed = true // Les structures sont infranchissables
-		}
+	// Définition des zones spéciales
+	corners := map[Position]bool{
+		{1, 1}: true, {1, 4}: true, {4, 1}: true, {4, 4}: true,
+	}
+	portals := map[Position]bool{
+		{2, 2}: true, {2, 3}: true, {3, 2}: true, {3, 3}: true,
 	}
 
-	// Portail au centre (couvrant 2x2) : positions (2,2), (2,3), (3,2), (3,3)
-	portalPositions := []Position{
-		{2, 2}, {2, 3}, {3, 2}, {3, 3},
-	}
-	for _, portalPos := range portalPositions {
-		if plot, err := grid.Get(portalPos); err == nil {
-			if isStart {
-				plot.StructureID = "commencement_portal"
+	// Parcourir toute la grille 6x6
+	for y := 0; y < 6; y++ {
+		for x := 0; x < 6; x++ {
+			pos := Position{X: x, Y: y}
+			plot, err := grid.Get(pos)
+			if err != nil {
+				continue
+			}
+
+			if corners[pos] {
+				// Dolmen ou Obélisque
+				plot.StructureID = fmt.Sprintf("struct_%s_%d_%d", structureType, pos.X, pos.Y)
+				plot.Empty = false
+			} else if portals[pos] {
+				// Portail (4 tuiles)
+				if isStart {
+					plot.StructureID = "start_portal"
+				} else {
+					plot.StructureID = "finish_portal"
+				}
+				plot.Empty = false
 			} else {
-				plot.StructureID = "finish_portal"
+				// Tout le reste est vide (pas de monstres/ressources)
+				plot.Empty = true
+				plot.StructureID = ""
 			}
 		}
 	}

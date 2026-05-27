@@ -175,7 +175,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 			CurrentStage:     0,
 			MaxStages:        2,
 			StageNames:       []string{"brut", "purifié"},
-			TurnsToNext:      -1,
+			TurnsToNext:      -1, // Ne change pas seul
 			CanPropagate:     false,
 			PropagationCount: 0,
 			MaxPropagations:  0,

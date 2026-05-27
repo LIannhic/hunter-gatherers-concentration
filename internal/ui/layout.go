@@ -95,6 +95,10 @@ const (
 	BoardH         = 525
 
 	TileSize = 87.5
+
+	// Flip animation characteristics
+	FaceSize      = 80.0
+	FlipThickness = 4.0
 )
 
 // Gauges Holder
