@@ -225,72 +225,6 @@ func (app *Application) setupGrids() {
 }
 
 // FillGridRandomly remplit un grid avec des paires d'entités et des pièges
-func (app *Application) FillGridRandomly(gridID string) {
-	grid, ok := app.World.GetGrid(gridID)
-	if !ok {
-		return
-	}
-
-	fmt.Printf("[INIT] Filling grid %s randomly...\n", gridID)
-
-	// 1. Liste toutes les positions libres
-	var positions []entity.Position
-	for y := 0; y < grid.Height; y++ {
-		for x := 0; x < grid.Width; x++ {
-			pos := board.Position{X: x, Y: y}
-			plot, _ := grid.Get(pos)
-			if len(plot.EntitiesID) == 0 && !plot.Modifier.Obstructed {
-				positions = append(positions, entity.Position{X: x, Y: y})
-			}
-		}
-	}
-
-	// 2. Mélange les positions
-	rand.Shuffle(len(positions), func(i, j int) {
-		positions[i], positions[j] = positions[j], positions[i]
-	})
-
-	// 3. Types disponibles
-	resourceTypes := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
-	creatureTypes := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey"}
-
-	posIdx := 0
-	totalTiles := len(positions)
-
-	// On remplit par paires tant qu'on a de la place
-	for posIdx < totalTiles-1 {
-		// Choisit aléatoirement entre Ressource, Créature ou Piège
-		choice := rand.Float32()
-
-		if choice < 0.4 {
-			// Paire de Ressources (40% de chance)
-			resType := resourceTypes[rand.Intn(len(resourceTypes))]
-			fmt.Printf("  - [%s] Spawning resource pair: %s at %v and %v\n", gridID, resType, positions[posIdx], positions[posIdx+1])
-			app.World.SpawnResource(gridID, resType, positions[posIdx])
-			app.World.SpawnResource(gridID, resType, positions[posIdx+1])
-			posIdx += 2
-		} else if choice < 0.8 {
-			// Paire de Créatures (40% de chance)
-			creType := creatureTypes[rand.Intn(len(creatureTypes))]
-			fmt.Printf("  - [%s] Spawning creature pair: %s at %v and %v\n", gridID, creType, positions[posIdx], positions[posIdx+1])
-			app.World.SpawnCreature(gridID, creType, positions[posIdx])
-			app.World.SpawnCreature(gridID, creType, positions[posIdx+1])
-			posIdx += 2
-		} else {
-			// Paire de Pièges (20% de chance)
-			fmt.Printf("  - [%s] Spawning trap pair at %v and %v\n", gridID, positions[posIdx], positions[posIdx+1])
-			app.World.SpawnTrap(gridID, positions[posIdx])
-			app.World.SpawnTrap(gridID, positions[posIdx+1])
-			posIdx += 2
-		}
-	}
-
-	// Si le nombre de cases était impair, on met un dernier piège
-	if posIdx < totalTiles {
-		fmt.Printf("  - [%s] Spawning lone trap at %v\n", gridID, positions[posIdx])
-		app.World.SpawnTrap(gridID, positions[posIdx])
-	}
-}
 
 // setupCallbacks connecte les actions aux use cases
 func (app *Application) setupCallbacks() {
@@ -310,7 +244,7 @@ func (app *Application) setupCallbacks() {
 			gridID = app.World.CurrentGridID
 		}
 
-		app.FillGridRandomly(gridID)
+		app.World.FillGridRandomly(gridID)
 	}
 
 	// Callback spawn toutes les créatures de test (Shift+S)
@@ -629,7 +563,7 @@ func (app *Application) spawnInitialEntities() {
 	for _, gridID := range app.World.GridOrder {
 		isPortalZone := app.World.DreamPlane != nil && (gridID == app.World.DreamPlane.StartZoneID || gridID == app.World.DreamPlane.EndZoneID)
 		if !isPortalZone {
-			app.FillGridRandomly(gridID)
+			app.World.FillGridRandomly(gridID)
 		}
 	}
 }
