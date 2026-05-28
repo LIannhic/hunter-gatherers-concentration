@@ -1360,6 +1360,11 @@ func NewPreviewSystem() *PreviewSystem {
 	}
 }
 
+func (s *PreviewSystem) Reset() {
+	s.previewTimers = make(map[string]int)
+	s.previewed = make(map[string]bool)
+}
+
 func (s *PreviewSystem) Priority() int { return 0 }
 
 func (s *PreviewSystem) Update(world *World) {
@@ -2509,6 +2514,13 @@ func (e *Engine) Start() {
 // Stop met en pause la simulation automatique
 func (e *Engine) Stop() {
 	e.Running = false
+}
+
+// ResetPreviews réinitialise le suivi des prévisualisations (pour une nouvelle partie)
+func (e *Engine) ResetPreviews() {
+	if e.previewSystem != nil {
+		e.previewSystem.Reset()
+	}
 }
 
 // Update fait progresser le tour de jeu

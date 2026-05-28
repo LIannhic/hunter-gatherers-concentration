@@ -945,6 +945,9 @@ func (app *Application) StartGame() {
 	_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
 	app.World.Player.Inventory.ScrollOffset = 0
 
+	// Réinitialise les prévisualisations uniques
+	app.Engine.ResetPreviews()
+
 	// Démarre l'engine (nécessaire pour les mouvements des créatures)
 	app.Engine.Start()
 	fmt.Println("[ENGINE] Started")
