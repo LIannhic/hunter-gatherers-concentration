@@ -227,6 +227,13 @@ func (m *Manager) generateAllAssets() {
 
 	// === ICÔNES D'UI ===
 	m.generateUIIcons(size)
+
+	// === ICÔNES DE MINIMAP ===
+	m.images["minimap_default"] = generateBiomeIcon(26, "default")
+	m.images["minimap_forest"] = generateBiomeIcon(26, "forest")
+	m.images["minimap_cave"] = generateBiomeIcon(26, "cave")
+	m.images["minimap_desert"] = generateBiomeIcon(26, "desert")
+	m.images["minimap_swamp"] = generateBiomeIcon(26, "swamp")
 }
 
 // generateBehaviorIcons crée les icônes pour les états de comportement des créatures
