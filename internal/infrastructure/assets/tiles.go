@@ -337,3 +337,57 @@ func generateDirectionIndicator(size int, dir string) *ebiten.Image {
 
 	return img
 }
+
+// generateBiomeIcon crée une icône simplifiée pour représenter un biome sur la minimap (26x26)
+func generateBiomeIcon(size int, biome string) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	centerX := float32(size) / 2
+	centerY := float32(size) / 2
+	iconColor := color.White
+
+	switch biome {
+	case "forest":
+		// Silhouette de sapin simplifiée
+		vector.DrawFilledRect(img, centerX-2, centerY+4, 4, 4, iconColor, true) // Tronc
+		// Triangle du bas
+		vector.StrokeLine(img, centerX-8, centerY+4, centerX+8, centerY+4, 2, iconColor, true)
+		vector.StrokeLine(img, centerX-8, centerY+4, centerX, centerY-2, 2, iconColor, true)
+		vector.StrokeLine(img, centerX+8, centerY+4, centerX, centerY-2, 2, iconColor, true)
+		// Triangle du haut
+		vector.StrokeLine(img, centerX-6, centerY-2, centerX+6, centerY-2, 2, iconColor, true)
+		vector.StrokeLine(img, centerX-6, centerY-2, centerX, centerY-8, 2, iconColor, true)
+		vector.StrokeLine(img, centerX+6, centerY-2, centerX, centerY-8, 2, iconColor, true)
+	case "cave":
+		// Stalactite / Entrée de grotte
+		vector.StrokeLine(img, centerX-8, centerY+6, centerX-4, centerY-6, 2, iconColor, true)
+		vector.StrokeLine(img, centerX-4, centerY-6, centerX+4, centerY-6, 2, iconColor, true)
+		vector.StrokeLine(img, centerX+4, centerY-6, centerX+8, centerY+6, 2, iconColor, true)
+		// Petit pic
+		vector.DrawFilledRect(img, centerX-1, centerY-2, 2, 6, iconColor, true)
+	case "desert":
+		// Soleil
+		vector.DrawFilledCircle(img, centerX, centerY, 5, iconColor, true)
+		for i := 0; i < 8; i++ {
+			angle := float64(i) * math.Pi / 4
+			x1 := centerX + float32(math.Cos(angle))*7
+			y1 := centerY + float32(math.Sin(angle))*7
+			x2 := centerX + float32(math.Cos(angle))*10
+			y2 := centerY + float32(math.Sin(angle))*10
+			vector.StrokeLine(img, x1, y1, x2, y2, 1.5, iconColor, true)
+		}
+	case "swamp":
+		// Nénuphar / Bulles
+		vector.StrokeCircle(img, centerX, centerY+2, 8, 1.5, iconColor, true)
+		vector.StrokeLine(img, centerX-4, centerY+2, centerX+4, centerY+2, 1, iconColor, true)
+		vector.DrawFilledCircle(img, centerX-4, centerY-4, 2, iconColor, true)
+		vector.DrawFilledCircle(img, centerX+3, centerY-6, 1.5, iconColor, true)
+	default:
+		// Losange pour Default
+		vector.StrokeLine(img, centerX, centerY-8, centerX+8, centerY, 2, iconColor, true)
+		vector.StrokeLine(img, centerX+8, centerY, centerX, centerY+8, 2, iconColor, true)
+		vector.StrokeLine(img, centerX, centerY+8, centerX-8, centerY, 2, iconColor, true)
+		vector.StrokeLine(img, centerX-8, centerY, centerX, centerY-8, 2, iconColor, true)
+	}
+
+	return img
+}

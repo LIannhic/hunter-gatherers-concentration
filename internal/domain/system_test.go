@@ -408,3 +408,51 @@ func TestMultipleGrids(t *testing.T) {
 		t.Error("Current grid should be grid2 after switch")
 	}
 }
+
+func TestDiscoveryUpdate(t *testing.T) {
+	w := NewWorld()
+	plane := board.NewDreamPlane("test_plane")
+	w.DreamPlane = plane
+
+	// Create 3 grids in a line: A <-> B <-> C
+	gA := w.CreateGrid("A", 4, 4, board.BiomeForest)
+	gB := w.CreateGrid("B", 4, 4, board.BiomeForest)
+	gC := w.CreateGrid("C", 4, 4, board.BiomeForest)
+
+	plane.AddZone(gA)
+	plane.AddZone(gB)
+	plane.AddZone(gC)
+
+	plane.Coords["A"] = board.Position{X: 0, Y: 0}
+	plane.Coords["B"] = board.Position{X: 1, Y: 0}
+	plane.Coords["C"] = board.Position{X: 2, Y: 0}
+
+	plane.Connect("A", "B", board.East)
+	plane.Connect("B", "C", board.East)
+
+	// Set starting grid to A
+	w.SetCurrentGrid("A")
+
+	// State check
+	if plane.DiscoveryStates["A"] != board.StateVisited {
+		t.Errorf("Grid A should be Visited, got %v", plane.DiscoveryStates["A"])
+	}
+	if plane.DiscoveryStates["B"] != board.StateAdjacent {
+		t.Errorf("Grid B should be Adjacent, got %v", plane.DiscoveryStates["B"])
+	}
+	if plane.DiscoveryStates["C"] != board.StateHidden {
+		t.Errorf("Grid C should be Hidden, got %v", plane.DiscoveryStates["C"])
+	}
+
+	// Move to B
+	w.SetCurrentGrid("B")
+	if plane.DiscoveryStates["B"] != board.StateVisited {
+		t.Errorf("Grid B should be Visited, got %v", plane.DiscoveryStates["B"])
+	}
+	if plane.DiscoveryStates["A"] != board.StateVisited {
+		t.Errorf("Grid A should remain Visited, got %v", plane.DiscoveryStates["A"])
+	}
+	if plane.DiscoveryStates["C"] != board.StateAdjacent {
+		t.Errorf("Grid C should now be Adjacent, got %v", plane.DiscoveryStates["C"])
+	}
+}

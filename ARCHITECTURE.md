@@ -199,6 +199,9 @@ Le jeu utilise une résolution logique fixe de **1280x720**. L'interface est div
 - **Playmat** (700x700) : Zone centrale contenant le plateau de jeu (525x525), les boutons d'action et les indicateurs de sortie.
 - **Gauges** (270x420) : Barres verticales de Santé, Mana et Santé Mentale.
 - **Minimap** (270x270) : Carte interactive du Plan de Rêve.
+  - **Grille 9x9 Centrée** : Utilise des cellules de 30x30px avec des nodes de 26x26px.
+  - **Centrage Absolu** : La zone actuelle est toujours à l'index (4,4), créant un effet de défilement du monde autour du joueur.
+  - **Brouillard de Guerre** : Affiche les zones adjacentes (silhouettes) et les zones visitées (icônes de biome).
 
 Séparation des responsabilités :
 - **Renderer**: Dessine le plateau central avec espacement dynamique (remplit toujours l'espace de 525x525 quelle que soit la taille de la grille). 

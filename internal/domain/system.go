@@ -166,11 +166,35 @@ func (w *World) GetCurrentGrid() (*board.Grid, bool) {
 func (w *World) SetCurrentGrid(gridID string) bool {
 	if _, ok := w.Grids[gridID]; ok {
 		w.CurrentGridID = gridID
+		w.UpdateDiscovery()
 		// Déclenche l'événement d'entrée pour les systèmes (comme Preview)
 		w.EventBus.PublishImmediate(event.NewGridEnteredEvent(gridID))
 		return true
 	}
 	return false
+}
+
+// UpdateDiscovery met à jour l'état de découverte du Dream Plane
+func (w *World) UpdateDiscovery() {
+	if w.DreamPlane == nil {
+		return
+	}
+	gridID := w.CurrentGridID
+	if gridID == "" {
+		return
+	}
+
+	// La zone actuelle devient Visited
+	w.DreamPlane.DiscoveryStates[gridID] = board.StateVisited
+
+	// Les voisins connectés deviennent Adjacent s'ils étaient Hidden
+	if conns, ok := w.DreamPlane.Connections[gridID]; ok {
+		for _, targetID := range conns {
+			if w.DreamPlane.DiscoveryStates[targetID] == board.StateHidden {
+				w.DreamPlane.DiscoveryStates[targetID] = board.StateAdjacent
+			}
+		}
+	}
 }
 
 // GenerateLayout génère la structure du monde (Dream Plane)
@@ -212,6 +236,7 @@ func (w *World) GenerateLayout(id string) {
 	}
 
 	w.CurrentGridID = w.DreamPlane.StartZoneID
+	w.UpdateDiscovery()
 
 	fmt.Printf("[WORLD] Layout généré avec %d zones. Départ: %s, Fin: %s\n",
 		len(w.Grids), w.DreamPlane.StartZoneID, w.DreamPlane.EndZoneID)
@@ -235,6 +260,7 @@ func (w *World) GeneratePlaytestLayout(id string) {
 	w.Grids[grid.ID] = grid
 	w.GridOrder = append(w.GridOrder, grid.ID)
 	w.CurrentGridID = grid.ID
+	w.UpdateDiscovery()
 
 	// Population de test précise pour le debug
 	fmt.Println("[WORLD] Population de la zone de playtest (Echo Hound en 1,1)...")

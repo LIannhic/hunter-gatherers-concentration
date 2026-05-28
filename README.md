@@ -23,6 +23,17 @@ L'expérience propose une profondeur stratégique s'appuyant sur une double bouc
 Le gameplay repose sur une gestion rigoureuse des ressources et du temps, dictée par un système en tour par tour. Chaque interaction, qu’il s’agisse de retourner une tuile ou d’utiliser un objet, consomme une unité de ressource (temps ou mana), forçant le joueur à planifier ses mouvements au sein d’une limite de tours impartis. La survie dépend de la gestion d'une barre de santé, physique ou mentale, qui s’érode au fil des erreurs ou des confrontations.
 L’aspect central de l’association étendue enrichit la mécanique de mémoire classique : le joueur doit identifier des paires dont la corrélation peut être identique, logique (clé et serrure), élémentaire ou narrative. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
 
+### Minimap et Exploration (Fog of War)
+
+Le plan onirique est un réseau de zones interconnectées. Pour s'orienter sans briser le mystère, la minimap utilise un système de **brouillard de guerre dynamique** :
+
+- **Rendu Centré** : La zone actuelle est toujours fixée au centre de la minimap (grille 9x9). Le reste du monde glisse autour lors des transitions.
+- **États de Découverte** :
+  - **Inconnu** : Zone cachée.
+  - **Adjacent** : Silhouette grise (route possible identifiée).
+  - **Visité** : Affiche l'icône du biome (Forest, Cave, Swamp, etc.).
+  - **Actuel** : Indicateur doré pulsant.
+
 ### Matrice de Dégâts (MATCH vs SKIP)
 
 Le jeu punit l'inattention et la précipitation via une matrice de décision stricte lors de l'interaction avec des paires de créatures :

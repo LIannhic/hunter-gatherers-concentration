@@ -68,6 +68,10 @@ func (s *LifecycleSystem) Update(world *World) {
 
 ### Implémentation
 
+- **`board/`** : Gestion de la géométrie et de la structure du monde
+  - `Grid` : Plateau individuel (Tuiles, Biomes, Pentes)
+  - `DreamPlane` : Réseau de grilles connectées. Gère les `DiscoveryStates` (Hidden, Adjacent, Visited) pour la minimap.
+  - `LayoutGenerator` : Algorithmes de génération de la structure du plan onirique.
 - **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
   - `TileState` : Hidden, Revealed, Matched, Blocked
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot

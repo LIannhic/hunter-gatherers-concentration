@@ -1,5 +1,6 @@
 # Default ignored files
 .idea/
+.artifacts/
 icone-hgc-16.ico
 icone-hgc-32.ico
 icone-hgc-64.ico

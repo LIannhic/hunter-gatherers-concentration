@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
@@ -679,40 +680,134 @@ func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string
 }
 
 func (h *HUD) renderMiniMap(screen *ebiten.Image) {
-	// Minimap Holder
-	vector.StrokeRect(screen, ui.MinimapX, ui.MinimapY, ui.MinimapW, ui.MinimapH, 1, color.RGBA{100, 100, 100, 255}, true)
-	text.Draw(screen, "MINIMAP", basicfont.Face7x13, ui.MinimapX+10, ui.MinimapY+20, color.RGBA{100, 200, 255, 255})
+	// Minimap Holder (270x270 at 1000, 440)
+	vector.StrokeRect(screen, float32(ui.MinimapX), float32(ui.MinimapY), float32(ui.MinimapW), float32(ui.MinimapH), 1, color.RGBA{100, 100, 100, 255}, true)
 
 	if h.world.DreamPlane == nil {
 		return
 	}
 
-	// Drawing the map as we go along
-	const padding = 10
-	mapW := float32(ui.MinimapW - 2*padding)
-	cellSize := mapW / 9 // Assuming 9x9 grid for minimap
-
 	plane := h.world.DreamPlane
+	currentGridID := h.world.CurrentGridID
+	currentCoords, ok := plane.Coords[currentGridID]
+	if !ok {
+		return
+	}
 
-	for row := 0; row < 9; row++ {
-		for col := 0; col < 9; col++ {
-			sx := float32(ui.MinimapX+padding) + float32(col)*cellSize
-			sy := float32(ui.MinimapY+padding+20) + float32(row)*cellSize
+	const (
+		cellSize = 30
+		nodeSize = 26
+		padding  = 2
+		halfGrid = 4 // Centre d'une grille 9x9
+	)
 
-			var zoneID string
-			for id, coords := range plane.Coords {
-				if coords.X == col && coords.Y == row {
-					zoneID = id
-					break
+	// Couleurs
+	adjColor := color.RGBA{60, 60, 65, 255}
+	visitedColor := color.RGBA{40, 40, 50, 255}
+	currentColor := color.RGBA{220, 200, 50, 255}
+	lineColor := color.RGBA{70, 70, 80, 255}
+
+	// 1. Dessiner d'abord les connexions (edges) pour qu'elles soient sous les nodes
+	for id, coords := range plane.Coords {
+		state := plane.DiscoveryStates[id]
+		if state == board.StateHidden {
+			continue
+		}
+
+		localX := halfGrid + (coords.X - currentCoords.X)
+		localY := halfGrid + (coords.Y - currentCoords.Y)
+
+		if localX < 0 || localX >= 9 || localY < 0 || localY >= 9 {
+			continue
+		}
+
+		// Connexions sortantes
+		if conns, ok := plane.Connections[id]; ok {
+			for _, targetID := range conns {
+				targetState := plane.DiscoveryStates[targetID]
+				if targetState == board.StateHidden {
+					continue
+				}
+
+				targetCoords := plane.Coords[targetID]
+				targetLocalX := halfGrid + (targetCoords.X - currentCoords.X)
+				targetLocalY := halfGrid + (targetCoords.Y - currentCoords.Y)
+
+				if targetLocalX < 0 || targetLocalX >= 9 || targetLocalY < 0 || targetLocalY >= 9 {
+					continue
+				}
+
+				// On ne dessine l'edge qu'une seule fois (par ID)
+				if id < targetID {
+					x1 := float32(ui.MinimapX + float64(localX*cellSize) + 15)
+					y1 := float32(ui.MinimapY + float64(localY*cellSize) + 15)
+					x2 := float32(ui.MinimapX + float64(targetLocalX*cellSize) + 15)
+					y2 := float32(ui.MinimapY + float64(targetLocalY*cellSize) + 15)
+
+					vector.StrokeLine(screen, x1, y1, x2, y2, 2, lineColor, true)
 				}
 			}
+		}
+	}
 
-			if zoneID != "" {
-				var rectColor color.Color = color.RGBA{150, 150, 150, 255}
-				if zoneID == h.world.CurrentGridID {
-					rectColor = color.RGBA{255, 255, 0, 255}
+	// 2. Dessiner les nodes
+	for id, coords := range plane.Coords {
+		state := plane.DiscoveryStates[id]
+		if state == board.StateHidden {
+			continue
+		}
+
+		localX := halfGrid + (coords.X - currentCoords.X)
+		localY := halfGrid + (coords.Y - currentCoords.Y)
+
+		if localX < 0 || localX >= 9 || localY < 0 || localY >= 9 {
+			continue
+		}
+
+		nx := float32(ui.MinimapX + float64(localX*cellSize) + padding)
+		ny := float32(ui.MinimapY + float64(localY*cellSize) + padding)
+
+		isCurrent := id == currentGridID
+
+		// Fond du node
+		var bgColor color.Color
+		if isCurrent {
+			bgColor = color.RGBA{45, 40, 20, 255}
+		} else if state == board.StateVisited {
+			bgColor = visitedColor
+		} else {
+			bgColor = adjColor
+		}
+
+		vector.DrawFilledRect(screen, nx, ny, nodeSize, nodeSize, bgColor, true)
+
+		// Bordure
+		bColor := lineColor
+		bWidth := float32(1)
+		if isCurrent {
+			bColor = currentColor
+			bWidth = 2
+			// Effet de pulsation (Halo doré)
+			pulse := float32(math.Sin(float64(h.pulseFrame)*0.1)*1.5 + 1.5)
+			vector.StrokeRect(screen, nx-pulse/2, ny-pulse/2, nodeSize+pulse, nodeSize+pulse, 1, color.RGBA{255, 220, 50, 100}, true)
+		}
+		vector.StrokeRect(screen, nx, ny, nodeSize, nodeSize, bWidth, bColor, true)
+
+		// Icône du biome (si Visited ou Current)
+		if state == board.StateVisited || isCurrent {
+			grid, ok := h.world.GetGrid(id)
+			if ok && h.assets != nil {
+				icon := h.assets.GetImage("minimap_" + string(grid.Biome))
+				if icon != nil {
+					op := &ebiten.DrawImageOptions{}
+					op.GeoM.Translate(float64(nx), float64(ny))
+					if isCurrent {
+						op.ColorScale.ScaleWithColor(color.RGBA{255, 255, 180, 255})
+					} else {
+						op.ColorScale.ScaleWithColor(color.RGBA{160, 160, 180, 255})
+					}
+					screen.DrawImage(icon, op)
 				}
-				vector.DrawFilledRect(screen, sx, sy, cellSize-1, cellSize-1, rectColor, true)
 			}
 		}
 	}
