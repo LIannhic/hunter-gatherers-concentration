@@ -2,11 +2,11 @@ package renderer
 
 import (
 	"math"
-	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/component"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 )
 
@@ -21,15 +21,17 @@ const (
 
 // TranslationAnim représente une translation d'une tuile (en pixels)
 type TranslationAnim struct {
-	EntityID     string
-	GridID       string
-	FromX, FromY float64
-	ToX, ToY     float64
-	Tick         int
-	Duration     int
-	TargetGridX  int
-	TargetGridY  int
-	Layer        Layer
+	EntityID      string
+	GridID        string
+	FromX, FromY  float64
+	ToX, ToY      float64
+	Tick          int
+	Duration      int
+	TargetGridX   int
+	TargetGridY   int
+	Layer         Layer
+	Mode          string // <--- Stocke "earthquake", "slide", etc.
+	FlipDirection entity.FlipDirection
 }
 
 // AnimationManager gère plusieurs translations en parallèle
@@ -46,7 +48,10 @@ func NewAnimationManager(r *BoardRenderer) *AnimationManager {
 }
 
 // StartTileMove démarre une animation de translation basée sur des positions de grille
-func (m *AnimationManager) StartTileMove(world *domain.World, gridID string, entityID string, fromPos, toPos board.Position, durationTicks int, layer Layer) {
+func (m *AnimationManager) StartTileMove(world *domain.World, gridID string, entityID string, fromPos, toPos board.Position, durationTicks int, layer Layer, mode string, flipDirection entity.FlipDirection) {
+	if mode == "" {
+		mode = "slide"
+	}
 	grid, _ := world.GetGrid(gridID)
 	isPortal := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
 	fx, fy := m.renderer.calculateTileScreenPos(fromPos, grid, isPortal)
@@ -66,31 +71,25 @@ func (m *AnimationManager) StartTileMove(world *domain.World, gridID string, ent
 	world.Components.Add(entityID, ma)
 
 	m.animes[entityID] = &TranslationAnim{
-		EntityID:    entityID,
-		GridID:      gridID,
-		FromX:       fx,
-		FromY:       fy,
-		ToX:         tx,
-		ToY:         ty,
-		Tick:        0,
-		Duration:    durationTicks,
-		TargetGridX: toPos.X,
-		TargetGridY: toPos.Y,
-		Layer:       layer,
+		EntityID:      entityID,
+		GridID:        gridID,
+		FromX:         fx,
+		FromY:         fy,
+		ToX:           tx,
+		ToY:           ty,
+		Tick:          0,
+		Duration:      durationTicks,
+		TargetGridX:   toPos.X,
+		TargetGridY:   toPos.Y,
+		Layer:         layer,
+		Mode:          mode,
+		FlipDirection: flipDirection,
 	}
-	// Publie un événement pour informer le reste du système (ex: bloquer l'input)
-	world.EventBus.PublishImmediate(event.Event{
-		Type:     event.AnimationStarted,
-		SourceID: entityID,
-		Payload: map[string]interface{}{
-			"grid_id": gridID,
-		},
-		Timestamp: time.Now(),
-	})
+
+	world.EventBus.PublishImmediate(event.NewAnimationStartedEvent(mode, entityID))
 }
 
 func smoothstep(t float64) float64 {
-	// Smoothstep cubic (0..1)
 	if t <= 0 {
 		return 0
 	}
@@ -100,8 +99,14 @@ func smoothstep(t float64) float64 {
 	return t * t * (3 - 2*t)
 }
 
-// Update avance toutes les animations et met à jour les composants dans le World
+// Update avance toutes les translations proprement
 func (m *AnimationManager) Update(world *domain.World) {
+	if len(m.animes) == 0 {
+		return
+	}
+
+	anyAnimationFinished := false
+
 	for id, a := range m.animes {
 		a.Tick++
 		t := float64(a.Tick) / math.Max(1, float64(a.Duration))
@@ -121,18 +126,13 @@ func (m *AnimationManager) Update(world *domain.World) {
 		}
 
 		if t >= 1 {
-			// Terminé : on retire le composant d'animation pour rendre la tuile de façon stable
 			world.Components.Remove(id, "moving_animation")
 			delete(m.animes, id)
-			// Publie l'événement de fin
-			world.EventBus.PublishImmediate(event.Event{
-				Type:     event.AnimationEnded,
-				SourceID: id,
-				Payload: map[string]interface{}{
-					"grid_id": a.GridID,
-				},
-				Timestamp: time.Now(),
-			})
+			anyAnimationFinished = true
 		}
+	}
+
+	if anyAnimationFinished && len(m.animes) == 0 {
+		world.EventBus.PublishImmediate(event.NewAnimationEndedEvent("slide", "manager_global"))
 	}
 }

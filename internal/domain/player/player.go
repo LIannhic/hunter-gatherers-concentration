@@ -29,6 +29,12 @@ const (
 	SpecterItemName              = "specter"
 	ShadowstalkerItemSourceID     = "shadowstalker_source"
 	ShadowstalkerItemName         = "shadowstalker"
+	MossMonkeyItemSourceID        = "moss_monkey_source"
+	MossMonkeyItemName            = "moss_monkey"
+	StonewardenItemSourceID       = "stonewarden_source"
+	StonewardenItemName           = "stonewarden"
+	LumiflyItemSourceID           = "lumifly_source"
+	LumiflyItemName               = "lumifly"
 	BurrowerItemSourceID         = "burrower_source"
 	BurrowerItemName             = "burrower"
 )
@@ -245,6 +251,39 @@ func NewShadowstalkerItem() *LootItem {
 		Name:        ShadowstalkerItemName,
 		Type:        entity.TypeCreature,
 		SourceID:    ShadowstalkerItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewMossMonkeyItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        MossMonkeyItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    MossMonkeyItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewStonewardenItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        StonewardenItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    StonewardenItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewLumiflyItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        LumiflyItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    LumiflyItemSourceID,
 		IsUsable:    true,
 		IsDeletable: true,
 	}

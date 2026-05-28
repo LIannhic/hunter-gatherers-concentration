@@ -147,7 +147,7 @@ func (r *BoardRenderer) ClearAnimations() {
 
 // StartFlipAnimation démarre une animation de flip pour une tuile
 func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir entity.FlipDirection, entityID string, finalState entity.TileState, startTrans, endTrans entity.Transformation) {
-	key := fmt.Sprintf("%s:%d,%d", gridID, pos.X, pos.Y)
+	key := fmt.Sprintf("%s:%d,%d:%s", gridID, pos.X, pos.Y, entityID)
 	r.flipAnimations[key] = &FlipAnimation{
 		GridID:         gridID,
 		Position:       pos,
@@ -268,22 +268,51 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 
 		// Mode détermine la strate de rendu (under, normal, over)
 		var layer Layer = LayerNormal
-		if modeStr, ok := e.Payload["mode"].(string); ok {
-			switch modeStr {
-			case "under":
-				layer = LayerUnder
-			case "over":
-				layer = LayerOver
-			default:
-				layer = LayerNormal
-			}
+		modeStr, _ := e.Payload["mode"].(string)
+
+		switch modeStr {
+		case "under":
+			layer = LayerUnder
+		case "over", "earthquake": // Le séisme est un rendu Over, tout simplement.
+			layer = LayerOver
+		default:
+			layer = LayerNormal
 		}
 
 		if r.AnimManager != nil {
-			// Durée: 60 ticks = ~1s à 60fps
-			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 60, layer)
+			flipDir := entity.FlipRight
+			if modeStr == "earthquake" {
+				flipDir = r.computeFlipDirection(board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y})
+			}
+			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 60, layer, modeStr, flipDir)
 		}
 	})
+}
+
+func (r *BoardRenderer) computeFlipDirection(from, to board.Position) entity.FlipDirection {
+	dx := to.X - from.X
+	dy := to.Y - from.Y
+
+	switch {
+	case dx == 0 && dy < 0:
+		return entity.FlipTop
+	case dx > 0 && dy < 0:
+		return entity.FlipTopRight
+	case dx > 0 && dy == 0:
+		return entity.FlipRight
+	case dx > 0 && dy > 0:
+		return entity.FlipBottomRight
+	case dx == 0 && dy > 0:
+		return entity.FlipBottom
+	case dx < 0 && dy > 0:
+		return entity.FlipBottomLeft
+	case dx < 0 && dy == 0:
+		return entity.FlipLeft
+	case dx < 0 && dy < 0:
+		return entity.FlipTopLeft
+	default:
+		return entity.FlipRight
+	}
 }
 
 // GetTileSize retourne la taille des tuiles
@@ -1085,6 +1114,20 @@ func (r *BoardRenderer) renderMovingEntities(screen *ebiten.Image, world *domain
 
 		curX := anim.CurrentX
 		curY := anim.CurrentY
+
+		if r.AnimManager != nil {
+			if transAnim, ok := r.AnimManager.animes[id]; ok && transAnim.Mode == "earthquake" {
+				progress := float64(transAnim.Tick) / math.Max(1, float64(transAnim.Duration))
+				grid, _ := world.GetGrid(world.CurrentGridID)
+				themeName := "default"
+				if grid != nil {
+					themeName = string(grid.Biome)
+				}
+				theme := r.assets.GetTheme(themeName)
+				r.renderEarthquakeTile360(screen, curX, curY, progress, ent, themeName, theme.HiddenBorder, transAnim.FlipDirection)
+				continue
+			}
+		}
 
 		// Création d'un plot fictif pour renderTileAt
 		fakePlot := &board.Plot{

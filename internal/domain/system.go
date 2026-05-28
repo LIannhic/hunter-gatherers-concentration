@@ -503,6 +503,40 @@ func (w *World) CanFlipTile() bool {
 	return len(w.tilesFlippedThisTurn) < 2
 }
 
+// HideAllUnmatchedTiles referme toutes les tuiles révélées qui n'ont pas été associées sur la grille courante.
+func (w *World) HideAllUnmatchedTiles() {
+    gridID := w.CurrentGridID
+    grid, ok := w.GetGrid(gridID)
+    if !ok {
+        return
+    }
+
+    for pos, plot := range grid.Plots {
+        if len(plot.EntitiesID) == 0 {
+            continue
+        }
+
+        topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+        if ent, exists := w.Entities.Get(entity.ID(topID)); exists {
+            state := ent.GetState()
+
+            // Si la tuile est visible mais pas encore validée (Matched)
+            if state&entity.Revealed != 0 && state&entity.Matched == 0 {
+                // Modifie l'état logique (retourne la tuile)
+                _, _ = w.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection())
+
+                // Notifie immédiatement le renderer graphique pour jouer l'animation de fermeture
+                w.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+                    entity.Position(pos),
+                    string(ent.GetID()),
+                    gridID,
+                    plot.Tilt.ToFlipDirection(),
+                ))
+            }
+        }
+    }
+}
+
 // =============================================================================
 // SECTION 5: LOGIQUE DE SPAWN ET GESTION DES ENTITÉS
 // =============================================================================
@@ -1533,6 +1567,12 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		sourceID = player.BurrowerItemSourceID
 	} else if name == player.ShadowstalkerItemName {
 		sourceID = player.ShadowstalkerItemSourceID
+	} else if name == player.MossMonkeyItemName {
+		sourceID = player.MossMonkeyItemSourceID
+	} else if name == player.StonewardenItemName {
+		sourceID = player.StonewardenItemSourceID
+	} else if name == player.LumiflyItemName {
+		sourceID = player.LumiflyItemSourceID
 	}
 
 	// Un match = un loot
@@ -1541,7 +1581,7 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		Name:        name,
 		Type:        eType,
 		SourceID:    sourceID,
-		IsUsable:    name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName,
+		IsUsable:    name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName || name == player.MossMonkeyItemName || name == player.StonewardenItemName || name == player.LumiflyItemName,
 		IsDeletable: true,
 	}
 

@@ -335,3 +335,27 @@ func NewPhaseChangedEvent(from, to GameState) Event {
 		Timestamp: time.Now(),
 	}
 }
+
+// NewAnimationStartedEvent crée un événement signalant le début d'une animation graphique.
+func NewAnimationStartedEvent(animationType string, targetID string) Event {
+    return Event{
+       Type:     AnimationStarted,
+       SourceID: targetID,
+       Payload: map[string]interface{}{
+          "animation_type": animationType,
+       },
+       Timestamp: time.Now(),
+    }
+}
+
+// NewAnimationEndedEvent crée un événement signalant la fin d'une animation graphique.
+func NewAnimationEndedEvent(animationType string, targetID string) Event {
+    return Event{
+       Type:     AnimationEnded,
+       SourceID: targetID,
+       Payload: map[string]interface{}{
+          "animation_type": animationType,
+       },
+       Timestamp: time.Now(),
+    }
+}

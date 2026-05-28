@@ -1,5 +1,5 @@
-// Package app orchestre les composants de haut niveau
-// C'est le "wiring" de l'application
+// Package app orchestre les composants de haut niveau.
+// C'est le "wiring" (câblage) principal de l'application.
 package app
 
 import (
@@ -31,7 +31,7 @@ import (
 	"golang.org/x/image/font/basicfont"
 )
 
-// Application est le conteneur principal
+// Application est le conteneur principal du cycle de vie du jeu.
 type Application struct {
 	// Domain
 	World       *domain.World
@@ -56,38 +56,35 @@ type Application struct {
 	// Session tracking
 	sessionStartTime time.Time
 	hasSaves         bool
+	randSource       *rand.Rand
 
 	// Debug
 	debug *DebugStats
 }
 
-// NewApplication crée et configure l'application
+// NewApplication crée, injecte les dépendances et configure l'application.
 func NewApplication() (*Application, error) {
-	// Initialise le générateur aléatoire
-	rand.Seed(time.Now().UnixNano())
+	app := &Application{
+		randSource: rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
 
-	app := &Application{}
+	// 1. Charge la configuration générale
+	app.Config = loader.DefaultConfig()
 
-	// 1. Charge la configuration
-	config := loader.DefaultConfig()
-	app.Config = config
-
-	// 2. Initialise le domaine
+	// 2. Initialise la logique du Domaine
 	app.World = domain.NewWorld()
 	app.AssocEngine = domain.NewAssocEngine()
 	app.Engine = domain.NewEngine(app.World)
 
-	// 3. Crée plusieurs grids
+	// 3. Crée et interconnecte les grilles de zones
 	app.setupGrids()
 
-	// 4. Infrastructure
+	// 4. Couche Infrastructure & Persistance (dossier ./saves)
 	app.Assets = assets.NewManager()
-
-	// Initialisation de la persistance (dossier ./saves)
 	repo := infraPersistence.NewJsonRepository("./saves")
 	app.Persistence = usecase.NewPersistenceManager(repo)
 
-	// 5. UI
+	// 5. Initialisation des composants UI et Rendering
 	app.Renderer = renderer.NewBoardRenderer(app.Assets)
 	app.TitleScreen = renderer.NewTitleScreen()
 	app.SaveMenu = renderer.NewSaveMenu()
@@ -95,10 +92,10 @@ func NewApplication() (*Application, error) {
 	app.HUD = hud.NewHUD(app.World)
 	app.HUD.SetAssetsManager(app.Assets)
 
-	// Subscribe renderer to scanner events
+	// Inscription du renderer aux événements de scan
 	app.Renderer.SubscribeToEvents(app.World)
 
-	// 5.1 Gestionnaire réactif des boutons d'action
+	// 5.1 Configuration du gestionnaire réactif des boutons d'action
 	btnManager := actionbuttons.NewManager(
 		func() int { return len(app.Input.GetRevealedTiles()) },
 		func() *player.Player { return app.World.Player },
@@ -120,7 +117,7 @@ func NewApplication() (*Application, error) {
 	app.Renderer.ActionButtons = btnManager
 	app.Input.SetActionButtonsManager(btnManager)
 
-	// 5.2 Feedback temps réel sur le HUD (pulse Sanity Gauge)
+	// 5.2 Feedback en temps réel sur le HUD (Pulsation de la jauge de Sanité)
 	app.HUD.SetTimerCallbacks(
 		func() float64 {
 			if app.World.TurnTimer != nil {
@@ -136,31 +133,17 @@ func NewApplication() (*Application, error) {
 		},
 	)
 
-	// 6. Connecte les composants UI
+	// 6. Connexion et liaisons des événements de l'UI
 	app.Input.SetRenderer(app.Renderer)
 	app.Input.OnToggleDetails = app.HUD.ToggleDetails
 	app.Input.OnToggleInvDetails = app.HUD.ToggleInventoryDetails
 	app.Input.OnToggleAssetsDetails = app.HUD.ToggleAssetsDetails
+
+	// Remplissage de débogage pour tester l'utilisation des objets
 	app.Input.OnFillInventory = func() {
-		fmt.Println("[DEBUG] Remplissage de l'inventaire avec des dreamberries et des limiers écho")
+		fmt.Println("[DEBUG] Remplissage de l'inventaire avec des Gardiens de Pierre.")
 		for i := 0; i < 15; i++ {
-			// 			loot := &player.LootItem{
-			// 				ID:          string(entity.NewID()),
-			// 				Name:        "bulle de savon",
-			// 				Type:        entity.TypeResource,
-			// 				SourceID:    "debug",
-			// 				IsDeletable: true,
-			// 			}
-			// 			_ = app.World.Player.Inventory.AddItem(loot)
-			_ = app.World.Player.Inventory.AddItem(player.NewDreamberryItem())
-			_ = app.World.Player.Inventory.AddItem(player.NewEchoHoundItem())
-			_ = app.World.Player.Inventory.AddItem(player.NewMoonstoneItem())
-			_ = app.World.Player.Inventory.AddItem(player.NewWhisperingHerbItem())
-			_ = app.World.Player.Inventory.AddItem(player.NewCrystalShardItem())
-			_ = app.World.Player.Inventory.AddItem(player.NewSpecterItem())
-			_ = app.World.Player.Inventory.AddItem(player.NewBurrowerItem())
-			_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
-			_ = app.World.Player.Inventory.AddItem(player.NewShadowstalkerItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewStonewardenItem())
 		}
 	}
 
@@ -177,7 +160,7 @@ func NewApplication() (*Application, error) {
 			app.HUD.ClearActiveLootSelection()
 			app.Input.SetPortablePortalMode(false)
 
-			// Démarre le timer de victoire de 5 secondes
+			// Démarre le compte à rebours de victoire fixe de 5 secondes
 			app.Input.StartVictoryTimer(5.0)
 		}
 	}
@@ -186,19 +169,19 @@ func NewApplication() (*Application, error) {
 		app.HUD.ShowVictory()
 	}
 
-	// 7. Configure les callbacks
+	// 7. Configuration des Callbacks de commandes de jeu
 	app.setupCallbacks()
 
-	// 8. Subscribe aux événements pour les animations
+	// 8. Liaison des abonnements événementiels pour les animations visuelles
 	app.setupEventSubscriptions()
 
-	// 9. Debug
+	// 9. Initialisation des métriques de Débogage
 	app.debug = NewDebugStats()
 
-	// 10. État initial : Menu
+	// 10. Fixation de l'état initial : Affichage du Menu Principal
 	app.State = domain.StateMenu
 	app.checkSaves()
-	fmt.Println("[STATE] État initial: MENU")
+	fmt.Println("[STATE] État initial : MENU")
 
 	return app, nil
 }
@@ -206,7 +189,6 @@ func NewApplication() (*Application, error) {
 func (app *Application) checkSaves() {
 	metas, _ := app.Persistence.GetSaveSummaries()
 	app.hasSaves = len(metas) > 0
-	// Mise à jour du texte du bouton de l'écran titre
 	if app.hasSaves {
 		app.TitleScreen.ButtonText = "CONTINUER"
 	} else {
@@ -214,29 +196,27 @@ func (app *Application) checkSaves() {
 	}
 }
 
-// setupGrids crée les grids initiaux via le générateur procédural
+// setupGrids orchestre le layout initial via le générateur procédural.
 func (app *Application) setupGrids() {
 	app.World.GenerateLayout("dream_plane_1")
 	fmt.Printf("Generated Dream Plane with %d zones\n", len(app.World.Grids))
 
-	// Définit la grille de commencement comme grille active par défaut
+	// Définit la zone de commencement comme grille active par défaut
 	if app.World.DreamPlane != nil {
 		app.World.CurrentGridID = app.World.DreamPlane.StartZoneID
 	}
 }
 
-// FillGridRandomly remplit un grid avec des paires d'entités et des pièges
-
-// setupCallbacks connecte les actions aux use cases
+// setupCallbacks connecte les actions de l'Input Handler aux Use Cases sous-jacents.
 func (app *Application) setupCallbacks() {
-	// Callback fin de tour
+	// Fin de tour normale
 	app.Input.OnTurnEnd = func() {
 		fmt.Println("[ACTION] Turn ended")
 		app.debug.Action()
 		app.Engine.Update()
 	}
 
-	// Callback spawn entités de test (remplacé par remplissage aléatoire)
+	// Spawn et remplissage aléatoire complet d'une grille
 	app.Input.OnSpawnEntities = func(gridID string) {
 		fmt.Printf("[ACTION] Random fill button pressed on grid %s\n", gridID)
 		app.debug.Action()
@@ -244,11 +224,10 @@ func (app *Application) setupCallbacks() {
 		if gridID == "" {
 			gridID = app.World.CurrentGridID
 		}
-
 		app.World.FillGridRandomly(gridID)
 	}
 
-	// Callback spawn toutes les créatures de test (Shift+S)
+	// Spawn de toutes les variétés de créatures (Shift+S)
 	app.Input.OnSpawnAllCreatures = func(gridID string) {
 		fmt.Printf("[ACTION] Spawn ALL creatures on grid %s\n", gridID)
 		app.debug.Action()
@@ -271,7 +250,6 @@ func (app *Application) setupCallbacks() {
 
 		spawned := 0
 		for _, c := range creatures {
-			// Trouve une position vide pour chaque créature
 			pos := app.findEmptyPosition(gridID)
 			if pos == nil {
 				fmt.Printf("[ERROR] No empty position for %s\n", c.species)
@@ -285,20 +263,18 @@ func (app *Application) setupCallbacks() {
 				spawned++
 			}
 		}
-
 		fmt.Printf("[SPAWN] Total spawned: %d\n", spawned)
 	}
 
-	// Callback spawn créature aléatoire (F9)
+	// Spawn d'une créature aléatoire (F9)
 	app.Input.OnSpawnRandomCreature = func(gridID string) {
 		if gridID == "" {
 			gridID = app.World.CurrentGridID
 		}
 
 		creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey"}
-		species := creatures[rand.Intn(len(creatures))]
+		species := creatures[app.randSource.Intn(len(creatures))]
 
-		// Trouve une position libre aléatoire
 		pos := app.findEmptyPosition(gridID)
 		if pos == nil {
 			fmt.Println("[ERROR] No empty position available")
@@ -313,7 +289,7 @@ func (app *Application) setupCallbacks() {
 		}
 	}
 
-	// Callback clear board
+	// Nettoyage complet du plateau de jeu
 	app.Input.OnClearBoard = func(gridID string) {
 		fmt.Printf("[ACTION] Clear button pressed on grid %s\n", gridID)
 		app.debug.Action()
@@ -329,13 +305,11 @@ func (app *Application) setupCallbacks() {
 		cmd.Execute()
 	}
 
-	// Callback switch grid
+	// Navigation et changement de zone (Grille active)
 	app.Input.OnSwitchGrid = func(gridID string) {
 		fmt.Printf("[ACTION] Switching to grid %s\n", gridID)
 
-		// Extraction et affichage du biome pour le diagnostic
 		if app.World != nil {
-			// Syntaxe Go avec vérification directe de la présence (booléen)
 			if g, ok := app.World.GetGrid(gridID); ok && g != nil {
 				fmt.Printf("[DEBUG-BIOME] Grid: %s | Biome Type: %s\n", gridID, g.Biome)
 			} else {
@@ -352,34 +326,30 @@ func (app *Application) setupCallbacks() {
 		}
 	}
 
-	// Callback rotation du plateau
 	app.Input.OnRotateBoard = func(delta float64) {
 		app.Renderer.RotateBoard(delta)
 	}
 
-	// Callback réinitialisation rotation
 	app.Input.OnResetRotation = func() {
 		app.Renderer.SetBoardRotation(0)
 	}
 
-	// Callback retour au menu
 	app.Input.OnExitToMenu = func() {
 		app.ReturnToMenu()
 	}
 
-	// Configure les callbacks de débogage
 	app.setupDebugCallbacks()
 }
 
-// setupDebugCallbacks configure les callbacks de débogage
+// setupDebugCallbacks configure les raccourcis et commandes de triche/débogage.
 func (app *Application) setupDebugCallbacks() {
-	// F3: Forcer le prochain tour
+	// F3 : Forcer le passage au prochain tour
 	app.Input.OnForceTurn = func() {
 		fmt.Println("[DEBUG] Forcing turn end")
 		app.Engine.Update()
 	}
 
-	// F5: Révéler toutes les tuiles (cheat)
+	// F5 : Révéler instantanément toutes les tuiles cachées du monde
 	app.Input.OnRevealAll = func(gridID string) {
 		fmt.Println("[CHEAT] Révélation instantanée de TOUTES les tuiles")
 		app.Renderer.ClearAnimations()
@@ -402,7 +372,7 @@ func (app *Application) setupDebugCallbacks() {
 		}
 	}
 
-	// F6: Cacher toutes les tuiles (cheat)
+	// F6 : Masquer instantanément toutes les tuiles du monde
 	app.Input.OnHideAll = func(gridID string) {
 		fmt.Println("[CHEAT] Masquage instantané de TOUTES les tuiles")
 		app.Renderer.ClearAnimations()
@@ -422,7 +392,7 @@ func (app *Application) setupDebugCallbacks() {
 		}
 	}
 
-	// F7: Désceller les sorties (cheat)
+	// F7 : Désceller les verrous de navigation de la zone actuelle
 	app.Input.OnUnlockNavigation = func(gridID string) {
 		if gridID == "" {
 			gridID = app.World.CurrentGridID
@@ -436,7 +406,7 @@ func (app *Application) setupDebugCallbacks() {
 		}
 	}
 
-	// F8: Retirer état bloqué (cheat)
+	// F8 : Basculer l'état bloqué de toutes les tuiles de la zone
 	app.Input.OnClearBlocked = func(gridID string) {
 		if gridID == "" {
 			gridID = app.World.CurrentGridID
@@ -444,7 +414,6 @@ func (app *Application) setupDebugCallbacks() {
 
 		if grid, ok := app.World.GetGrid(gridID); ok {
 			count := 0
-			// On décide de l'action à faire basé sur la première entité trouvée
 			shouldBlock := true
 			first := true
 
@@ -473,20 +442,19 @@ func (app *Application) setupDebugCallbacks() {
 		}
 	}
 
-	// F10: Toggle mouvement automatique
+	// F10 : Activer/Désactiver la boucle d'automatisation des mouvements de l'Engine
 	app.Input.OnToggleAutoMove = func() {
 		app.Engine.Running = !app.Engine.Running
 		if app.Engine.Running {
-			fmt.Println("[DEBUG] Mouvement automatique: ON")
+			fmt.Println("[DEBUG] Mouvement automatique : ON")
 		} else {
-			fmt.Println("[DEBUG] Mouvement automatique: OFF")
+			fmt.Println("[DEBUG] Mouvement automatique : OFF")
 		}
 	}
 }
 
-// setupEventSubscriptions abonne le renderer aux événements pour les animations
+// setupEventSubscriptions connecte l'EventBus aux animations graphiques du Renderer.
 func (app *Application) setupEventSubscriptions() {
-	// Abonne le renderer aux événements TileRevealed pour démarrer les animations
 	app.World.EventBus.SubscribeFunc(event.TileRevealed, func(e event.Event) {
 		position, ok1 := e.Payload["position"].(entity.Position)
 		entityID, ok3 := e.Payload["entity_id"].(string)
@@ -494,21 +462,17 @@ func (app *Application) setupEventSubscriptions() {
 		flipDir, ok5 := e.Payload["flip_direction"].(entity.FlipDirection)
 
 		if ok1 && ok3 && ok4 && ok5 {
-			// Enregistre la révélation pour les triggers de créatures
 			app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y})
 
 			var entState entity.TileState
 			var startTrans, endTrans entity.Transformation
 
-			// CAS 1 : Entité réelle (Ressource, Créature, Piège, Structure)
 			if ent, ok := app.World.Entities.Get(entity.ID(entityID)); ok {
 				entState = ent.GetState()
 				endTrans = ent.GetTransformation()
 				applyTrans := flipDir.ToTransformation()
 				startTrans = entity.Compose(endTrans, applyTrans)
 			} else if strings.HasPrefix(entityID, "exit_") {
-				// CAS 2 : Tuile de sortie (Navigation)
-				// Format attendu: exit_north_0
 				parts := strings.Split(entityID, "_")
 				if len(parts) == 3 {
 					dirName := parts[1]
@@ -538,7 +502,6 @@ func (app *Application) setupEventSubscriptions() {
 				}
 			}
 
-			// Démarre l'animation de flip si on a récupéré les infos
 			if entState != 0 {
 				app.Renderer.StartFlipAnimation(
 					gridID,
@@ -554,13 +517,11 @@ func (app *Application) setupEventSubscriptions() {
 	})
 }
 
-// spawnInitialEntities crée les entités de base au démarrage
+// spawnInitialEntities injecte les dolmens, portails et génère le contenu des autres grilles.
 func (app *Application) spawnInitialEntities() {
 	fmt.Println("=== Spawning initial entities ===")
-	// 1. Délègue au domaine la création des structures fixes (dolmens, portails)
 	app.World.PopulateInitialStructures()
 
-	// 2. Remplissage aléatoire du reste (seulement les zones qui ne sont pas des portails)
 	for _, gridID := range app.World.GridOrder {
 		isPortalZone := app.World.DreamPlane != nil && (gridID == app.World.DreamPlane.StartZoneID || gridID == app.World.DreamPlane.EndZoneID)
 		if !isPortalZone {
@@ -569,12 +530,10 @@ func (app *Application) spawnInitialEntities() {
 	}
 }
 
-// Update met à jour l'application
+// Update met à jour la logique de l'application selon son état global (Pattern State).
 func (app *Application) Update() error {
-	// Stats debug
 	app.debug.Frame()
 
-	// Gestion selon l'état du jeu
 	switch app.State {
 	case domain.StateMenu:
 		return app.updateMenu()
@@ -583,11 +542,10 @@ func (app *Application) Update() error {
 	case domain.StateGameOver:
 		return app.updateGameOver()
 	}
-
 	return nil
 }
 
-// updateMenu gère l'écran titre et le menu de sauvegarde
+// updateMenu orchestre la navigation de l'écran titre et de la sélection de sauvegarde.
 func (app *Application) updateMenu() error {
 	if app.SaveMenu.IsVisible() {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
@@ -618,10 +576,8 @@ func (app *Application) updateMenu() error {
 		x, y := ebiten.CursorPosition()
 		if app.TitleScreen.IsStartButtonClicked(x, y) {
 			if app.hasSaves {
-				// Charger la dernière partie directement (Bouton "Continuer")
 				app.StartGameWithSlot(0)
 			} else {
-				// Première fois : ouvrir la sélection
 				metas, _ := app.Persistence.GetSaveSummaries()
 				app.SaveMenu.UpdateMetas(metas)
 				app.SaveMenu.SetVisible(true)
@@ -637,9 +593,8 @@ func (app *Application) updateMenu() error {
 	return nil
 }
 
-// updatePlaying gère le jeu en cours
+// updatePlaying régit le cycle d'exécution du gameplay actif (Timers, inventaire, victoires).
 func (app *Application) updatePlaying() error {
-	// Vérification Victoire
 	if app.HUD.IsVictoryVisible() {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 			app.HUD.HideVictory()
@@ -662,75 +617,56 @@ func (app *Application) updatePlaying() error {
 		return nil
 	}
 
-	// Met à jour les processus temps réel (comme les timers de preview)
 	app.Engine.UpdateFrame()
 
-	// Mise à jour du compte à rebours temps réel (60 fps fixe)
 	if app.World.TurnTimer != nil {
 		dt := 1.0 / 60.0
 
-		// 1. ARRÊT DU TIMER : zones de départ et de fin
 		isPortalZone := app.World.DreamPlane != nil && (app.World.CurrentGridID == app.World.DreamPlane.StartZoneID || app.World.CurrentGridID == app.World.DreamPlane.EndZoneID)
 		if isPortalZone {
-			dt = 0 // Stoppe l'écoulement
+			dt = 0
 		}
 
-		// 2. RALENTISSEMENT : pendant la prévisualisation (mode portail portable)
 		if app.Input.IsPortablePortalMode() {
-			dt /= 5.0 // 5x plus lent
+			dt /= 5.0
 		}
 
-		// 3. RALENTISSEMENT : pendant les animations de déplacement (UI)
 		if len(app.World.Components.QueryByComponent("moving_animation")) > 0 {
-			// Ralentit le timer pour que les animations soient visibles (x4 slower)
 			dt /= 4.0
 		}
 
-		expired := app.World.TurnTimer.Update(dt)
-		if expired {
+		if app.World.TurnTimer.Update(dt) {
 			fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
-			// Simule un Skip : recache les tuiles et consomme le tour
 			app.Input.ResetTimerSkip()
 			app.World.TurnTimer.Reset()
 		}
 	}
 
-	// Mise à jour de l'HUD (animations, timers)
 	app.HUD.Update()
-
-	// Traite les événements en attente
 	app.World.EventBus.ProcessQueue()
 
-	// Vérification de la mort
 	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
 
-		// Logique de mort persistante
 		diff := string(app.World.Difficulty.Level)
 		if err := app.Persistence.HandleDeath(app.World.Hub, app.World.Player, diff); err != nil {
 			fmt.Printf("[SAVE] Erreur lors de la mise à jour du compteur de décès : %v\n", err)
 		}
-
 		app.State = domain.StateGameOver
 	}
 
-	// Gère les entrées HUD (ex: fermer fenêtre détails)
 	mx, my := ebiten.CursorPosition()
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		// On mémorise l'index sélectionné AVANT le clic pour détecter le double-clic (usage)
 		prevSelectedIdx := app.HUD.GetSelectedLootIndex()
 
 		if app.HUD.HandleClick(mx, my) {
 			newSelectedIdx := app.HUD.GetSelectedLootIndex()
-
 			app.Input.SetPortablePortalMode(app.HUD.IsPortablePortalSelected())
 
-			// Si on a un double-clic valide sur un objet de l'inventaire
 			if prevSelectedIdx == newSelectedIdx && newSelectedIdx != -1 {
 				selectedItem := app.HUD.GetSelectedLootItem()
 
 				if selectedItem != nil {
-					// 1. FACTORISATION : On cherche l'index réel dans l'inventaire une seule fois
 					inventoryIdx := -1
 					for i, item := range app.World.Player.Inventory.Items {
 						if item.ID == selectedItem.ID {
@@ -739,9 +675,8 @@ func (app *Application) updatePlaying() error {
 						}
 					}
 
-					// 2. DISPATCHER DE COMMANDES
 					if inventoryIdx >= 0 {
-						var cmd interface{ Execute() error } // Interface temporaire pour lier nos commandes
+						var cmd interface{ Execute() error }
 
 						switch selectedItem.Name {
 						case "echo_hound":
@@ -750,8 +685,7 @@ func (app *Application) updatePlaying() error {
 								GridID:    app.World.CurrentGridID,
 								ItemIndex: inventoryIdx,
 							}
-
-						case "dreamberry", "moonstone", "crystal_shard", "whispering_herb", "specter", "burrower", "shadowstalker":
+						case "dreamberry", "moonstone", "crystal_shard", "whispering_herb", "specter", "burrower", "shadowstalker", "stonewarden", "moss_monkey", "lumifly":
 							cmd = &usecase.UseLootItemCommand{
 								World:     app.World,
 								ItemIndex: inventoryIdx,
@@ -773,20 +707,18 @@ func (app *Application) updatePlaying() error {
 			return nil
 		}
 	}
+
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		if app.HUD.HandleRightClick(mx, my) {
 			return nil
 		}
 	}
 
-	// Gère le scroll HUD
 	app.HUD.HandleScroll(mx, my)
-
-	// Gère les entrées
 	return app.Input.Update()
 }
 
-// updateGameOver gère l'écran de fin
+// updateGameOver gère les clics et interactions sur l'écran d'échec.
 func (app *Application) updateGameOver() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		app.ReturnToMenu()
@@ -806,11 +738,9 @@ func (app *Application) updateGameOver() error {
 	return nil
 }
 
-// StartGameWithSlot démarre le jeu avec un slot spécifique
+// StartGameWithSlot démarre ou charge une expédition sur un emplacement donné.
 func (app *Application) StartGameWithSlot(slotID int) {
 	fmt.Printf("[SAVE] Starting game with slot %d\n", slotID)
-
-	// Tentative de chargement ou création
 	var save *domain.SaveData
 	var err error
 
@@ -825,27 +755,22 @@ func (app *Application) StartGameWithSlot(slotID int) {
 	}
 
 	if save != nil {
-		// Mise à jour des stats de session
 		save.Meta.SessionCount++
 		app.sessionStartTime = time.Now()
 
-		// Chaque expédition démarre avec un nouvel état de joueur et de hub.
 		app.World.Hub = meta.NewHub()
 		app.World.Player = player.New(save.Player.ID)
 
-		// Applique la difficulté sauvegardée
 		if save.Meta.Difficulty != "" {
 			app.World.Difficulty = meta.GetSettings(meta.DifficultyLevel(save.Meta.Difficulty))
 		}
 
-		// Régénère le monde à chaque nouveau départ (même après Game Over)
 		app.World.GenerateLayout("dream_plane_1")
-
 		app.StartGame()
 	}
 }
 
-// StartPlaytestGame démarre une session de test dense
+// StartPlaytestGame instancie un environnement de test isolé et accéléré.
 func (app *Application) StartPlaytestGame() {
 	fmt.Println("[PLAYTEST] Starting playtest session")
 	app.sessionStartTime = time.Now()
@@ -854,71 +779,55 @@ func (app *Application) StartPlaytestGame() {
 	app.World.Player = player.New("playtest_player")
 	app.World.Difficulty = meta.GetSettings(meta.LevelPlaytest)
 
-	// Utilise le layout de test
 	app.World.GeneratePlaytestLayout("playtest_plane")
-
 	app.StartGame()
 }
 
-// StartGame démarre le jeu depuis le menu (logique commune)
+// StartGame configure l'état d'initialisation commun à tout type de lancement de partie.
 func (app *Application) StartGame() {
 	oldState := app.State
 	app.State = domain.StatePlaying
 	app.SaveMenu.SetVisible(false)
 
-	// Publie l'événement de changement de phase
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
-
 	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
 
-	// Réinitialise le monde (tour, etc.)
 	app.World.Turn = 0
 	app.World.MaxTurns = app.World.Player.Stats.MaxSanity
 
-	// V0.2: L'inventaire est vidé à chaque nouvelle partie
 	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
 	_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
 	app.World.Player.Inventory.ScrollOffset = 0
 
-	// Réinitialise les prévisualisations uniques
 	app.Engine.ResetPreviews()
-
-	// Démarre l'engine (nécessaire pour les mouvements des créatures)
 	app.Engine.Start()
 	fmt.Println("[ENGINE] Started")
 
-	// Démarre le compte à rebours temps réel avec la durée de la difficulté courante
 	if app.World.TurnTimer != nil {
 		app.World.TurnTimer.SetMaxTime(app.World.Difficulty.TurnTimerDuration)
 		app.World.TurnTimer.Reset()
 		fmt.Printf("[TIMER] Compte à rebours démarré : %.1fs\n", app.World.Difficulty.TurnTimerDuration)
 	}
 
-	// Spawn les entités initiales si nécessaire
 	if app.World.Entities.Count() == 0 {
 		fmt.Println("=== Spawning initial entities ===")
 		app.spawnInitialEntities()
 		fmt.Printf("=== Total entities: %d ===\n", app.World.Entities.Count())
 	}
 
-	// DÉCLENCHEMENT DU PREVIEW : On active la grille actuelle au démarrage réel du jeu.
-	// Cela force le PreviewSystem à s'activer sur une grille maintenant peuplée.
 	if app.World.CurrentGridID != "" {
 		app.World.SetCurrentGrid(app.World.CurrentGridID)
 	}
 }
 
-// ReturnToMenu retourne au menu principal
+// ReturnToMenu quitte la session active, sauvegarde l'état persistant et vide la mémoire temporaire.
 func (app *Application) ReturnToMenu() {
-	// Cache les fenêtres de fin
 	app.HUD.HideVictory()
 
-	// Arrête le timer temps réel
 	if app.World.TurnTimer != nil {
 		app.World.TurnTimer.Stop()
 	}
 
-	// Sauvegarde de la progression avant de quitter
 	if app.State == domain.StatePlaying {
 		duration := time.Since(app.sessionStartTime).Seconds()
 		diff := string(app.World.Difficulty.Level)
@@ -931,32 +840,23 @@ func (app *Application) ReturnToMenu() {
 	app.State = domain.StateMenu
 	app.checkSaves()
 
-	// Publie l'événement de changement de phase
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
-
 	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
 
-	// Réinitialise l'état du jeu
 	app.Input.ResetGameState()
-
-	// Réinitialise la rotation du plateau
 	app.Renderer.SetBoardRotation(0)
 
-	// Vide les boards pour la prochaine partie
 	for _, gridID := range app.World.GridOrder {
 		cmd := &usecase.ClearBoardCommand{World: app.World, GridID: gridID}
 		cmd.Execute()
 	}
 
-	// Vide l'inventaire
 	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
-
 	fmt.Println("[MENU] Retour au menu principal")
 }
 
-// Draw dessine l'application
+// Draw distribue l'appel d'affichage graphique Ebitengine vers l'écran adéquat.
 func (app *Application) Draw(screen *ebiten.Image) {
-	// Gestion selon l'état du jeu
 	switch app.State {
 	case domain.StateMenu:
 		app.drawMenu(screen)
@@ -967,7 +867,7 @@ func (app *Application) Draw(screen *ebiten.Image) {
 	}
 }
 
-// drawMenu dessine l'écran titre
+// drawMenu affiche l'écran d'accueil principal.
 func (app *Application) drawMenu(screen *ebiten.Image) {
 	app.TitleScreen.Render(screen, app.hasSaves)
 
@@ -980,29 +880,20 @@ func (app *Application) drawMenu(screen *ebiten.Image) {
 	}
 }
 
-// drawPlaying dessine le jeu en cours
+// drawPlaying gère le rendu complet de l'arène de jeu, des calques d'inputs et du HUD.
 func (app *Application) drawPlaying(screen *ebiten.Image) {
-	// Fond noir
 	screen.Fill(color.Black)
 
-	// Dessine le plateau
 	app.Renderer.Render(screen, app.World)
-
-	// Dessine les surbrillances de sélection
 	app.Input.Draw(screen)
-
-	// Dessine le HUD
 	app.HUD.Render(screen)
 
-	// Message si aucune entité
 	if app.World.Entities.Count() == 0 {
-		text.Draw(screen, "Appuyez sur S pour spawner des entites", basicfont.Face7x13,
-			200, 300,
-			color.RGBA{255, 255, 0, 255})
+		text.Draw(screen, "Appuyez sur S pour spawner des entites", basicfont.Face7x13, 200, 300, color.RGBA{255, 255, 0, 255})
 	}
 }
 
-// drawGameOver dessine l'écran de fin
+// drawGameOver dessine la fenêtre modale de défaite.
 func (app *Application) drawGameOver(screen *ebiten.Image) {
 	screen.Fill(color.Black)
 
@@ -1016,7 +907,6 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	text.Draw(screen, "GAME OVER", basicfont.Face7x13, x+250, y+50, color.RGBA{255, 100, 100, 255})
 	text.Draw(screen, "Statistiques épuisées. Votre voyage s'arrête ici.", basicfont.Face7x13, x+120, y+100, color.White)
 
-	// Boutons
 	btnW, btnH := 160, 40
 
 	// Bouton REJOUER
@@ -1033,14 +923,13 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	text.Draw(screen, "MENU", basicfont.Face7x13, bx2+60, by+25, color.White)
 }
 
-// findEmptyPosition trouve une position vide aléatoire sur le grid
+// findEmptyPosition localise aléatoirement une parcelle exempte d'obstacles et d'entités.
 func (app *Application) findEmptyPosition(gridID string) *entity.Position {
 	grid, ok := app.World.GetGrid(gridID)
 	if !ok {
 		return nil
 	}
 
-	// Collecte toutes les positions vides
 	var emptyPositions []entity.Position
 	for y := 0; y < grid.Height; y++ {
 		for x := 0; x < grid.Width; x++ {
@@ -1056,18 +945,16 @@ func (app *Application) findEmptyPosition(gridID string) *entity.Position {
 		return nil
 	}
 
-	pos := emptyPositions[rand.Intn(len(emptyPositions))]
+	pos := emptyPositions[app.randSource.Intn(len(emptyPositions))]
 	return &pos
 }
 
-// Layout retourne la taille de la fenêtre
+// Layout retourne la dimension d'affichage réclamée par Ebitengine en fonction du contexte applicatif.
 func (app *Application) Layout(outsideWidth, outsideHeight int) (int, int) {
-	// En mode menu, utilise la taille de l'écran titre
 	if app.State == domain.StateMenu {
 		return app.TitleScreen.Layout()
 	}
 
-	// En jeu, utilise la taille fixe définie dans l'issue
 	if app.State == domain.StatePlaying {
 		return ui.ScreenWidth, ui.ScreenHeight
 	}
