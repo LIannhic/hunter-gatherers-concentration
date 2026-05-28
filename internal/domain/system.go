@@ -1531,6 +1531,8 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		sourceID = player.SpecterItemSourceID
 	} else if name == player.BurrowerItemName {
 		sourceID = player.BurrowerItemSourceID
+	} else if name == player.ShadowstalkerItemName {
+		sourceID = player.ShadowstalkerItemSourceID
 	}
 
 	// Un match = un loot
@@ -1539,7 +1541,7 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		Name:        name,
 		Type:        eType,
 		SourceID:    sourceID,
-		IsUsable:    name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName,
+		IsUsable:    name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName,
 		IsDeletable: true,
 	}
 
