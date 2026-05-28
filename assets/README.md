@@ -98,6 +98,18 @@ Chaque tuile comprend :
 - **Icônes de comportement** : Pastilles colorées pour les états des créatures.
 - **Animations de fermeture** : Les tuiles se referment en suivant la pente du terrain (`Tilt`), garantissant une cohérence visuelle avec le relief.
 
+### 4. Minimap et Biomes
+
+Les icônes de la minimap sont générées à une taille de **26x26 px** pour s'intégrer dans la grille pixel-perfect du HUD.
+
+| Icône | Description | Visibilité |
+|-------|-------------|------------|
+| `forest` | Sapin stylisé | Visité / Actuel |
+| `cave` | Entrée de grotte | Visité / Actuel |
+| `desert` | Soleil rayonnant | Visité / Actuel |
+| `swamp` | Nénuphar et bulles | Visité / Actuel |
+| `default` | Losange géométrique | Visité / Actuel |
+
 ## 🎮 Utilisation dans le Code
 
 ```go
