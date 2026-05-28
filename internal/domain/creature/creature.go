@@ -287,6 +287,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: DirNorth},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
+        c.SetThreatZone(ThreatCone)
 		c.AddTag("flying")
 		c.AddTag("passive")
 
@@ -313,6 +314,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: DirNorth},
 			Collision:   CollisionHandler{Type: CollideBounce},
 		})
+        c.SetThreatZone(ThreatCone)
 		c.AddTag("dangerous")
 		c.AddTag("aggressive")
 
@@ -355,6 +357,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: DirNorth},
 			Collision:   CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"dirt", "soil"}},
 		})
+        c.SetThreatZone(ThreatCone)
 		c.AddTag("elusive")
 
 	case "specter":
@@ -368,6 +371,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		})
 		// Utilise le profil global réécrit dans movement.go
 		c.SetMovementProfile(SpecterProfile())
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("ethereal")
 		c.AddTag("dangerous")
 
@@ -390,6 +394,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
 			Collision:  CollisionHandler{Type: CollideStop},
 		})
+        c.SetThreatZone(ThreatCone)
 		c.AddTag("static")
 
 	case "echo_hound":
@@ -417,6 +422,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: DirNorth},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
+        c.SetThreatZone(ThreatCone)
 		c.AddTag("fast")
 
 	case "fleeing_sprite":
@@ -429,6 +435,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Speed:   2,
 		})
 		c.SetMovementProfile(FleeingProfile())
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("passive")
 		c.AddTag("elusive")
 
@@ -454,6 +461,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: DirSouth},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
+        c.SetThreatZone(ThreatCone)
 		c.AddTag("territorial")
 		c.AddTag("dangerous_on_reveal")
 		c.AddTag("climb")
@@ -500,6 +508,10 @@ func (c *Creature) GetActiveThreatDirections() []entity.Direction {
 	}
 
 	return activeThreats
+}
+
+func (c *Creature) SetThreatZone(zone []entity.Direction) {
+    c.ThreatZone = zone
 }
 
 // IsPositionThreatened vérifie si une position cible est menacée par la créature
@@ -554,3 +566,24 @@ func (c *Creature) IsPositionThreatened(target entity.Position) bool {
 
 	return false
 }
+
+// Gabarits de zones de menace (Orientés Nord par défaut, relatifs à la créature)
+var (
+    // Menace uniquement la case devant elle
+    ThreatFrontal = []entity.Direction{entity.DirNorth}
+
+    // Cône à 3x3 devant (Nord, Nord-Est, Nord-Ouest)
+    ThreatCone = []entity.Direction{entity.DirNorth, entity.DirNorthEast, entity.DirNorthWest}
+
+    // Menace en croix (Cardinaux)
+    ThreatCross = []entity.Direction{entity.DirNorth, entity.DirEast, entity.DirSouth, entity.DirWest}
+
+    // Menace les diagonales
+    ThreatDiagonals = []entity.Direction{entity.DirNorthEast, entity.DirSouthEast, entity.DirSouthWest, entity.DirNorthWest}
+
+    // Autour d'elle à 360° (Les 8 directions)
+    ThreatFull360 = []entity.Direction{
+       entity.DirNorth, entity.DirNorthEast, entity.DirEast, entity.DirSouthEast,
+       entity.DirSouth, entity.DirSouthWest, entity.DirWest, entity.DirNorthWest,
+    }
+)
