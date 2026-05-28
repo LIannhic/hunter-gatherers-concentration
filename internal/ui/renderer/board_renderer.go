@@ -1012,7 +1012,14 @@ func (r *BoardRenderer) RenderSelectionHighlight(screen *ebiten.Image, pos board
 	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
 
 	x, y := r.calculateTileScreenPos(pos, grid, isPortalZone)
-	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, highlightColor, true)
+
+	// Effet d'immunité (Shadowstalker) - On remplace la couleur par du gris si actif
+	finalColor := highlightColor
+	if world.Player != nil && world.Player.ImmunityTurns > 0 {
+		finalColor = color.RGBA{150, 150, 160, 255} // Gris pierre/éthéré bien visible
+	}
+
+	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, finalColor, true)
 }
 
 func (r *BoardRenderer) RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World) {
