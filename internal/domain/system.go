@@ -1349,12 +1349,14 @@ func (s *TriggerSystem) executeAction(action string, tile *board.Plot, world *Wo
 // --- SYSTEM: PREVIEW ---
 // Gère la révélation des tuiles à l'entrée d'une grille
 type PreviewSystem struct {
-	previewTimers map[string]int // Timer par gridID
+	previewTimers map[string]int  // Timer par gridID
+	previewed     map[string]bool // Suit si une grille a déjà été prévisualisée
 }
 
 func NewPreviewSystem() *PreviewSystem {
 	return &PreviewSystem{
 		previewTimers: make(map[string]int),
+		previewed:     make(map[string]bool),
 	}
 }
 
@@ -1378,84 +1380,48 @@ func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
 		return
 	}
 
+	// Vérifie si la grille a déjà été prévisualisée
+	if s.previewed[gridID] {
+		return
+	}
+
 	// Pas de prévisualisation dans les zones de commencement et de fin
 	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
 	if isPortalZone {
 		if gridID == world.DreamPlane.StartZoneID {
 			// Dans la zone de commencement, on laisse 2 secondes au joueur pour voir le portail
 			s.previewTimers[gridID] = 2 * 60 // 2 secondes (Ajusté selon TurnTimer)
+			s.previewed[gridID] = true
 		}
 		return
 	}
 
 	settings := world.Difficulty
-	if settings.PreviewRatio <= 0 {
+	// Si la durée est <= 0, on ne fait pas de prévisualisation
+	if settings.PreviewDuration <= 0 {
 		return
 	}
 
-	fmt.Printf("[PREVIEW] Entrée sur %s (Difficulté: %s)\n", gridID, settings.Level)
+	fmt.Printf("[PREVIEW] Première entrée sur %s (Difficulté: %s)\n", gridID, settings.Level)
 
 	// Détermine quelles entités révéler
-	var allEntities []entity.Entity
 	for _, tile := range grid.Plots {
 		if len(tile.EntitiesID) > 0 {
 			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-			if ent, ok := world.Entities.Get(entity.ID(topID)); ok {
-				allEntities = append(allEntities, ent)
+			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
+				if e.GetState()&entity.Hidden != 0 {
+					// Révélation instantanée sans animation
+					e.SetState(entity.Revealed)
+				}
 			}
 		}
 	}
 
-	if settings.Level == meta.LevelNormal {
-		s.revealHalfPairs(world, allEntities, gridID)
-	} else {
-		// Easy ou Insane
-		for _, e := range allEntities {
-			if e.GetState()&entity.Hidden != 0 {
-				// Révélation instantanée sans animation
-				e.SetState(entity.Revealed)
-			}
-		}
-	}
+	// Marque la grille comme prévisualisée
+	s.previewed[gridID] = true
 
-	// Lance le timer si une durée est définie
-	if settings.PreviewDuration > 0 {
-		s.previewTimers[gridID] = int(settings.PreviewDuration * 60) // 60 fps
-	}
-}
-
-func (s *PreviewSystem) revealHalfPairs(world *World, entities []entity.Entity, gridID string) {
-	typeGroups := make(map[string][]entity.Entity)
-	for _, e := range entities {
-		resType := ""
-		if res, ok := e.(*resource.Resource); ok {
-			resType = "res_" + res.ResourceType
-		} else if cre, ok := e.(*creature.Creature); ok {
-			resType = "cre_" + cre.Species
-		}
-
-		if resType != "" {
-			typeGroups[resType] = append(typeGroups[resType], e)
-		}
-	}
-
-	ratio := world.Difficulty.PreviewRatio
-	for _, group := range typeGroups {
-		// Mélange pour ne pas toujours révéler les mêmes positions
-		rand.Shuffle(len(group), func(i, j int) {
-			group[i], group[j] = group[j], group[i]
-		})
-
-		// On révèle un nombre de tuiles proportionnel au ratio (0.5 pour Normal)
-		countToReveal := int(float64(len(group)) * ratio)
-		for i := 0; i < countToReveal; i++ {
-			e := group[i]
-			if e.GetState()&entity.Hidden != 0 {
-				// Révélation instantanée sans animation
-				e.SetState(entity.Revealed)
-			}
-		}
-	}
+	// Lance le timer
+	s.previewTimers[gridID] = int(settings.PreviewDuration * 60) // 60 fps
 }
 
 func (s *PreviewSystem) hideGrid(world *World, gridID string) {
