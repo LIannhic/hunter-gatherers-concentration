@@ -602,7 +602,8 @@ func (c *UseLootItemCommand) CanExecute() bool {
 		player.CrystalShardItemName,
 		player.WhisperingHerbItemName,
 		player.SpecterItemName,
-		player.BurrowerItemName:
+		player.BurrowerItemName,
+		player.ShadowstalkerItemName:
 		return true
 	default:
 		return false
@@ -685,6 +686,10 @@ func (c *UseLootItemCommand) Execute() error {
 			return errors.New("burrower inutilisable : aucune créature sur la grille")
 		}
 		message = "Burrower activé : une créature laissera bientôt des traces de boue."
+
+	case player.ShadowstalkerItemName:
+		c.World.Player.ImmunityTurns = 1
+		message = "Vous vous sentez évanescent."
 
 	default:
 		return errors.New("objet de butin non pris en charge")

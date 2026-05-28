@@ -160,6 +160,7 @@ func NewApplication() (*Application, error) {
 			_ = app.World.Player.Inventory.AddItem(player.NewSpecterItem())
 			_ = app.World.Player.Inventory.AddItem(player.NewBurrowerItem())
 			_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
+			_ = app.World.Player.Inventory.AddItem(player.NewShadowstalkerItem())
 		}
 	}
 
@@ -750,7 +751,7 @@ func (app *Application) updatePlaying() error {
 								ItemIndex: inventoryIdx,
 							}
 
-						case "dreamberry", "moonstone", "crystal_shard", "whispering_herb", "specter", "burrower":
+						case "dreamberry", "moonstone", "crystal_shard", "whispering_herb", "specter", "burrower", "shadowstalker":
 							cmd = &usecase.UseLootItemCommand{
 								World:     app.World,
 								ItemIndex: inventoryIdx,

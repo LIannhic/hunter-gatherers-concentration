@@ -27,6 +27,8 @@ const (
 	WhisperingHerbItemName       = "whispering_herb"
 	SpecterItemSourceID          = "specter_source"
 	SpecterItemName              = "specter"
+	ShadowstalkerItemSourceID     = "shadowstalker_source"
+	ShadowstalkerItemName         = "shadowstalker"
 	BurrowerItemSourceID         = "burrower_source"
 	BurrowerItemName             = "burrower"
 )
@@ -117,6 +119,9 @@ type Player struct {
 	StatusEffects *StatusEffects
 	Position      entity.Position
 	anchor        BorderPosition // Position sur la bordure du plateau
+
+	// Buffs temporaires
+	ImmunityTurns int // Nombre de tours d'immunité restants
 }
 
 // --- Constructeurs ---
@@ -229,6 +234,17 @@ func NewSpecterItem() *LootItem {
 		Name:        SpecterItemName,
 		Type:        entity.TypeCreature,
 		SourceID:    SpecterItemSourceID,
+		IsUsable:    true,
+		IsDeletable: true,
+	}
+}
+
+func NewShadowstalkerItem() *LootItem {
+	return &LootItem{
+		ID:          string(entity.NewID()),
+		Name:        ShadowstalkerItemName,
+		Type:        entity.TypeCreature,
+		SourceID:    ShadowstalkerItemSourceID,
 		IsUsable:    true,
 		IsDeletable: true,
 	}
@@ -352,6 +368,9 @@ func (p *Player) IsAlive() bool {
 
 // TakeDamage applique des dégâts après réduction par les résistances.
 func (p *Player) TakeDamage(amount int, damageType string) {
+	if p.ImmunityTurns > 0 {
+		return // Immunisé
+	}
 	resistance := p.Skills.Resistances[damageType]
 	actual := amount - (amount * resistance / 100)
 	p.Stats.Health -= actual
@@ -390,6 +409,11 @@ func (p *Player) ConsumeSanity(amount int) {
 	p.Stats.Sanity -= amount
 	if p.Stats.Sanity < 0 {
 		p.Stats.Sanity = 0
+	}
+
+	// Décrémentation des buffs de tour
+	if amount > 0 && p.ImmunityTurns > 0 {
+		p.ImmunityTurns--
 	}
 }
 
