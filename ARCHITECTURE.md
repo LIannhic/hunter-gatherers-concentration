@@ -98,6 +98,9 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Phase de panique (< 3s) utilisée pour les feedbacks visuels (pulse Sanity Gauge)
   - Durée maximale synchronisée avec `meta.DifficultySettings.TurnTimerDuration`
 
+- **Buffs et Protection** :
+  - `ImmunityTurns` : Géré dans `Player`, permet de bloquer tous les dégâts. Utilisé par l'effet du Shadowstalker.
+
 - **StatusEffects** (`player/status.go`) : Altérations mentales du joueur
   - `Aphasia`, `Agnosia`, `Ataxia`, `Amnesia`
   - Interceptées par le rendu UI pour scrambler les coordonnées/labels des boutons d'action

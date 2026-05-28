@@ -348,6 +348,16 @@ Le domaine communique l'intention de profondeur au moteur de rendu via les évé
 - **Calque Normal** : Pour les tuiles physiques (Memory), les ressources et les déplacements standards.
 - **Calque Over** : Pour les entités volantes ou les effets de surface (griffures).
 
+### Effets des Objets de Butin (Loot)
+
+Certains butins peuvent être utilisés directement depuis l'inventaire pour octroyer des bonus :
+
+- **Shadowstalker** : Octroie l'état **Évanescent** pendant 1 tour. Le joueur ne subit aucun dégât (physique ou d'erreur de match). Le cadre de sélection du plateau devient **gris** pour signaler cet état.
+- **Echo Hound** : Déclenche un scanner révélant les positions des entités cachées.
+- **Burrower** : Force une créature à laisser des traces de boue lors de son prochain déplacement.
+- **Spectre** : Fait disparaître une paire de créatures du plateau.
+- **Ressources** : Restaurent de la santé, de la mana ou de la santé mentale.
+
 ### Animation de fermeture et relief
 
 Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement. Elles utilisent la propriété `Tilt` (pente) de la parcelle. Cela simule une tuile qui "retombe" selon la gravité du terrain.

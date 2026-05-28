@@ -88,6 +88,13 @@ Le joueur peut subir des altérations mentales qui déforment l'interface :
 
 Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
 
+### État Évanescent (Bonus Shadowstalker)
+
+L'utilisation d'un butin de Shadowstalker permet de passer entre les plans :
+- **Protection** : Immunité totale aux dégâts pendant 1 tour.
+- **Feedback** : Le cadre de survol et de sélection sur la grille devient **gris pierre**.
+- **Message** : "Vous vous sentez évanescent."
+
 ## Verbes
 
 Pour le joueur :Pendant les parties (Actions directes)
