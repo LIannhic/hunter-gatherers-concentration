@@ -46,8 +46,9 @@ func NewManager() *Manager {
 		},
 		themes: map[string]TileTheme{
 			"default": ThemeDefault,
-			"forest":  ThemeForest,
 			"cave":    ThemeCave,
+			"desert":   ThemeDesert,
+			"forest":  ThemeForest,
 			"swamp":   ThemeSwamp,
 		},
 	}
