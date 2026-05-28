@@ -88,6 +88,15 @@ var (
 		Eye:       color.RGBA{255, 200, 0, 255},   // Ambre/Jaune
 		Bg:        color.RGBA{50, 45, 40, 255},    // Brun terreux
 	}
+
+	// Stonewarden - Gardien de pierre
+	StonewardenPalette = CreaturePalette{
+		Body:      color.RGBA{120, 120, 130, 255}, // Gris pierre
+		Highlight: color.RGBA{180, 180, 190, 255}, // Gris clair
+		Shadow:    color.RGBA{70, 70, 80, 255},    // Gris sombre
+		Eye:       color.RGBA{100, 200, 255, 255}, // Bleu éthéré
+		Bg:        color.RGBA{45, 45, 50, 255},
+	}
 )
 
 // generateLumifly crée l'icône d'une luciole
@@ -336,6 +345,42 @@ func generateMossMonkey(size int, p CreaturePalette) *ebiten.Image {
 	// Bras (longs pour un singe)
 	vector.StrokeLine(img, centerX-15, centerY+5, centerX-22, centerY+20, 3, p.Body, true)
 	vector.StrokeLine(img, centerX+15, centerY+5, centerX+22, centerY+20, 3, p.Body, true)
+
+	return img
+}
+
+// generateStonewarden crée l'icône d'un gardien de pierre
+func generateStonewarden(size int, p CreaturePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+
+	centerX := float32(size / 2)
+	centerY := float32(size / 2)
+
+	// Corps (forme de bloc monolithique)
+	vector.DrawFilledRect(img, centerX-18, centerY-10, 36, 30, p.Body, true)
+	// Facettes de pierre
+	vector.DrawFilledRect(img, centerX-18, centerY-10, 36, 4, p.Highlight, true)
+	vector.DrawFilledRect(img, centerX-18, centerY+16, 36, 4, p.Shadow, true)
+
+	// Épaules
+	vector.DrawFilledRect(img, centerX-24, centerY-5, 12, 12, p.Shadow, true)
+	vector.DrawFilledRect(img, centerX+12, centerY-5, 12, 12, p.Shadow, true)
+
+	// Tête (bloc plus petit posé dessus)
+	vector.DrawFilledRect(img, centerX-10, centerY-22, 20, 15, p.Body, true)
+	// Bordure supérieure tête
+	vector.DrawFilledRect(img, centerX-10, centerY-22, 20, 2, p.Highlight, true)
+
+	// Yeux (fentes éthérées)
+	vector.DrawFilledRect(img, centerX-6, centerY-16, 4, 3, p.Eye, true)
+	vector.DrawFilledRect(img, centerX+2, centerY-16, 4, 3, p.Eye, true)
+
+	// Lichen/Mousse (touches de vert sur le corps)
+	mossColor := color.RGBA{80, 120, 60, 200}
+	vector.DrawFilledCircle(img, centerX-10, centerY+5, 4, mossColor, true)
+	vector.DrawFilledCircle(img, centerX+12, centerY-2, 3, mossColor, true)
+	vector.DrawFilledCircle(img, centerX-5, centerY+20, 5, mossColor, true)
 
 	return img
 }

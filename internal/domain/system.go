@@ -270,7 +270,7 @@ func (w *World) GeneratePlaytestLayout(id string) {
 	_, _ = w.SpawnCreature(grid.ID, "echo_hound", entity.Position{X: 2, Y: 1}) // Sa paire
 
 	// 2. Population automatique pour le reste
-	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "moss_monkey"}
+	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "moss_monkey", "stonewarden"}
 	resources := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
 
 	fmt.Println("[WORLD] Population de la zone de playtest...")
