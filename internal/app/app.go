@@ -923,6 +923,12 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 		sw := float32(screen.Bounds().Dx())
 		sh := float32(screen.Bounds().Dy())
 
+		// Log de débogage pour la bulle
+		if app.World.Player.VisualEffects["bubble"] > 0 {
+			fmt.Printf("[DEBUG-FX] Cursor: (%d, %d) | Bubble Center (norm): (%.3f, %.3f) | Screen: (%.0f, %.0f)\n",
+				mx, my, float32(mx)/sw, float32(my)/sh, sw, sh)
+		}
+
 		params := renderer.GlobalEffectParams{
 			SanityRatio: ratio,
 			Biome:       biome,
