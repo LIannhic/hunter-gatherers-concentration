@@ -218,6 +218,8 @@ Séparation des responsabilités :
     - **Tapis de Jeu (Playmat)** : 700x700. Contient le plateau, les boutons et les **Effets Plein Écran** (ex: Scanner de l'Echo Hound).
 - **Input**: Capture les événements, gère la navigation entre les zones et les raccourcis clavier.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
+- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur.
+
 - **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip.
 
 ### 5. App (Wiring)
