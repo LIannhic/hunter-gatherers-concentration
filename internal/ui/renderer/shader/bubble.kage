@@ -6,31 +6,29 @@ var Resolution vec2
 
 func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
     // Calcul du ratio d'aspect dynamique
-    aspectRatio := Resolution.x / Resolution.y
+    aspect := Resolution.x / Resolution.y
 
-    // On transforme les deux coordonnées dans le même espace (ajusté par X)
-    uv := texCoord
-    uv.x *= aspectRatio
+    // Passage dans un espace carré (isotrope) pour les calculs de distance
+    uv := vec2(texCoord.x * aspect, texCoord.y)
+    center := vec2(Center.x * aspect, Center.y)
 
-    center := Center
-    center.x *= aspectRatio
+    delta := uv - center
+    dist := length(delta)
 
-    p := uv - center
-    r := length(p)
+    // Rayon normalisé par rapport à la hauteur
+    radius := 0.09 * Intensity
 
-    // Rayon ciblé pour englober une tuile (88px)
-    // On utilise une valeur normalisée par rapport à la hauteur (720px par défaut)
-    bubbleRadius := 0.09 * Intensity
+    if dist < radius {
+        // Calcul de la distortion dans l'espace isotrope
+        strength := 1.0 - sqrt(1.0 - pow(dist / radius, 2.0))
 
-    if r < bubbleRadius {
-        // Distortion de lentille sphérique quadratique
-        factor := 1.0 - sqrt(1.0 - pow(r / bubbleRadius, 2.0))
+        // Déformation de la coordonnée de lecture
+        warped := uv - delta * strength
 
-        // On projette le décalage vers l'arrière dans l'espace UV d'origine
-        offset := p * factor
-        offset.x /= aspectRatio
+        // Retour vers l'espace UV normalisé (rectangulaire)
+        warped.x /= aspect
 
-        return imageSrc0At(Center + offset)
+        return imageSrc0At(warped)
     }
 
     return imageSrc0At(texCoord)
