@@ -118,6 +118,13 @@ func (c *RevealTileCommand) Execute() error {
 			fmt.Printf("[COMBAT] Confrontation ! La créature %s attaque le joueur en %v\n", cre.Species, playerPos)
 			c.World.Player.TakeDamage(10, "physical")
 
+			// Déclenche les effets visuels (Shaders) selon l'espèce
+			if cre.Species == "shadowstalker" {
+				c.World.Player.VisualEffects["blur"] = 3 // Dure 3 tours
+			} else if cre.Species == "lumifly" {
+				c.World.Player.VisualEffects["bubble"] = 3
+			}
+
 			// Feedback visuel de l'attaque
 			track := entity.NewTrack("intent_beam", 2, entity.Position{X: c.Position.X, Y: c.Position.Y}, playerPos)
 			track.SetGridID(c.GridID)

@@ -134,6 +134,9 @@ type Player struct {
 
 	// Buffs temporaires
 	ImmunityTurns int // Nombre de tours d'immunité restants
+
+	// Effets visuels (Shaders)
+	VisualEffects map[string]int // "blur", "bubble", etc. -> Durée en tours
 }
 
 // --- Constructeurs ---
@@ -159,6 +162,7 @@ func New(id string) *Player {
 			VisionRange:          1,
 			RevealEfficiency:     1.0,
 		},
+		VisualEffects: make(map[string]int),
 	}
 }
 

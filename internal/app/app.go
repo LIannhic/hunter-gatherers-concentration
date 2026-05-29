@@ -44,8 +44,9 @@ type Application struct {
 	Persistence *usecase.PersistenceManager
 
 	// UI
-	Renderer    *renderer.BoardRenderer
-	TitleScreen *renderer.TitleScreen
+	Renderer       *renderer.BoardRenderer
+	EffectRenderer *renderer.EffectRenderer
+	TitleScreen    *renderer.TitleScreen
 	SaveMenu    *renderer.SaveMenu
 	Input       *input.Handler
 	HUD         *hud.HUD
@@ -86,6 +87,7 @@ func NewApplication() (*Application, error) {
 
 	// 5. Initialisation des composants UI et Rendering
 	app.Renderer = renderer.NewBoardRenderer(app.Assets)
+	app.EffectRenderer, _ = renderer.NewEffectRenderer()
 	app.TitleScreen = renderer.NewTitleScreen()
 	app.SaveMenu = renderer.NewSaveMenu()
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
@@ -548,6 +550,10 @@ func (app *Application) spawnInitialEntities() {
 func (app *Application) Update() error {
 	app.debug.Frame()
 
+	if app.EffectRenderer != nil {
+		app.EffectRenderer.Update()
+	}
+
 	switch app.State {
 	case domain.StateMenu:
 		return app.updateMenu()
@@ -902,6 +908,28 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 	app.Renderer.Render(screen, app.World)
 	app.Input.Draw(screen)
 	app.HUD.Render(screen)
+
+	// Application des shaders globaux (Biome + Attaques créatures + Sanité)
+	if app.EffectRenderer != nil && app.World.Player != nil {
+		ratio := float32(app.World.Player.Stats.Sanity) / float32(app.World.Player.Stats.MaxSanity)
+
+		grid, _ := app.World.GetCurrentGrid()
+		biome := ""
+		if grid != nil {
+			biome = string(grid.Biome)
+		}
+
+		mx, my := ebiten.CursorPosition()
+
+		params := renderer.GlobalEffectParams{
+			SanityRatio: ratio,
+			Biome:       biome,
+			UseBlur:     app.World.Player.VisualEffects["blur"] > 0,
+			UseBubble:   app.World.Player.VisualEffects["bubble"] > 0,
+			MousePos:    []float32{float32(mx) / float32(ui.ScreenWidth), float32(my) / float32(ui.ScreenHeight)},
+		}
+		app.EffectRenderer.ProcessGlobalEffects(screen, params)
+	}
 
 	if app.World.Entities.Count() == 0 {
 		text.Draw(screen, "Appuyez sur S pour spawner des entites", basicfont.Face7x13, 200, 300, color.RGBA{255, 255, 0, 255})

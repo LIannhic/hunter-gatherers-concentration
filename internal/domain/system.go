@@ -2759,6 +2759,13 @@ func (e *Engine) Update() {
 	// Diminue la santé mentale à chaque tour
 	if e.world.Player != nil {
 		e.world.Player.ConsumeSanity(1)
+
+		// Met à jour les durées des effets visuels
+		for name, duration := range e.world.Player.VisualEffects {
+			if duration > 0 {
+				e.world.Player.VisualEffects[name]--
+			}
+		}
 	}
 
 	e.world.EventBus.Publish(event.NewTurnEndedEvent(e.world.Turn))
