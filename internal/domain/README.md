@@ -94,6 +94,7 @@ func (s *LifecycleSystem) Update(world *World) {
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)
 - Une séparation claire : le plateau fournit la géométrie, les entités portent la logique
 - Un système plus flexible pour les entités spéciales (ex: les portails de commencement qui se bloquent après un délai)
+- **Unification de l'interface `Hoverable`** : Toutes les entités interactives (tuiles, butin) et les sorties implémentent `Hoverable`, permettant un effet d'inclinaison (tilt) unifié au survol.
 
 ---
 
@@ -322,9 +323,10 @@ L'inventaire agit comme un tampon entre la session de récolte onirique et le fo
 ### Fonctionnement du LootSystem
 
 1. **Détection** : Le système écoute les événements `TileMatched`.
-2. **Instanciation** : Il crée un `LootItem` à partir des métadonnées de l'entité matchée (nom de l'espèce ou type de ressource).
-3. **Transfert** : L'objet est ajouté au premier slot disponible de l'inventaire du joueur.
-4. **Overflow** : Si l'inventaire est plein (30 slots), le butin est détruit et un événement `InventoryFull` est émis pour déclencher un retour visuel.
+2. **Instanciation** : Il crée un `LootItem` à partir des métadonnées de l'entité matchée. `LootItem` est maintenant une entité de plein droit (`entity.Entity`) de type `TypeLoot`.
+3. **Grille d'Inventaire** : L'inventaire est géré comme une `Grid` dédiée (`InventoryGridID = "inventory"`). Cela permet d'utiliser les mêmes systèmes de rendu et de survol que pour le plateau de jeu.
+4. **Transfert** : L'objet est ajouté à la fois à la liste logique du joueur via `AddLootItem` et placé spatialement sur la grille d'inventaire pour la synchronisation.
+5. **Overflow** : Si l'inventaire est plein (30 slots), le butin est détruit et un événement `InventoryFull` est émis pour déclencher un retour visuel.
 
 ### Caractéristiques de l'Inventaire
 

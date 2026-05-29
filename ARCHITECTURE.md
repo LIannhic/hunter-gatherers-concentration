@@ -83,14 +83,17 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Chaque tuile contient une référence optionnelle à une entité
   - Les tuiles ne portent plus d'état ; c'est l'entité qui le porte
   - Permet la recherche rapide des entités par position
+  - **Inventory Grid** : L'inventaire est désormais une grille logicielle (`InventoryGridID`), permettant un traitement spatial uniforme (hover, highlights).
   - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles.
 
 - **Systems** : Mettent à jour l'état du monde
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
   - **ResourceLifecycleSystem** : Gère la maturation des ressources
-  - **LootSystem** : Transforme les matches réussis en objets d'inventaire
+  - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire.
   - **TrackSystem** : Gère la décomposition temporelle des traces
+
+- **Interface `Hoverable`** : Unifie l'interaction de survol pour les tuiles, les sorties de navigation et les objets de l'inventaire. Centralise la logique d'autorisation (ex: blocage des tuiles scellées).
 
 - **TurnTimer** (`timer.go`) : Compte à rebours temps réel par tour
   - Décrémente à chaque frame (60 fps)
