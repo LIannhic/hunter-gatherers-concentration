@@ -106,6 +106,14 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 		return
 	}
 
+	// Redimensionnement dynamique des buffers si nécessaire
+	sw, sh := screen.Bounds().Dx(), screen.Bounds().Dy()
+	if r.bufferA.Bounds().Dx() != sw || r.bufferA.Bounds().Dy() != sh {
+		fmt.Printf("[DEBUG-FX] Resizing buffers to %dx%d (Screen was %v)\n", sw, sh, screen.Bounds())
+		r.bufferA = ebiten.NewImage(sw, sh)
+		r.bufferB = ebiten.NewImage(sw, sh)
+	}
+
 	// Ping-pong buffers initialization
 	r.bufferA.Clear()
 	r.bufferA.DrawImage(screen, nil)
