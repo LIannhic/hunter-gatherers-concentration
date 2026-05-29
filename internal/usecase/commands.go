@@ -258,6 +258,7 @@ func (c *MatchTilesCommand) Execute() error {
 		if entity1.GetType() == entity.TypeCreature || entity1.GetType() == entity.TypeResource {
 			if grid, ok := c.World.GetGrid(c.GridID); ok {
 				grid.MatchedTargetsCount += 2
+				fmt.Printf("[DEBUG-MATCH] Grid: %s | Match Valide | MatchedTargetsTotal: %d\n", c.GridID, grid.MatchedTargetsCount)
 			}
 		}
 
@@ -573,8 +574,7 @@ func (c *UseScannerItemCommand) Execute() error {
 		return fmt.Errorf("échec de l'effet de scan : %w", err)
 	}
 
-	inv := &c.World.Player.Inventory
-	err = inv.RemoveItem(c.ItemIndex)
+	err = c.World.RemoveLootItem(c.ItemIndex)
 	if err != nil {
 		return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
 	}
@@ -611,23 +611,26 @@ func (c *UseLootItemCommand) CanExecute() bool {
 }
 
 func (c *UseLootItemCommand) Execute() error {
-	if !c.CanExecute() {
-		return errors.New("impossible d'utiliser cet objet de butin")
-	}
-
-	inv := &c.World.Player.Inventory
-	item, err := inv.GetItem(c.ItemIndex)
+	item, err := c.World.Player.Inventory.GetItem(c.ItemIndex)
 	if err != nil {
 		return err
 	}
 
-	ability := ItemAbilities[item.Name]
+	ability, exists := ItemAbilities[item.Name]
+	if !exists {
+		return fmt.Errorf("aucune capacité définie pour l'objet : %s", item.Name)
+	}
+
+	if !ability.CanExecute(c.World) {
+		return fmt.Errorf("les conditions d'utilisation pour %s ne sont pas remplies (aucune pile trouvée ?)", item.Name)
+	}
+
 	message, errAbility := ability.Execute(c.World)
 	if errAbility != nil {
 		return errAbility
 	}
 
-	err = inv.RemoveItem(c.ItemIndex)
+	err = c.World.RemoveLootItem(c.ItemIndex)
 	if err != nil {
 		return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
 	}
@@ -675,8 +678,7 @@ func (c *UseDreamberryItemCommand) Execute() error {
 	const manaRestorationAmount = 5
 	c.World.Player.RestoreMana(manaRestorationAmount)
 
-	inv := &c.World.Player.Inventory
-	err := inv.RemoveItem(c.ItemIndex)
+	err := c.World.RemoveLootItem(c.ItemIndex)
 	if err != nil {
 		return fmt.Errorf("erreur lors de la suppression de la dreamberry : %w", err)
 	}

@@ -76,4 +76,7 @@ func (w *World) FillGridRandomly(gridID string) {
 		fmt.Printf("  - [%s] Spawning lone trap at %v\n", gridID, positions[posIdx])
 		w.SpawnTrap(gridID, positions[posIdx])
 	}
+
+	fmt.Printf("[DEBUG-POP] Grid %s population terminee. Cibles (Matchable): %d | Pieges: %d\n",
+		gridID, grid.InitialMatchableCount, totalTiles-grid.InitialMatchableCount)
 }
