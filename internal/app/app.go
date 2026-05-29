@@ -135,15 +135,29 @@ func NewApplication() (*Application, error) {
 
 	// 6. Connexion et liaisons des événements de l'UI
 	app.Input.SetRenderer(app.Renderer)
+	app.HUD.SetBoardRenderer(app.Renderer)
 	app.Input.OnToggleDetails = app.HUD.ToggleDetails
 	app.Input.OnToggleInvDetails = app.HUD.ToggleInventoryDetails
 	app.Input.OnToggleAssetsDetails = app.HUD.ToggleAssetsDetails
 
 	// Remplissage de débogage pour tester l'utilisation des objets
 	app.Input.OnFillInventory = func() {
-		fmt.Println("[DEBUG] Remplissage de l'inventaire avec des Gardiens de Pierre.")
-		for i := 0; i < 15; i++ {
-			_ = app.World.Player.Inventory.AddItem(player.NewStonewardenItem())
+		fmt.Println("[DEBUG] Remplissage de l'inventaire avec divers objets.")
+		items := []*player.LootItem{
+			player.NewCrystalShardItem(),
+			player.NewDreamberryItem(),
+			player.NewMoonstoneItem(),
+			player.NewWhisperingHerbItem(),
+			player.NewBurrowerItem(),
+			player.NewEchoHoundItem(),
+			player.NewMossMonkeyItem(),
+			player.NewShadowstalkerItem(),
+			player.NewSpecterItem(),
+			player.NewStonewardenItem(),
+
+		}
+		for _, item := range items {
+			_ = app.World.AddLootItem(item)
 		}
 	}
 
@@ -669,7 +683,7 @@ func (app *Application) updatePlaying() error {
 				if selectedItem != nil {
 					inventoryIdx := -1
 					for i, item := range app.World.Player.Inventory.Items {
-						if item.ID == selectedItem.ID {
+						if item.GetID() == selectedItem.GetID() {
 							inventoryIdx = i
 							break
 						}
@@ -795,8 +809,9 @@ func (app *Application) StartGame() {
 	app.World.Turn = 0
 	app.World.MaxTurns = app.World.Player.Stats.MaxSanity
 
+	// Initialisation propre de l'inventaire via le World
 	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
-	_ = app.World.Player.Inventory.AddItem(player.NewPortablePortalItem())
+	_ = app.World.AddLootItem(player.NewPortablePortalItem())
 	app.World.Player.Inventory.ScrollOffset = 0
 
 	app.Engine.ResetPreviews()

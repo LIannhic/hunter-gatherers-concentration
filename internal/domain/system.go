@@ -54,6 +54,9 @@ type World struct {
 	// Dream Plane (Mega-board structure)
 	DreamPlane *DreamPlane
 
+	// Inventory is modeled as a separate logical grid and not part of the game zone list.
+	InventoryGrid *board.Grid
+
 	// Factories
 	CreatureFactory *creature.Factory
 	ResourceFactory *resource.Factory
@@ -78,7 +81,7 @@ type World struct {
 // NewWorld initialise un nouveau monde avec les réglages par défaut
 func NewWorld() *World {
 	p := player.New("player_1")
-	return &World{
+	w := &World{
 		Grids:                make(map[string]*board.Grid),
 		GridOrder:            make([]string, 0),
 		Entities:             entity.NewManager(),
@@ -97,6 +100,12 @@ func NewWorld() *World {
 		lastTurnNumber:       0,
 		TurnTimer:            NewTurnTimer(meta.GetSettings(meta.LevelNormal).TurnTimerDuration),
 	}
+
+	// Initialise la grille d'inventaire
+	// 3 colonnes, 10 lignes pour 30 slots par défaut
+	w.CreateGrid(board.InventoryGridID, 3, 10, board.BiomeDefault)
+
+	return w
 }
 
 // =============================================================================
@@ -106,6 +115,11 @@ func NewWorld() *World {
 // CreateGrid crée un nouveau grid et l'ajoute au monde
 func (w *World) CreateGrid(id string, width, height int, biome board.BiomeType) *board.Grid {
 	grid := board.NewGrid(id, width, height, biome)
+	if id == board.InventoryGridID {
+		w.InventoryGrid = grid
+		return grid
+	}
+
 	w.Grids[id] = grid
 	w.GridOrder = append(w.GridOrder, id)
 	if w.CurrentGridID == "" {
@@ -150,6 +164,12 @@ func (w *World) IsNavigationOpen(gridID string) bool {
 
 // GetGrid retourne un grid par son ID
 func (w *World) GetGrid(id string) (*board.Grid, bool) {
+	if id == board.InventoryGridID {
+		if w.InventoryGrid == nil {
+			return nil, false
+		}
+		return w.InventoryGrid, true
+	}
 	grid, ok := w.Grids[id]
 	return grid, ok
 }
@@ -174,27 +194,175 @@ func (w *World) SetCurrentGrid(gridID string) bool {
 	return false
 }
 
-// UpdateDiscovery met à jour l'état de découverte du Dream Plane
 func (w *World) UpdateDiscovery() {
-	if w.DreamPlane == nil {
-		return
-	}
-	gridID := w.CurrentGridID
-	if gridID == "" {
+	if w.DreamPlane == nil || w.CurrentGridID == "" {
 		return
 	}
 
-	// La zone actuelle devient Visited
-	w.DreamPlane.DiscoveryStates[gridID] = board.StateVisited
+	if w.DreamPlane.DiscoveryStates == nil {
+		w.DreamPlane.DiscoveryStates = make(map[string]board.DiscoveryState)
+	}
 
-	// Les voisins connectés deviennent Adjacent s'ils étaient Hidden
-	if conns, ok := w.DreamPlane.Connections[gridID]; ok {
-		for _, targetID := range conns {
-			if w.DreamPlane.DiscoveryStates[targetID] == board.StateHidden {
-				w.DreamPlane.DiscoveryStates[targetID] = board.StateAdjacent
+	current := w.CurrentGridID
+	if _, ok := w.DreamPlane.DiscoveryStates[current]; !ok {
+		w.DreamPlane.DiscoveryStates[current] = board.StateHidden
+	}
+
+	// Marque la zone actuelle comme visitée.
+	w.DreamPlane.DiscoveryStates[current] = board.StateVisited
+
+	neighbors := make(map[string]bool)
+	if conns, ok := w.DreamPlane.Connections[current]; ok {
+		for _, neighborID := range conns {
+			neighbors[neighborID] = true
+			if _, ok := w.DreamPlane.DiscoveryStates[neighborID]; !ok {
+				w.DreamPlane.DiscoveryStates[neighborID] = board.StateHidden
 			}
 		}
 	}
+
+	for zoneID := range w.DreamPlane.Zones {
+		if zoneID == current {
+			continue
+		}
+		if neighbors[zoneID] {
+			if w.DreamPlane.DiscoveryStates[zoneID] != board.StateVisited {
+				w.DreamPlane.DiscoveryStates[zoneID] = board.StateAdjacent
+			}
+		} else if w.DreamPlane.DiscoveryStates[zoneID] != board.StateVisited {
+			w.DreamPlane.DiscoveryStates[zoneID] = board.StateHidden
+		}
+	}
+}
+
+// SyncInventoryGrid synchronise la grille logique d'inventaire avec la liste des objets du joueur.
+func (w *World) SyncInventoryGrid() {
+	grid, ok := w.GetGrid(board.InventoryGridID)
+	if !ok {
+		return
+	}
+
+	// 1. Vide tous les emplacements de la grille d'inventaire
+	for _, plot := range grid.Plots {
+		plot.EntitiesID = nil
+	}
+
+	// 2. Replace les entités selon leur nouvel index (compactage)
+	for i, item := range w.Player.Inventory.Items {
+		pos := board.Position{X: i % 3, Y: i / 3}
+		_ = grid.PlaceEntity(pos, string(item.GetID()))
+		item.SetPosition(pos)
+		item.SetGridID(board.InventoryGridID)
+	}
+}
+
+// RemoveLootItem retire un objet de l'inventaire par son index et synchronise la grille.
+func (w *World) RemoveLootItem(index int) error {
+	if index < 0 || index >= len(w.Player.Inventory.Items) {
+		return errors.New("index invalide")
+	}
+
+	item := w.Player.Inventory.Items[index]
+	// Retire de la liste slice
+	err := w.Player.Inventory.RemoveItem(index)
+	if err != nil {
+		return err
+	}
+
+	// Désinscrit l'entité
+	w.Entities.Remove(item.GetID())
+
+	// Re-synchronise toute la grille pour le compactage
+	w.SyncInventoryGrid()
+	return nil
+}
+
+// AddLootItem ajoute un objet à l'inventaire et le synchronise sur la grille logicielle.
+func (w *World) AddLootItem(item *player.LootItem) error {
+	err := w.Player.Inventory.AddItem(item)
+	if err != nil {
+		return err
+	}
+
+	w.Entities.Register(item)
+	item.SetState(entity.Revealed) // Toujours visible en inventaire
+	w.SyncInventoryGrid()
+	return nil
+}
+
+// GetHoverableAt retourne l'élément interactif à une position donnée d'une grille.
+// Gère les entités standard, le butin d'inventaire et les sorties (via GridID spéciaux).
+func (w *World) GetHoverableAt(gridID string, pos board.Position) board.Hoverable {
+	// 1. Cas de la grille d'inventaire
+	if gridID == board.InventoryGridID {
+		grid, ok := w.GetGrid(gridID)
+		if !ok {
+			return nil
+		}
+		plot, err := grid.Get(pos)
+		if err != nil || len(plot.EntitiesID) == 0 {
+			return nil
+		}
+		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+		ent, ok := w.Entities.Get(entity.ID(topID))
+		if !ok {
+			return nil
+		}
+		return ent
+	}
+
+	// 2. Cas des sorties (Navigation) - On utilise des GridID virtuels "exit_north", etc.
+	if strings.HasPrefix(gridID, "exit_") {
+		dirStr := strings.TrimPrefix(gridID, "exit_")
+		var dir entity.Direction
+		switch dirStr {
+		case "north":
+			dir = entity.DirNorth
+		case "east":
+			dir = entity.DirEast
+		case "south":
+			dir = entity.DirSouth
+		case "west":
+			dir = entity.DirWest
+		default:
+			return nil
+		}
+
+		grid, ok := w.GetGrid(w.CurrentGridID)
+		if !ok {
+			return nil
+		}
+
+		index := pos.X // Pour les sorties, on utilise X comme index (0 ou 1)
+		if index < 0 || index > 1 {
+			return nil
+		}
+
+		return &board.ExitTile{
+			Direction: dir,
+			Index:     index,
+			State:     grid.ExitsState[dir][index],
+		}
+	}
+
+	// 3. Cas standard (Grilles de jeu)
+	grid, ok := w.GetGrid(gridID)
+	if !ok {
+		return nil
+	}
+
+	plot, err := grid.Get(pos)
+	if err != nil || len(plot.EntitiesID) == 0 {
+		return nil
+	}
+
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	ent, ok := w.Entities.Get(entity.ID(topID))
+	if !ok {
+		return nil
+	}
+
+	return ent
 }
 
 // GenerateLayout génère la structure du monde (Dream Plane)
@@ -238,10 +406,27 @@ func (w *World) GenerateLayout(id string) {
 	w.CurrentGridID = w.DreamPlane.StartZoneID
 	w.UpdateDiscovery()
 
+	w.PopulateInitialStructures()
+	w.PopulateZones()
+
 	fmt.Printf("[WORLD] Layout généré avec %d zones. Départ: %s, Fin: %s\n",
 		len(w.Grids), w.DreamPlane.StartZoneID, w.DreamPlane.EndZoneID)
 
 	w.EventBus.PublishImmediate(event.NewWorldGeneratedEvent(id, len(w.Grids)))
+}
+
+// PopulateZones remplit toutes les zones non-portal générées avec des entités aléatoires.
+func (w *World) PopulateZones() {
+	if w.DreamPlane == nil {
+		return
+	}
+
+	for _, gridID := range w.GridOrder {
+		if gridID == w.DreamPlane.StartZoneID || gridID == w.DreamPlane.EndZoneID {
+			continue
+		}
+		w.FillGridRandomly(gridID)
+	}
 }
 
 // GeneratePlaytestLayout génère un monde de test dense avec toutes les entités
@@ -971,7 +1156,7 @@ func (w *World) HasPortablePortal() bool {
 func (w *World) RemovePortablePortal() bool {
 	for idx, item := range w.Player.Inventory.Items {
 		if item.SourceID == player.PortablePortalItemSourceID {
-			_ = w.Player.Inventory.RemoveItem(idx)
+			_ = w.RemoveLootItem(idx)
 			return true
 		}
 	}
@@ -996,7 +1181,7 @@ func (w *World) applyPortablePortalLootTax() {
 	indices = indices[:taxAmount]
 	sort.Sort(sort.Reverse(sort.IntSlice(indices)))
 	for _, idx := range indices {
-		_ = w.Player.Inventory.RemoveItem(idx)
+		_ = w.RemoveLootItem(idx)
 	}
 }
 
@@ -1548,45 +1733,25 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		return
 	}
 
-	sourceID := string(entID)
-	// Si c'est un EchoHound, un Dreamberry ou un item de loot consommable,
-	// on applique le SourceID spécifique lorsque disponible.
-	if name == player.EchoHoundItemName {
-		sourceID = player.EchoHoundItemSourceID
-	} else if name == player.DreamberryItemName {
-		sourceID = player.DreamberryItemSourceID
-	} else if name == player.MoonstoneItemName {
-		sourceID = player.MoonstoneItemSourceID
-	} else if name == player.CrystalShardItemName {
-		sourceID = player.CrystalShardItemSourceID
-	} else if name == player.WhisperingHerbItemName {
-		sourceID = player.WhisperingHerbItemSourceID
-	} else if name == player.SpecterItemName {
-		sourceID = player.SpecterItemSourceID
-	} else if name == player.BurrowerItemName {
-		sourceID = player.BurrowerItemSourceID
-	} else if name == player.ShadowstalkerItemName {
-		sourceID = player.ShadowstalkerItemSourceID
-	} else if name == player.MossMonkeyItemName {
-		sourceID = player.MossMonkeyItemSourceID
-	} else if name == player.StonewardenItemName {
-		sourceID = player.StonewardenItemSourceID
-	} else if name == player.LumiflyItemName {
-		sourceID = player.LumiflyItemSourceID
-	}
+	// Pour les créatures et ressources, le SourceID correspond au nom de l'espèce ou du type
+	// Cela permet de retrouver facilement les assets (ex: creature_echo_hound)
+	sourceID := name
 
 	// Un match = un loot
 	loot := &player.LootItem{
-		ID:          string(entity.NewID()),
-		Name:        name,
-		Type:        eType,
-		SourceID:    sourceID,
-		IsUsable:    name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName || name == player.MossMonkeyItemName || name == player.StonewardenItemName || name == player.LumiflyItemName,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         name,
+		SourceID:     sourceID,
+		OriginalType: eType,
+		IsUsable:     name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName || name == player.MossMonkeyItemName || name == player.StonewardenItemName || name == player.LumiflyItemName,
+		IsDeletable:  true,
 	}
+	// On garde le type d'origine en tag pour le rendu
+	loot.AddTag(fmt.Sprintf("original_type_%d", eType))
+	loot.AddTag(name)
 
-	// Tente d'ajouter à l'inventaire
-	err := s.world.Player.Inventory.AddItem(loot)
+	// Tente d'ajouter à l'inventaire via le World pour la synchronisation des grilles
+	err := s.world.AddLootItem(loot)
 	if err != nil {
 		// Inventaire plein : on détruit le loot
 		fmt.Printf("[LOOT] Inventaire plein ! Le loot %s est perdu.\n", name)
@@ -1596,7 +1761,7 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 
 	// Une fois le loot acquis, on peut retirer les entités du board
 	fmt.Printf("[LOOT] Acquisition : %s (ID: %s)\n", name, entID)
-	s.world.EventBus.PublishImmediate(event.NewLootAcquiredEvent(loot.ID, loot.Name, loot.Type))
+	s.world.EventBus.PublishImmediate(event.NewLootAcquiredEvent(string(loot.GetID()), loot.Name, loot.OriginalType))
 }
 
 func (s *LootSystem) getEntityName(ent entity.Entity) string {

@@ -169,10 +169,40 @@ func TestWorldFindAvailable3x3DeploymentArea(t *testing.T) {
 	}
 }
 
+func TestWorldGenerateLayoutPopulatesZones(t *testing.T) {
+	w := NewWorld()
+	w.GenerateLayout("test_plane")
+
+	if w.Entities.Count() == 0 {
+		t.Fatal("Expected generated world to contain entities after population")
+	}
+
+	populated := false
+	for _, gridID := range w.GridOrder {
+		if w.DreamPlane != nil && (gridID == w.DreamPlane.StartZoneID || gridID == w.DreamPlane.EndZoneID) {
+			continue
+		}
+		grid, _ := w.GetGrid(gridID)
+		for _, plot := range grid.Plots {
+			if len(plot.EntitiesID) > 0 {
+				populated = true
+				break
+			}
+		}
+		if populated {
+			break
+		}
+	}
+
+	if !populated {
+		t.Error("Expected at least one non-portal zone to be populated")
+	}
+}
+
 func TestWorldDeployPortablePortalSuccess(t *testing.T) {
 	w := NewWorld()
 	w.CreateGrid("test", 6, 6, board.BiomeForest)
-	_ = w.Player.Inventory.AddItem(player.NewPortablePortalItem())
+	_ = w.AddLootItem(player.NewPortablePortalItem())
 
 	portal, err := w.DeployPortablePortal("test")
 	if err != nil {
@@ -203,7 +233,7 @@ func TestWorldDeployPortablePortalForcedPenalty(t *testing.T) {
 		}
 	}
 
-	_ = w.Player.Inventory.AddItem(player.NewPortablePortalItem())
+	_ = w.AddLootItem(player.NewPortablePortalItem())
 
 	portal, err := w.DeployPortablePortal("test")
 	if err != nil {

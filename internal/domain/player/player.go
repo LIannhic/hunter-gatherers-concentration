@@ -10,33 +10,39 @@ import (
 
 // IDs de source et noms pour les objets et ressources
 const (
+    // Butin initial
 	PortablePortalItemSourceID   = "portable_portal"
 	PortablePortalItemName       = "portail portable"
-	PortablePortalLootTaxPercent = 25
+	PortablePortalLootTaxPercent = 50
 
-	EchoHoundItemSourceID        = "echo_hound_source"
-	EchoHoundItemName            = "echo_hound"
-
-	DreamberryItemSourceID       = "dreamberry_source"
-	DreamberryItemName           = "dreamberry"
-	MoonstoneItemSourceID        = "moonstone_source"
-	MoonstoneItemName            = "moonstone"
-	CrystalShardItemSourceID     = "crystal_shard_source"
+    // Butin ressources
+	CrystalShardItemSourceID     = "crystal_shard"
 	CrystalShardItemName         = "crystal_shard"
-	WhisperingHerbItemSourceID   = "whispering_herb_source"
+	DreamberryItemSourceID       = "dreamberry"
+	DreamberryItemName           = "dreamberry"
+	MoonstoneItemSourceID        = "moonstone"
+	MoonstoneItemName            = "moonstone"
+	WhisperingHerbItemSourceID   = "whispering_herb"
 	WhisperingHerbItemName       = "whispering_herb"
-	SpecterItemSourceID          = "specter_source"
+
+	// Butin créatures
+	BurrowerItemSourceID         = "burrower"
+   	BurrowerItemName             = "burrower"
+	EchoHoundItemSourceID        = "echo_hound"
+   	EchoHoundItemName            = "echo_hound"
+   	FleeingSpriteSourceID        = "fleeing_sprite"
+   	FleeingSpriteName            = "fleeing_sprite"
+	LumiflyItemSourceID          = "lumifly"
+	LumiflyItemName              = "lumifly"
+	MossMonkeyItemSourceID       = "moss_monkey"
+	MossMonkeyItemName           = "moss_monkey"
+	ShadowstalkerItemSourceID    = "shadowstalker"
+	ShadowstalkerItemName        = "shadowstalker"
+	SpecterItemSourceID          = "specter"
 	SpecterItemName              = "specter"
-	ShadowstalkerItemSourceID     = "shadowstalker_source"
-	ShadowstalkerItemName         = "shadowstalker"
-	MossMonkeyItemSourceID        = "moss_monkey_source"
-	MossMonkeyItemName            = "moss_monkey"
-	StonewardenItemSourceID       = "stonewarden_source"
-	StonewardenItemName           = "stonewarden"
-	LumiflyItemSourceID           = "lumifly_source"
-	LumiflyItemName               = "lumifly"
-	BurrowerItemSourceID         = "burrower_source"
-	BurrowerItemName             = "burrower"
+	StonewardenItemSourceID      = "stonewarden"
+	StonewardenItemName          = "stonewarden"
+
 )
 
 // --- Types de base ---
@@ -55,12 +61,12 @@ type Stats struct {
 
 // LootItem représente un objet physique ou une entité capturée dans l'inventaire.
 type LootItem struct {
-	ID          string      // Identifiant unique de l'instance
-	Name        string      // Nom affiché de l'objet
-	Type        entity.Type // Catégorie d'objet (Artefact, Créature, Ressource...)
-	SourceID    string      // ID de référence pour les données sources (ex: atlas)
-	IsUsable    bool        // Si l'objet possède une action d'utilisation
-	IsDeletable bool        // Si l'objet peut être supprimé manuellement par le joueur
+	entity.BaseEntity
+	Name         string      // Nom affiché de l'objet
+	SourceID     string      // ID de référence pour les données sources (ex: atlas)
+	OriginalType entity.Type // Type d'entité d'origine (Créature, Ressource...)
+	IsUsable     bool        // Si l'objet possède une action d'utilisation
+	IsDeletable  bool        // Si l'objet peut être supprimé manuellement par le joueur
 }
 
 // BorderPosition définit l'ancrage du joueur sur la périphérie du plateau.
@@ -170,133 +176,133 @@ func NewInventory(maxSize int) *Inventory {
 
 func NewPortablePortalItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        PortablePortalItemName,
-		Type:        entity.TypeArtefact,
-		SourceID:    PortablePortalItemSourceID,
-		IsUsable:    true,
-		IsDeletable: false,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         PortablePortalItemName,
+		SourceID:     PortablePortalItemSourceID,
+		OriginalType: entity.TypeArtefact,
+		IsUsable:     true,
+		IsDeletable:  false,
 	}
 }
 
 func NewEchoHoundItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        EchoHoundItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    EchoHoundItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         EchoHoundItemName,
+		SourceID:     EchoHoundItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewDreamberryItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        DreamberryItemName,
-		Type:        entity.TypeResource,
-		SourceID:    DreamberryItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         DreamberryItemName,
+		SourceID:     DreamberryItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewMoonstoneItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        MoonstoneItemName,
-		Type:        entity.TypeResource,
-		SourceID:    MoonstoneItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         MoonstoneItemName,
+		SourceID:     MoonstoneItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewCrystalShardItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        CrystalShardItemName,
-		Type:        entity.TypeResource,
-		SourceID:    CrystalShardItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         CrystalShardItemName,
+		SourceID:     CrystalShardItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewWhisperingHerbItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        WhisperingHerbItemName,
-		Type:        entity.TypeResource,
-		SourceID:    WhisperingHerbItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         WhisperingHerbItemName,
+		SourceID:     WhisperingHerbItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewSpecterItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        SpecterItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    SpecterItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         SpecterItemName,
+		SourceID:     SpecterItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewShadowstalkerItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        ShadowstalkerItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    ShadowstalkerItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         ShadowstalkerItemName,
+		SourceID:     ShadowstalkerItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewMossMonkeyItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        MossMonkeyItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    MossMonkeyItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         MossMonkeyItemName,
+		SourceID:     MossMonkeyItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewStonewardenItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        StonewardenItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    StonewardenItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         StonewardenItemName,
+		SourceID:     StonewardenItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewLumiflyItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        LumiflyItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    LumiflyItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         LumiflyItemName,
+		SourceID:     LumiflyItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
 func NewBurrowerItem() *LootItem {
 	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        BurrowerItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    BurrowerItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         BurrowerItemName,
+		SourceID:     BurrowerItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
 }
 
