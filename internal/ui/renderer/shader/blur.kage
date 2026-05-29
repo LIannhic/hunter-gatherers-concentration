@@ -5,8 +5,7 @@ var Intensity float
 func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
     clr := vec4(0, 0, 0, 0)
     samples := 9
-    // Offset en pixels pour le flou
-    offset := 2.5 * Intensity
+    offset := 0.002 * Intensity
 
     clr += imageSrc0At(texCoord + vec2(-offset, -offset))
     clr += imageSrc0At(texCoord + vec2(0, -offset))

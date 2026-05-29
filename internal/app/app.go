@@ -926,7 +926,7 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 			Biome:       biome,
 			UseBlur:     app.World.Player.VisualEffects["blur"] > 0,
 			UseBubble:   app.World.Player.VisualEffects["bubble"] > 0,
-			MousePos:    []float32{float32(mx), float32(my)},
+			MousePos:    []float32{float32(mx) / float32(ui.ScreenWidth), float32(my) / float32(ui.ScreenHeight)},
 		}
 		app.EffectRenderer.ProcessGlobalEffects(screen, params)
 	}

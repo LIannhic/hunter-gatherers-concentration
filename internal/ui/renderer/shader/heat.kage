@@ -4,11 +4,9 @@ var Time float
 var Intensity float
 
 func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
-    // Fréquence et amplitude adaptées aux pixels
-    freq := 0.05
-    amp := 8.0 * Intensity
-
-    offset := vec2(sin(texCoord.y * freq + Time * 3.0) * amp, 0.0)
+    freq := 20.0
+    amp := 0.005
+    offset := vec2(sin(texCoord.y * freq + Time * 5.0) * amp, 0.0)
 
     original := imageSrc0At(texCoord)
     processed := imageSrc0At(texCoord + offset)
