@@ -893,7 +893,7 @@ func (app *Application) drawMenu(screen *ebiten.Image) {
 	app.TitleScreen.Render(screen, app.hasSaves)
 
 	if app.hasSaves {
-		text.Draw(screen, "[ CHANGER DE PROFIL ]", basicfont.Face7x13, 335, 430, color.RGBA{150, 150, 255, 255})
+		text.Draw(screen, "[ CHANGER DE PROFIL ]", basicfont.Face7x13, 570, 405, color.RGBA{150, 150, 255, 255})
 	}
 
 	if app.SaveMenu.IsVisible() {
@@ -920,13 +920,16 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 		}
 
 		mx, my := ebiten.CursorPosition()
+		sw := float32(screen.Bounds().Dx())
+		sh := float32(screen.Bounds().Dy())
 
 		params := renderer.GlobalEffectParams{
 			SanityRatio: ratio,
 			Biome:       biome,
 			UseBlur:     app.World.Player.VisualEffects["blur"] > 0,
 			UseBubble:   app.World.Player.VisualEffects["bubble"] > 0,
-			MousePos:    []float32{float32(mx) / float32(ui.ScreenWidth), float32(my) / float32(ui.ScreenHeight)},
+			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
+			ScreenSize:  []float32{sw, sh},
 		}
 		app.EffectRenderer.ProcessGlobalEffects(screen, params)
 	}

@@ -2,24 +2,31 @@ package main
 
 var Center vec2
 var Intensity float
+var Resolution vec2
 
 func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
-    // Ratio d'aspect pour transformer les coordonnées rectangulaires en espace carré
-    aspectRatio := 1280.0 / 720.0
+    // Calcul du ratio d'aspect dynamique
+    aspectRatio := Resolution.x / Resolution.y
 
-    p := texCoord - Center
-    p.x *= aspectRatio
+    // On transforme les deux coordonnées dans le même espace (ajusté par X)
+    uv := texCoord
+    uv.x *= aspectRatio
 
+    center := Center
+    center.x *= aspectRatio
+
+    p := uv - center
     r := length(p)
 
     // Rayon ciblé pour englober une tuile (88px)
-    // 60px / 720px ~ 0.083. On arrondit à 0.09 pour un effet généreux.
+    // On utilise une valeur normalisée par rapport à la hauteur (720px par défaut)
     bubbleRadius := 0.09 * Intensity
 
     if r < bubbleRadius {
-        // Distortion de lentille sphérique
+        // Distortion de lentille sphérique quadratique
         factor := 1.0 - sqrt(1.0 - pow(r / bubbleRadius, 2.0))
 
+        // On projette le décalage vers l'arrière dans l'espace UV d'origine
         offset := p * factor
         offset.x /= aspectRatio
 

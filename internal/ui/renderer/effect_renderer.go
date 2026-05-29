@@ -93,6 +93,7 @@ type GlobalEffectParams struct {
 	UseBlur     bool
 	UseBubble   bool
 	MousePos    []float32 // [x, y] normalized
+	ScreenSize  []float32 // [width, height] pixels
 }
 
 // ProcessGlobalEffects applique les effets cumulatifs sur l'image entière.
@@ -115,25 +116,25 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 
 	// 1. Biome Effects (Wave for Swamp, Heat for Desert)
 	if params.Biome == "swamp" {
-		r.applyShader(src, dst, "wave", intensity, nil)
+		r.applyShader(src, dst, "wave", intensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	} else if params.Biome == "desert" {
-		r.applyShader(src, dst, "heat", intensity, nil)
+		r.applyShader(src, dst, "heat", intensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
 	// 2. Creature Attack Effects
 	if params.UseBubble {
-		r.applyShader(src, dst, "bubble", intensity, params.MousePos)
+		r.applyShader(src, dst, "bubble", intensity, params.MousePos, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
 	if params.UseBlur {
 		// Blur is often applied last to smooth things out
-		r.applyShader(src, dst, "blur", intensity, nil)
+		r.applyShader(src, dst, "blur", intensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
@@ -143,7 +144,7 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	}
 }
 
-func (r *EffectRenderer) applyShader(src, dst *ebiten.Image, name string, intensity float32, center []float32) {
+func (r *EffectRenderer) applyShader(src, dst *ebiten.Image, name string, intensity float32, center []float32, resolution []float32) {
 	shader, ok := r.shaders[name]
 	if !ok {
 		return
@@ -153,8 +154,9 @@ func (r *EffectRenderer) applyShader(src, dst *ebiten.Image, name string, intens
 	op := &ebiten.DrawRectShaderOptions{}
 	op.Images[0] = src
 	op.Uniforms = map[string]interface{}{
-		"Time":      float32(r.count) / 60.0,
-		"Intensity": intensity,
+		"Time":       float32(r.count) / 60.0,
+		"Intensity":  intensity,
+		"Resolution": resolution,
 	}
 
 	if center != nil {

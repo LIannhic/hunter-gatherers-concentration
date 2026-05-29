@@ -1,6 +1,7 @@
 package main
 
 var Intensity float
+var Resolution vec2
 
 func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
     clr := vec4(0, 0, 0, 0)

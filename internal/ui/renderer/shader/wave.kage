@@ -2,6 +2,7 @@ package main
 
 var Time float
 var Intensity float
+var Resolution vec2
 
 func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
     freq := 20.0
