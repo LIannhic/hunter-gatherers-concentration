@@ -1,4 +1,4 @@
-// Package hud affiche les informations de l'interface
+// HUD affiche les informations de l'interface
 package hud
 
 import (
@@ -21,10 +21,16 @@ import (
 	"golang.org/x/image/font/basicfont"
 )
 
+// BoardRenderer minimal interface for HUD
+type BoardRenderer interface {
+	RenderInventoryLoot(target *ebiten.Image, world *domain.World, selectedIdx int, selection map[int]bool, confirmAll bool)
+}
+
 // HUD affiche les informations de jeu
 type HUD struct {
-	world                *domain.World
-	assets               *assets.Manager
+	world    *domain.World
+	assets   *assets.Manager
+	renderer BoardRenderer
 	showDetails          bool
 	showInventoryDetails bool
 	showAssetsDetails    bool
@@ -95,6 +101,10 @@ func (h *HUD) Update() {
 func (h *HUD) SetTimerCallbacks(getRemaining func() float64, getPanic func() bool) {
 	h.getTimerRemaining = getRemaining
 	h.getTimerPanic = getPanic
+}
+
+func (h *HUD) SetBoardRenderer(r BoardRenderer) {
+	h.renderer = r
 }
 
 func (h *HUD) SetAssetsManager(am *assets.Manager) {
@@ -302,10 +312,10 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	resourceCount := 0
 	creatureCount := 0
 	for _, item := range h.world.Player.Inventory.Items {
-		if item.Type == entity.TypeResource {
+		if item.OriginalType == entity.TypeResource {
 			resourceCount++
 			totalValue += 100 // Valeur arbitraire pour l'instant
-		} else if item.Type == entity.TypeCreature {
+		} else if item.OriginalType == entity.TypeCreature {
 			creatureCount++
 			totalValue += 250
 		}
@@ -532,54 +542,10 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 
 	items := inv.Items
 
-	// 1. Dessiner les slots dans le buffer offscreen
+	// 1. Dessiner les slots dans le buffer offscreen via le BoardRenderer pour le TILT
 	h.inventoryOffscreen.Fill(color.Transparent)
-
-	rowH := ui.LootSlotSize + ui.LootSlotPadding
-	for i := 0; i < inv.MaxSize; i++ {
-		row := i / ui.LootSlotsPerRow
-		col := i % ui.LootSlotsPerRow
-
-		sx := float64(col)*rowH + 5
-		sy := float64(row)*rowH - inv.ScrollOffset
-
-		if sy+rowH < 0 || sy > 331 {
-			continue
-		}
-
-		// Slot border
-		slotClr := color.RGBA{50, 50, 50, 255}
-
-		// Highlight if selected for deletion or if clear-all-confirmation is on (and item is deletable)
-		highlight := h.selectedLoots[i]
-		if h.confirmClearAll && i < len(items) && items[i].IsDeletable {
-			highlight = true
-		}
-
-		if h.selectedLootIndex == i {
-			slotClr = color.RGBA{0, 180, 255, 255} // Blue highlight for active portable portal
-		} else if highlight {
-			slotClr = color.RGBA{255, 100, 100, 255} // Red highlight for deletion
-		}
-		vector.StrokeRect(h.inventoryOffscreen, float32(sx), float32(sy), float32(ui.LootSlotSize), float32(ui.LootSlotSize), 1, slotClr, true)
-
-		if i < len(items) {
-			item := items[i]
-			itemClr := color.RGBA{150, 150, 150, 255}
-			switch item.Type {
-			case entity.TypeResource:
-				itemClr = color.RGBA{100, 200, 100, 255}
-			case entity.TypeCreature:
-				itemClr = color.RGBA{200, 100, 100, 255}
-			case entity.TypeArtefact:
-				itemClr = color.RGBA{170, 100, 255, 255}
-			}
-			vector.DrawFilledRect(h.inventoryOffscreen, float32(sx+4), float32(sy+4), float32(ui.LootSlotSize-8), float32(ui.LootSlotSize-8), itemClr, true)
-
-			if len(item.Name) > 0 {
-				text.Draw(h.inventoryOffscreen, string(item.Name[0]), basicfont.Face7x13, int(sx+ui.LootSlotSize/2)-3, int(sy+ui.LootSlotSize/2)+5, color.Black)
-			}
-		}
+	if h.renderer != nil {
+		h.renderer.RenderInventoryLoot(h.inventoryOffscreen, h.world, h.selectedLootIndex, h.selectedLoots, h.confirmClearAll)
 	}
 
 	// 2. Afficher le buffer
@@ -956,7 +922,6 @@ func (h *HUD) HandleClick(x, y int) bool {
 		if float64(x) >= dlx && float64(x) <= dlx+float64(ui.DeleteLootSize) &&
 			float64(y) >= dly && float64(y) <= dly+float64(ui.DeleteLootSize) {
 
-			inv := &h.world.Player.Inventory
 			if len(h.selectedLoots) > 0 {
 				// Suppression de toutes les tuiles sélectionnées
 				// On trie les indices par ordre décroissant pour ne pas décaler les suivants
@@ -968,26 +933,25 @@ func (h *HUD) HandleClick(x, y int) bool {
 
 				for _, idx := range indices {
 					// Vérifie si l'item est supprimable
-					if idx < len(inv.Items) && inv.Items[idx].IsDeletable {
-						inv.RemoveItem(idx)
+					if idx < len(h.world.Player.Inventory.Items) && h.world.Player.Inventory.Items[idx].IsDeletable {
+						_ = h.world.RemoveLootItem(idx)
 					}
 				}
 				h.selectedLoots = make(map[int]bool)
 			} else if !h.confirmClearAll {
 				// Première étape : Sélectionner tout (Confirmation)
 				// On ne sélectionne visuellement que ce qui est supprimable
-				if len(inv.Items) > 0 {
+				if len(h.world.Player.Inventory.Items) > 0 {
 					h.confirmClearAll = true
 				}
 			} else {
 				// Deuxième étape : Supprimer tout ce qui est supprimable
-				newItems := make([]*player.LootItem, 0, inv.MaxSize)
-				for _, item := range inv.Items {
-					if !item.IsDeletable {
-						newItems = append(newItems, item)
+				// On parcourt à l'envers pour garder les indices valides
+				for i := len(h.world.Player.Inventory.Items) - 1; i >= 0; i-- {
+					if h.world.Player.Inventory.Items[i].IsDeletable {
+						_ = h.world.RemoveLootItem(i)
 					}
 				}
-				inv.Items = newItems
 				h.confirmClearAll = false
 			}
 			return true

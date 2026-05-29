@@ -7,6 +7,7 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -220,6 +221,22 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 		icon = r.assets.GetResourceIcon(ent.ResourceType, stageName)
 		if len(stageName) > 0 {
 			label = string(stageName[0])
+		}
+	case *player.LootItem:
+		// On tente de récupérer l'icône appropriée selon le type d'origine ou le SourceID
+		if ent.OriginalType == entity.TypeCreature {
+			icon = r.assets.GetCreatureIcon(ent.SourceID)
+		} else if ent.OriginalType == entity.TypeResource {
+			icon = r.assets.GetResourceIcon(ent.SourceID, "")
+		} else {
+			// Fallback sur le SourceID pour les artefacts etc.
+			icon = r.assets.GetImage("resource_" + ent.SourceID)
+		}
+		if icon == nil {
+			// Dernier recours : première lettre du nom
+			if len(ent.Name) > 0 {
+				label = string(ent.Name[0])
+			}
 		}
 	}
 
