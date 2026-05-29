@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"image/color"
 	"math"
+	"fmt"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -109,9 +110,9 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	// Redimensionnement dynamique des buffers si nécessaire
 	sw, sh := screen.Bounds().Dx(), screen.Bounds().Dy()
 	if r.bufferA.Bounds().Dx() != sw || r.bufferA.Bounds().Dy() != sh {
-		fmt.Printf("[DEBUG-FX] Resizing buffers to %dx%d (Screen was %v)\n", sw, sh, screen.Bounds())
 		r.bufferA = ebiten.NewImage(sw, sh)
 		r.bufferB = ebiten.NewImage(sw, sh)
+	}
 	}
 
 	// Ping-pong buffers initialization

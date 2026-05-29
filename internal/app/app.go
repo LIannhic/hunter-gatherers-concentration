@@ -923,17 +923,15 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 		sw := float32(screen.Bounds().Dx())
 		sh := float32(screen.Bounds().Dy())
 
-		// Log de débogage pour la bulle
-		if app.World.Player.VisualEffects["bubble"] > 0 {
-			fmt.Printf("[DEBUG-FX] Cursor: (%d, %d) | Bubble Center (norm): (%.3f, %.3f) | Screen: (%.0f, %.0f)\n",
-				mx, my, float32(mx)/sw, float32(my)/sh, sw, sh)
-		}
+		// La bulle n'apparaît que sur le Playmat (700x700 à partir de ui.PlaymatX)
+		isOverPlaymat := float64(mx) >= ui.PlaymatX && float64(mx) < ui.PlaymatX+ui.PlaymatW &&
+			float64(my) >= ui.PlaymatY && float64(my) < ui.PlaymatY+ui.PlaymatH
 
 		params := renderer.GlobalEffectParams{
 			SanityRatio: ratio,
 			Biome:       biome,
 			UseBlur:     app.World.Player.VisualEffects["blur"] > 0,
-			UseBubble:   app.World.Player.VisualEffects["bubble"] > 0,
+			UseBubble:   app.World.Player.VisualEffects["bubble"] > 0 && isOverPlaymat,
 			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},
 		}
