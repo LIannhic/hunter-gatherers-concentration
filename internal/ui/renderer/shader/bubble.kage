@@ -4,26 +4,22 @@ var Center vec2
 var Intensity float
 
 func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
-    // Ratio d'aspect pour transformer les coordonnées rectangulaires en espace carré
-    aspectRatio := 1280.0 / 720.0
-
     p := texCoord - Center
-    p.x *= aspectRatio
-
     r := length(p)
 
-    // Rayon ciblé pour englober une tuile (88px)
-    // 60px / 720px ~ 0.083. On arrondit à 0.09 pour un effet généreux.
-    bubbleRadius := 0.09 * Intensity
+    // Rayon fixe en pixels pour englober une tuile (88px)
+    // On multiplie par Intensity pour que la bulle apparaisse progressivement
+    bubbleRadius := 70.0 * Intensity
 
     if r < bubbleRadius {
-        // Distortion de lentille sphérique
-        factor := 1.0 - sqrt(1.0 - pow(r / bubbleRadius, 2.0))
+        // Distortion de loupe concentrée
+        dist := r / bubbleRadius
 
-        offset := p * factor
-        offset.x /= aspectRatio
+        // Formule de zoom : mix entre identité et grossissement
+        // factor < 1.0 = zoom in
+        factor := 1.0 - (1.0 - pow(dist, 2.0)) * 0.5
 
-        return imageSrc0At(Center + offset)
+        return imageSrc0At(Center + p * factor)
     }
 
     return imageSrc0At(texCoord)
