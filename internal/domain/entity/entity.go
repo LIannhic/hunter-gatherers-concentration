@@ -400,6 +400,10 @@ type Entity interface {
 	AddTag(string)
 	HasTag(string) bool
 	RemoveTag(string)
+
+	// Hoverable compliance (Pseudo-ECS logic)
+	GetHoverID() string
+	IsHoverAllowed() bool
 }
 
 // Transformation représente une des 8 symétries du carré (groupe diédrique D4)
@@ -566,6 +570,14 @@ func (e *BaseEntity) RemoveTag(tag string) {
 			return
 		}
 	}
+}
+
+func (e *BaseEntity) GetHoverID() string {
+	return string(e.ID)
+}
+
+func (e *BaseEntity) IsHoverAllowed() bool {
+	return e.State&Blocked == 0
 }
 
 // Manager gère toutes les entités

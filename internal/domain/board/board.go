@@ -33,6 +33,44 @@ const (
 	FlipCenter      = entity.FlipCenter
 )
 
+// Hoverable interface pour les éléments interactifs (tuiles, sorties, butin)
+type Hoverable interface {
+	GetHoverID() string
+	IsHoverAllowed() bool
+}
+
+// InventoryGridID est l'identifiant réservé pour la grille d'inventaire
+const InventoryGridID = "inventory"
+
+// ExitTile représente une tuile de sortie pour la navigation
+type ExitTile struct {
+	Direction entity.Direction
+	Index     int
+	State     entity.TileState
+}
+
+func (e *ExitTile) GetHoverID() string {
+	return fmt.Sprintf("exit_%s_%d", DirectionToName(e.Direction), e.Index)
+}
+
+func (e *ExitTile) IsHoverAllowed() bool {
+	return e.State&entity.Blocked == 0
+}
+
+func DirectionToName(dir entity.Direction) string {
+	switch dir {
+	case entity.DirNorth:
+		return "north"
+	case entity.DirEast:
+		return "east"
+	case entity.DirSouth:
+		return "south"
+	case entity.DirWest:
+		return "west"
+	}
+	return "unknown"
+}
+
 func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
 	return entity.CalculateFlipDirection(tileSize, localX, localY)
 }

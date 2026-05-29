@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"strings"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -139,66 +140,32 @@ func (h *Handler) Update() error {
 }
 
 func (h *Handler) updateHover() {
-	if h.renderer == nil {
+	if h.renderer == nil || h.world == nil {
 		return
 	}
 
 	activeThisFrame := make(map[string]bool)
 	mx, my := ebiten.CursorPosition()
-	localX, localY, gridID, ok := h.renderer.ScreenToLocalTile(mx, my, h.world)
+	pos, gridID, ok := h.renderer.ScreenToGrid(mx, my, h.world)
 
 	if ok {
-		grid, _ := h.world.GetGrid(gridID)
-		pos, _, _ := h.renderer.ScreenToGrid(mx, my, h.world)
-		if grid != nil {
-			plot, err := grid.Get(pos)
-			if err == nil && len(plot.EntitiesID) > 0 {
-				topID := plot.EntitiesID[len(plot.EntitiesID)-1]
-				if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok && ent.GetState()&entity.Blocked == 0 {
-					activeThisFrame[topID] = true
+		hoverable := h.world.GetHoverableAt(gridID, pos)
+		if hoverable != nil && hoverable.IsHoverAllowed() {
+			id := hoverable.GetHoverID()
+			activeThisFrame[id] = true
 
-					tileSize := h.renderer.GetTileSize()
-					dir := entity.CalculateFlipDirection(tileSize, localX, localY)
-					h.renderer.NotifyHover(topID, dir)
-				}
+			localX, localY, _, _ := h.renderer.ScreenToLocalTile(mx, my, h.world)
+			tileSize := h.renderer.GetTileSize()
+			// Pour les sorties ou l'inventaire, on utilise une taille fixe de 88 si nécessaire
+			if gridID == board.InventoryGridID || strings.HasPrefix(gridID, "exit_") {
+				tileSize = int(math.Round(ui.TileSize))
 			}
-		}
-	} else {
-		// Vérification survol des sorties (Navigation)
-		if dir, index, ok := h.getClickedExit(); ok {
-			gridID := h.world.CurrentGridID
-			if grid, ok := h.world.GetGrid(gridID); ok {
-				state := grid.ExitsState[dir][index]
-				if state&entity.Blocked == 0 {
-					// Identifiant virtuel pour le hover
-					id := fmt.Sprintf("exit_%s_%d", directionToName(dir), index)
-					activeThisFrame[id] = true
-
-					// Pour les sorties, on utilise une direction de flip simplifiée vers le centre de la sortie
-					px := float64(mx) - ui.PlaymatX
-					py := float64(my) - ui.PlaymatY
-					fDir := h.calculateExitFlipDirection(px, py, dir)
-					h.renderer.NotifyHover(id, fDir)
-				}
-			}
+			dir := entity.CalculateFlipDirection(tileSize, localX, localY)
+			h.renderer.NotifyHover(id, dir)
 		}
 	}
 
 	h.renderer.DecayHoverStates(activeThisFrame)
-}
-
-func directionToName(dir entity.Direction) string {
-	switch dir {
-	case entity.DirNorth:
-		return "north"
-	case entity.DirEast:
-		return "east"
-	case entity.DirSouth:
-		return "south"
-	case entity.DirWest:
-		return "west"
-	}
-	return "unknown"
 }
 
 func (h *Handler) calculateExitFlipDirection(px, py float64, dir entity.Direction) entity.FlipDirection {
@@ -341,7 +308,7 @@ func (h *Handler) handleMouse() error {
 				SourceID: "player",
 				Payload: map[string]interface{}{
 					"position":       entity.Position{}, // Position virtuelle
-					"entity_id":      fmt.Sprintf("exit_%s_%d", directionToName(dir), index),
+					"entity_id":      fmt.Sprintf("exit_%s_%d", board.DirectionToName(dir), index),
 					"grid_id":        h.world.CurrentGridID,
 					"flip_direction": flipDir,
 				},
@@ -1262,7 +1229,11 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 			highlightColor = color.RGBA{255, 255, 255, 50}
 		}
 
-		h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
+		// On ne dessine pas le highlight ici si c'est l'inventaire,
+		// car le BoardRenderer le gère maintenant de manière inclinée (tilted).
+		if gridID != board.InventoryGridID {
+			h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
+		}
 	}
 
 	if h.portablePortalMode {
