@@ -9,10 +9,14 @@ import (
 )
 
 const (
-	DirNorth = entity.DirNorth
-	DirEast  = entity.DirEast
-	DirSouth = entity.DirSouth
-	DirWest  = entity.DirWest
+	Forward       = entity.DirNorth
+	Backward      = entity.DirSouth
+	Right         = entity.DirEast
+	Left          = entity.DirWest
+	ForwardRight  = entity.DirNorthEast
+	ForwardLeft   = entity.DirNorthWest
+	BackwardRight = entity.DirSouthEast
+	BackwardLeft  = entity.DirSouthWest
 )
 
 // Creature est une entité vivante avec comportement
@@ -30,7 +34,7 @@ func New(species string, pos entity.Position) *Creature {
 	c := &Creature{
 		BaseEntity: entity.NewBaseEntity(entity.TypeCreature),
 		Species:    species,
-		ThreatZone: []entity.Direction{entity.DirNorth}, // Par défaut face à elle
+		ThreatZone: []entity.Direction{Forward}, // Par défaut face à elle
 	}
 	c.SetPosition(pos)
 	c.AddTag("creature")
@@ -284,7 +288,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic: AcousticSilent,  // Vol silencieux
 			},
 			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
-			Orientation: Orientation{Direction: DirNorth},
+			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
         c.SetThreatZone(ThreatCone)
@@ -311,7 +315,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				TelegraphsIntent: true,           // ajoute des traces de griffures sur les tuiles autour de lui
 			},
 			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
-			Orientation: Orientation{Direction: DirNorth},
+			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideBounce},
 		})
         c.SetThreatZone(ThreatCone)
@@ -354,7 +358,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				TrackDuration: 2,
 			},
 			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
-			Orientation: Orientation{Direction: DirNorth},
+			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"dirt", "soil"}},
 		})
         c.SetThreatZone(ThreatCone)
@@ -419,7 +423,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				TrackDuration: 2,
 			},
 			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
-			Orientation: Orientation{Direction: DirNorth},
+			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
         c.SetThreatZone(ThreatCone)
@@ -458,7 +462,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				LeavesTracks: false, // Le singe mousse ne laisse pas de traces, mais des pièges
 			},
 			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
-			Orientation: Orientation{Direction: DirSouth},
+			Orientation: Orientation{Direction: Backward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
         c.SetThreatZone(ThreatCone)
@@ -581,23 +585,23 @@ func (c *Creature) IsPositionThreatened(target entity.Position) bool {
 	return false
 }
 
-// Gabarits de zones de menace (Orientés Nord par défaut, relatifs à la créature)
+// Gabarits de zones de menace (Relatifs à la créature)
 var (
-    // Menace uniquement la case devant elle
-    ThreatFrontal = []entity.Direction{entity.DirNorth}
+	// Menace uniquement la case devant elle
+	ThreatFrontal = []entity.Direction{Forward}
 
-    // Cône à 3x3 devant (Nord, Nord-Est, Nord-Ouest)
-    ThreatCone = []entity.Direction{entity.DirNorth, entity.DirNorthEast, entity.DirNorthWest}
+	// Cône à 3x3 devant (Avant, Avant-Droite, Avant-Gauche)
+	ThreatCone = []entity.Direction{Forward, ForwardRight, ForwardLeft}
 
-    // Menace en croix (Cardinaux)
-    ThreatCross = []entity.Direction{entity.DirNorth, entity.DirEast, entity.DirSouth, entity.DirWest}
+	// Menace en croix (Cardinaux relatifs)
+	ThreatCross = []entity.Direction{Forward, Right, Backward, Left}
 
-    // Menace les diagonales
-    ThreatDiagonals = []entity.Direction{entity.DirNorthEast, entity.DirSouthEast, entity.DirSouthWest, entity.DirNorthWest}
+	// Menace les diagonales relatives
+	ThreatDiagonals = []entity.Direction{ForwardRight, BackwardRight, BackwardLeft, ForwardLeft}
 
-    // Autour d'elle à 360° (Les 8 directions)
-    ThreatFull360 = []entity.Direction{
-       entity.DirNorth, entity.DirNorthEast, entity.DirEast, entity.DirSouthEast,
-       entity.DirSouth, entity.DirSouthWest, entity.DirWest, entity.DirNorthWest,
-    }
+	// Autour d'elle à 360° (Les 8 directions)
+	ThreatFull360 = []entity.Direction{
+		Forward, ForwardRight, Right, BackwardRight,
+		Backward, BackwardLeft, Left, ForwardLeft,
+	}
 )

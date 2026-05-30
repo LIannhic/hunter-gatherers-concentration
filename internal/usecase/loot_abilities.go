@@ -29,6 +29,7 @@ var ItemAbilities = map[string]LootAbility{
 	player.ShadowstalkerItemName:  &ShadowstalkerAbility{},
 	player.MossMonkeyItemName:     &MossMonkeyAbility{},
 	player.StonewardenItemName:    &StonewardenAbility{},
+	player.FleeingSpriteName:      &FleeingSpriteAbility{},
 }
 
 // --- ABILITY : DREAMBERRY ---
@@ -315,4 +316,16 @@ func (a *StonewardenAbility) Execute(world *domain.World) (string, error) {
     grid.Plots[sourcePos] = targetPlot
 
     return fmt.Sprintf("[GARDIEN] Séisme en (%d,%d) ! Dispersion de la pile effectuée.", sourcePos.X, sourcePos.Y), nil
+}
+
+// --- ABILITY : FLEEING SPRITE ---
+
+type FleeingSpriteAbility struct{}
+
+func (a *FleeingSpriteAbility) CanExecute(world *domain.World) bool { return true }
+
+func (a *FleeingSpriteAbility) Execute(world *domain.World) (string, error) {
+	fmt.Println("[ABILITY] Activation du Fleeing Sprite - ThreatVisionTurns set to 1")
+	world.Player.ThreatVisionTurns = 1
+	return "L'éclat du Fleeing Sprite révèle les intentions de vos prédateurs.", nil
 }

@@ -168,6 +168,56 @@ func (tr *TrackRenderer) RenderAttackThreats(screen *ebiten.Image, world *domain
 	}
 }
 
+// RenderPotentialThreats dessine des marqueurs blancs sur les cases menacées par toutes les créatures
+func (tr *TrackRenderer) RenderPotentialThreats(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
+	creatures := world.Entities.GetByType(entity.TypeCreature)
+	whiteSprite := tr.getOrCreateSprite("intent_beam_white")
+	if whiteSprite == nil {
+		return
+	}
+
+	for _, ent := range creatures {
+		c, ok := ent.(*domain.Creature)
+		if !ok || c.GetGridID() != world.CurrentGridID {
+			continue
+		}
+
+		// On n'affiche pas si la créature est déjà en train d'animer une attaque (géré par RenderAttackThreats)
+		if _, exists := world.Components.Get(string(c.GetID()), "attacking_animation"); exists {
+			continue
+		}
+
+		threats := c.GetActiveThreatDirections()
+		if len(threats) == 0 {
+			continue
+		}
+
+		startPos := c.GetPosition()
+		startX, startY := getCenter(startPos)
+
+		for _, dir := range threats {
+			targetPos := startPos.Add(dir.ToVector())
+			endX, endY := getCenter(targetPos)
+
+			midX := startX + (endX-startX)*0.5
+			midY := startY + (endY-startY)*0.5
+			angle := math.Atan2(endY-startY, endX-startX)
+
+			op := &ebiten.DrawImageOptions{}
+			w, h := whiteSprite.Bounds().Dx(), whiteSprite.Bounds().Dy()
+
+			op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+			op.GeoM.Rotate(angle)
+			op.GeoM.Translate(midX, midY)
+
+			// Légère transparence pour ne pas trop surcharger l'écran
+			op.ColorScale.ScaleAlpha(0.6)
+
+			screen.DrawImage(whiteSprite, op)
+		}
+	}
+}
+
 // =========================================================================
 // MOTEUR DE RENDU TECHNIQUE (GÉOMÉTRIE ET MATRICES)
 // =========================================================================

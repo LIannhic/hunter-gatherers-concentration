@@ -1762,7 +1762,7 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		Name:         name,
 		SourceID:     sourceID,
 		OriginalType: eType,
-		IsUsable:     name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName || name == player.MossMonkeyItemName || name == player.StonewardenItemName || name == player.LumiflyItemName,
+		IsUsable:     name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName || name == player.MossMonkeyItemName || name == player.StonewardenItemName || name == player.LumiflyItemName || name == player.FleeingSpriteName,
 		IsDeletable:  true,
 	}
 	// On garde le type d'origine en tag pour le rendu
@@ -2497,15 +2497,15 @@ func sign(x int) int {
 
 func directionToOrientation(dir entity.Position) creature.Orientation {
 	if dir.X > 0 {
-		return creature.Orientation{Direction: creature.DirEast}
+		return creature.Orientation{Direction: creature.Right}
 	}
 	if dir.X < 0 {
-		return creature.Orientation{Direction: creature.DirWest}
+		return creature.Orientation{Direction: creature.Left}
 	}
 	if dir.Y > 0 {
-		return creature.Orientation{Direction: creature.DirSouth}
+		return creature.Orientation{Direction: creature.Backward}
 	}
-	return creature.Orientation{Direction: creature.DirNorth}
+	return creature.Orientation{Direction: creature.Forward}
 }
 
 // --- WORLD ADAPTER ---

@@ -134,6 +134,7 @@ type Player struct {
 
 	// Buffs temporaires
 	ImmunityTurns int // Nombre de tours d'immunité restants
+	ThreatVisionTurns int // Nombre de tours où les zones de menace sont visibles
 
 	// Effets visuels (Shaders)
 	VisualEffects map[string]int // "blur", "bubble", etc. -> Durée en tours
@@ -310,6 +311,18 @@ func NewBurrowerItem() *LootItem {
 	}
 }
 
+func NewFleeingSpriteItem() *LootItem {
+	return &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         FleeingSpriteName,
+		SourceID:     FleeingSpriteSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+}
+
+
 // --- Méthodes de l'Inventaire ---
 
 // AddItem ajoute un objet unique dans le premier slot disponible.
@@ -463,6 +476,9 @@ func (p *Player) ConsumeSanity(amount int) {
 	// Décrémentation des buffs de tour
 	if amount > 0 && p.ImmunityTurns > 0 {
 		p.ImmunityTurns--
+	}
+	if amount > 0 && p.ThreatVisionTurns > 0 {
+		p.ThreatVisionTurns--
 	}
 }
 

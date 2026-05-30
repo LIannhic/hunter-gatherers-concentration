@@ -528,6 +528,11 @@ func (r *BoardRenderer) renderEffectsOver(screen *ebiten.Image, world *domain.Wo
 				return r.getTileCenter(pos, grid, isPortal)
 			}
 			r.trackRenderer.RenderAttackThreats(screen, world, getCenter)
+
+			// Si le bonus du Fleeing Sprite est actif, on affiche toutes les zones de menace
+			if world.Player != nil && world.Player.ThreatVisionTurns > 0 {
+				r.trackRenderer.RenderPotentialThreats(screen, world, getCenter)
+			}
 		}
 	}
 }
