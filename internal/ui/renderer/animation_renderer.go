@@ -34,16 +34,27 @@ type TranslationAnim struct {
 	FlipDirection entity.FlipDirection
 }
 
-// AnimationManager gère plusieurs translations en parallèle
+// AttackAnim représente un lunge visuel (brusque aller, lent retour)
+type AttackAnim struct {
+	EntityID     string
+	DirX, DirY   float64
+	Tick         int
+	Duration     int
+	MaxAmplitude float64
+}
+
+// AnimationManager gère plusieurs translations et attaques en parallèle
 type AnimationManager struct {
-	renderer *BoardRenderer
-	animes   map[string]*TranslationAnim // key = entityID
+	renderer    *BoardRenderer
+	animes      map[string]*TranslationAnim // key = entityID
+	attackAnimes map[string]*AttackAnim      // key = entityID
 }
 
 func NewAnimationManager(r *BoardRenderer) *AnimationManager {
 	return &AnimationManager{
-		renderer: r,
-		animes:   make(map[string]*TranslationAnim),
+		renderer:    r,
+		animes:      make(map[string]*TranslationAnim),
+		attackAnimes: make(map[string]*AttackAnim),
 	}
 }
 
@@ -89,6 +100,30 @@ func (m *AnimationManager) StartTileMove(world *domain.World, gridID string, ent
 	world.EventBus.PublishImmediate(event.NewAnimationStartedEvent(mode, entityID))
 }
 
+// StartAttack démarre une animation de lunge brusque
+func (m *AnimationManager) StartAttack(world *domain.World, entityID string, dx, dy float64, hitTarget *entity.Position) {
+	duration := 25
+	m.attackAnimes[entityID] = &AttackAnim{
+		EntityID:     entityID,
+		DirX:         dx,
+		DirY:         dy,
+		Tick:         0,
+		Duration:     duration,
+		MaxAmplitude: 15.0, // Pixels de décalage max
+	}
+
+	aa := &component.AttackingAnimation{
+		OffsetX:       0,
+		OffsetY:       0,
+		CurrentTick:   0,
+		DurationTicks: duration,
+		HitTarget:     hitTarget,
+	}
+	world.Components.Add(entityID, aa)
+
+	world.EventBus.PublishImmediate(event.NewAnimationStartedEvent("attack", entityID))
+}
+
 func smoothstep(t float64) float64 {
 	if t <= 0 {
 		return 0
@@ -101,12 +136,13 @@ func smoothstep(t float64) float64 {
 
 // Update avance toutes les translations proprement
 func (m *AnimationManager) Update(world *domain.World) {
-	if len(m.animes) == 0 {
+	if len(m.animes) == 0 && len(m.attackAnimes) == 0 {
 		return
 	}
 
 	anyAnimationFinished := false
 
+	// --- Mise à jour des translations (Slide) ---
 	for id, a := range m.animes {
 		a.Tick++
 		t := float64(a.Tick) / math.Max(1, float64(a.Duration))
@@ -132,7 +168,63 @@ func (m *AnimationManager) Update(world *domain.World) {
 		}
 	}
 
-	if anyAnimationFinished && len(m.animes) == 0 {
-		world.EventBus.PublishImmediate(event.NewAnimationEndedEvent("slide", "manager_global"))
+	// --- Mise à jour des attaques (Lunge) ---
+	for id, a := range m.attackAnimes {
+		a.Tick++
+		t := float64(a.Tick) / math.Max(1, float64(a.Duration))
+
+		var offset float64
+		lungeThreshold := 0.2 // 20% du temps pour l'aller brusque
+		if t < lungeThreshold {
+			// Aller brusque : 0 -> 1 en 20% du temps
+			it := t / lungeThreshold
+			offset = it * a.MaxAmplitude
+		} else {
+			// Retour lent : 1 -> 0 en 80% du temps
+			it := (t - lungeThreshold) / (1.0 - lungeThreshold)
+			if it > 1 {
+				it = 1
+			}
+			// Utilisation de 1 - it pour le retour, avec un petit lissage
+			offset = (1.0 - smoothstep(it)) * a.MaxAmplitude
+		}
+
+		if comp, ok := world.Components.Get(id, "attacking_animation"); ok {
+			aa := comp.(*component.AttackingAnimation)
+			aa.OffsetX = a.DirX * offset
+			aa.OffsetY = a.DirY * offset
+			aa.CurrentTick = a.Tick
+		}
+
+		if t >= 1 {
+			var hitTarget interface{}
+			if comp, ok := world.Components.Get(id, "attacking_animation"); ok {
+				aa := comp.(*component.AttackingAnimation)
+				if aa.HitTarget != nil {
+					hitTarget = *aa.HitTarget
+				}
+			}
+
+			world.Components.Remove(id, "attacking_animation")
+			delete(m.attackAnimes, id)
+			anyAnimationFinished = true
+
+			payload := map[string]interface{}{
+				"animation_type": "attack",
+			}
+			if hitTarget != nil {
+				payload["hit_target"] = hitTarget
+			}
+
+			world.EventBus.PublishImmediate(event.Event{
+				Type:     event.AnimationEnded,
+				SourceID: id,
+				Payload:  payload,
+			})
+		}
+	}
+
+	if anyAnimationFinished && len(m.animes) == 0 && len(m.attackAnimes) == 0 {
+		world.EventBus.PublishImmediate(event.NewAnimationEndedEvent("manager_global", "manager_global"))
 	}
 }

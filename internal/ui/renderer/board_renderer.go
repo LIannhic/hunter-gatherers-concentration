@@ -52,6 +52,9 @@ type BoardRenderer struct {
 	trackRenderer *TrackRenderer
 	// Animation manager pour translations et calques
 	AnimManager *AnimationManager
+
+	// Hits en attente d'être affichés (creatureID -> position)
+	pendingHits map[string]entity.Position
 }
 
 // HoverState suit le progrès du survol pour une tuile
@@ -114,6 +117,7 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		hoverStates:          make(map[string]*HoverState),
 		bounceStates:         make(map[string]*BounceState),
 		trackRenderer:        NewTrackRenderer(ui.TileSize),
+		pendingHits:          make(map[string]entity.Position),
 	}
 	// Initialise le gestionnaire d'animations lié au renderer
 	r.AnimManager = NewAnimationManager(r)
@@ -179,8 +183,10 @@ func (r *BoardRenderer) UpdateAnimations(world *domain.World) {
 				Type:     event.AnimationEnded,
 				SourceID: anim.EntityID,
 				Payload: map[string]interface{}{
-					"grid_id":  anim.GridID,
-					"position": anim.Position,
+					"grid_id":        anim.GridID,
+					"position":       anim.Position,
+					"animation_type": "flip", // Précise le type pour filtrage
+					"tile_state":     anim.TileState,
 				},
 			})
 		}
@@ -286,6 +292,42 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 				flipDir = r.computeFlipDirection(board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y})
 			}
 			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 60, layer, modeStr, flipDir)
+		}
+	})
+
+	// Démarre l'animation d'attaque après le flip d'une créature
+	world.EventBus.SubscribeFunc(event.AnimationEnded, func(e event.Event) {
+		if animType, ok := e.Payload["animation_type"].(string); ok && animType == "flip" {
+			// On ne déclenche l'attaque QUE si la tuile finit Révélée (pas si on la cache)
+			if finalState, ok := e.Payload["tile_state"].(entity.TileState); ok && finalState&entity.Revealed == 0 {
+				return
+			}
+
+			ent, ok := world.Entities.Get(entity.ID(e.SourceID))
+			if !ok || ent.GetType() != entity.TypeCreature {
+				return
+			}
+
+			creature := ent.(*domain.Creature)
+			dx, dy := creature.GetLungeDirectionVector()
+
+			var hitTarget *entity.Position
+			if pos, ok := r.pendingHits[e.SourceID]; ok {
+				target := pos
+				hitTarget = &target
+				delete(r.pendingHits, e.SourceID)
+			}
+
+			if r.AnimManager != nil {
+				r.AnimManager.StartAttack(world, e.SourceID, dx, dy, hitTarget)
+			}
+		}
+	})
+
+	// Enregistre les hits subis par le joueur pour les synchroniser avec l'attaque
+	world.EventBus.SubscribeFunc(event.PlayerDamaged, func(e event.Event) {
+		if pos, ok := e.Payload["position"].(entity.Position); ok {
+			r.pendingHits[e.SourceID] = pos
 		}
 	})
 }
@@ -477,6 +519,16 @@ func (r *BoardRenderer) renderMovementsOver(screen *ebiten.Image, world *domain.
 func (r *BoardRenderer) renderEffectsOver(screen *ebiten.Image, world *domain.World) {
 	if world.CurrentGridID != "" {
 		r.renderScannerEffects(screen, world.CurrentGridID, world)
+
+		// Rendu des menaces d'attaque (Intensions d'attaque) au-dessus de tout
+		if r.trackRenderer != nil {
+			getCenter := func(pos board.Position) (float64, float64) {
+				grid, _ := world.GetGrid(world.CurrentGridID)
+				isPortal := world.DreamPlane != nil && (world.CurrentGridID == world.DreamPlane.StartZoneID || world.CurrentGridID == world.DreamPlane.EndZoneID)
+				return r.getTileCenter(pos, grid, isPortal)
+			}
+			r.trackRenderer.RenderAttackThreats(screen, world, getCenter)
+		}
 	}
 }
 
@@ -833,6 +885,13 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	ent, ok := world.Entities.Get(entity.ID(entityID))
 	if !ok {
 		return
+	}
+
+	// Gestion du décalage d'attaque
+	if comp, ok := world.Components.Get(entityID, "attacking_animation"); ok {
+		aa := comp.(*component.AttackingAnimation)
+		x += aa.OffsetX
+		y += aa.OffsetY
 	}
 
 	visualState := ent.GetState()
