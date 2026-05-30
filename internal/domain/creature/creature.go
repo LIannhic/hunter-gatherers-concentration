@@ -510,6 +510,20 @@ func (c *Creature) GetActiveThreatDirections() []entity.Direction {
 	return activeThreats
 }
 
+// GetLungeDirectionVector retourne le vecteur unitaire du décalage visuel d'attaque.
+// Dans le cas d'un cône, on prend la direction centrale (la première du slice par convention interne).
+func (c *Creature) GetLungeDirectionVector() (dx, dy float64) {
+	if len(c.ThreatZone) == 0 {
+		return 0, 0
+	}
+
+	// Pour ThreatCone, ThreatZone[0] est DirNorth (le centre).
+	// On transforme cette direction locale par la transformation actuelle de l'entité.
+	targetDir := entity.TransformDirection(c.ThreatZone[0], c.GetTransformation())
+	v := targetDir.ToVector()
+	return float64(v.X), float64(v.Y)
+}
+
 func (c *Creature) SetThreatZone(zone []entity.Direction) {
     c.ThreatZone = zone
 }

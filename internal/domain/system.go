@@ -105,7 +105,26 @@ func NewWorld() *World {
 	// 3 colonnes, 10 lignes pour 30 slots par défaut
 	w.CreateGrid(board.InventoryGridID, 3, 10, board.BiomeDefault)
 
+	w.initListeners()
+
 	return w
+}
+
+func (w *World) initListeners() {
+	w.EventBus.SubscribeFunc(event.AnimationEnded, func(e event.Event) {
+		if animType, ok := e.Payload["animation_type"].(string); ok && animType == "attack" {
+			if targetPos, ok := e.Payload["hit_target"].(entity.Position); ok {
+				ent, exists := w.Entities.Get(entity.ID(e.SourceID))
+				if !exists {
+					return
+				}
+				// Création de la trace persistante (red beam)
+				track := entity.NewTrack("intent_beam", 2, ent.GetPosition(), targetPos)
+				track.SetGridID(ent.GetGridID())
+				w.Entities.Register(track)
+			}
+		}
+	})
 }
 
 // =============================================================================

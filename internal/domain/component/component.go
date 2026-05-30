@@ -273,3 +273,13 @@ type MovingAnimation struct {
 }
 
 func (m MovingAnimation) Type() string { return "moving_animation" }
+
+// AttackingAnimation gère un décalage visuel brusque (lunge) sans changer la position logique
+type AttackingAnimation struct {
+	OffsetX, OffsetY float64 // Décalage en pixels
+	CurrentTick      int
+	DurationTicks    int
+	HitTarget        *entity.Position // Si non-nil, l'attaque a touché cette position
+}
+
+func (a AttackingAnimation) Type() string { return "attacking_animation" }
