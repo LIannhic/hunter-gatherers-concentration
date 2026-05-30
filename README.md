@@ -48,11 +48,14 @@ Le jeu punit l'inattention et la précipitation via une matrice de décision str
 - **Match Invalide** : Les tuiles se referment violemment.
 - **Skip** : Permet de refermer les tuiles sagement si aucune paire n'est identifiée.
 
-### Confrontation et Zones de Menace
+### Confrontation et Animations d'Attaque
 
 Chaque créature possède une **Zone de Menace** (directions qu'elle attaque).
-- **Placement Périphérique** : Le joueur agit depuis le bord du plateau. Sa position (`entity.Position`) et son ancrage (`BorderPosition`) sont déterminés par l'endroit où il clique pour révéler une tuile.
-- **Calcul de Confrontation** : Lors du dévoilement, si le joueur se trouve dans la zone de menace de la créature (après application de la transformation D4/Flip), il subit **10 points de dégâts physiques**.
+- **Placement Périphérique** : Le joueur agit depuis le bord des cases. Sa position (`entity.Position`) et son ancrage (`BorderPosition`) sont déterminés par l'endroit où il clique pour révéler une tuile.
+- **Animation de Lunge** : Lors du dévoilement (Hidden -> Revealed), la créature effectue une translation brusque de quelques pixels vers sa zone de menace, suivie d'un retour lent à sa position initiale.
+- **Indicateurs de Menace** : Durant cette animation, des demi-cercles blancs (Intention de Menace) apparaissent entre la créature et les cases qu'elle menace. Ces indicateurs s'affichent même si la cible est en dehors de la grille (sur le tapis de jeu).
+- **Calcul de Confrontation** : Si le joueur se trouve dans la zone de menace lors du dévoilement, il subit **10 points de dégâts physiques**.
+- **Visualisation des Dégâts** : Une attaque réussie remplace l'indicateur blanc par un demi-cercle rouge intense, synchronisé avec le mouvement brusque de la créature.
 - **Esquive** : En choisissant de "tirer" la tuile depuis un angle mort de la créature, le joueur peut éviter l'attaque lors de la révélation.
 
 ### Compte à rebours temps réel (Turn Timer)
@@ -164,6 +167,7 @@ Les créatures laissent derrière elles des traces qui respectent des règles de
 - **Herbe Brisée (Broken Grass)** : Rendu sur le calque **Under**, marquant la case d'origine du déplacement.
 - **Griffures (Claws)** : Rendu sur le calque **Over**, marquant la case de destination (impact).
 - **Empreintes (Footprints)** : Rendu sur le calque **Normal**, apparaissant sous les tuiles physiques pour simuler le passage au sol.
+- **Rayons d'Attaque (Intent Beam)** : Rendu sur le calque **Over**, positionné entre la créature et sa cible. Rouge pour une attaque réussie, Blanc pour une simple zone de menace.
 
 Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il s'agisse d'un plateau 3x3 ou 6x6.
 
