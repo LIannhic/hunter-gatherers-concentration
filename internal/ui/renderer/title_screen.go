@@ -28,23 +28,23 @@ type Rect struct {
 // NewTitleScreen crée un nouvel écran titre
 func NewTitleScreen() *TitleScreen {
 	return &TitleScreen{
-		width: 800,
-		height: 600,
+		width: 1280,
+		height: 720,
 		buttonRect: Rect{
-			X: 300,
-			Y: 320,
+			X: 540,
+			Y: 300,
 			W: 200,
 			H: 50,
 		},
 		profileButtonRect: Rect{
-			X: 300,
-			Y: 380,
+			X: 540,
+			Y: 360,
 			W: 200,
 			H: 50,
 		},
 		playtestButtonRect: Rect{
-			X: 300,
-			Y: 440,
+			X: 540,
+			Y: 420,
 			W: 200,
 			H: 50,
 		},

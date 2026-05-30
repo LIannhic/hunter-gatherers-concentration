@@ -47,9 +47,9 @@ type Application struct {
 	Renderer       *renderer.BoardRenderer
 	EffectRenderer *renderer.EffectRenderer
 	TitleScreen    *renderer.TitleScreen
-	SaveMenu    *renderer.SaveMenu
-	Input       *input.Handler
-	HUD         *hud.HUD
+	SaveMenu       *renderer.SaveMenu
+	Input          *input.Handler
+	HUD            *hud.HUD
 
 	// Game State
 	State domain.GameState
@@ -156,7 +156,6 @@ func NewApplication() (*Application, error) {
 			player.NewShadowstalkerItem(),
 			player.NewSpecterItem(),
 			player.NewStonewardenItem(),
-
 		}
 		for _, item := range items {
 			_ = app.World.AddLootItem(item)

@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"image/color"
 	"math"
-	"fmt"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -112,7 +111,6 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	if r.bufferA.Bounds().Dx() != sw || r.bufferA.Bounds().Dy() != sh {
 		r.bufferA = ebiten.NewImage(sw, sh)
 		r.bufferB = ebiten.NewImage(sw, sh)
-	}
 	}
 
 	// Ping-pong buffers initialization
