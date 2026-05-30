@@ -247,6 +247,19 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		{"Herbe Cassée", "broken_grass"},
 		{"Empreinte Pas", "footprints"},
 		{"Rayon Attaque", "intent_beam"},
+		{"Lumifly", "creature_lumifly"},
+		{"Shadowstalker", "creature_shadowstalker"},
+		{"Burrower", "creature_burrower"},
+		{"Flutterwing", "creature_flutterwing"},
+		{"Fleeing Sprite", "creature_fleeing_sprite"},
+		{"Specter", "creature_specter"},
+		{"Echo Hound", "creature_echo_hound"},
+		{"Moss Monkey", "creature_moss_monkey"},
+		{"Stonewarden", "creature_stonewarden"},
+		{"Dreamberry", "resource_dreamberry"},
+		{"Moonstone", "resource_moonstone"},
+		{"Whisper Herb", "resource_whispering_herb"},
+		{"Shard", "resource_crystal_shard"},
 	}
 
 	colWidth := 150

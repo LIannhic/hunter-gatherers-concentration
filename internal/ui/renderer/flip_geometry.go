@@ -57,11 +57,13 @@ func GetTransformationGeometry(t entity.Transformation) [4][2]float32 {
 	case entity.TransIdentity:
 		return [4][2]float32{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
 	case entity.TransRot90:
-		return [4][2]float32{{1, 0}, {1, 1}, {0, 1}, {0, 0}}
+		// Correction : rotation 90° horaire (v, 1-u)
+		return [4][2]float32{{0, 1}, {0, 0}, {1, 0}, {1, 1}}
 	case entity.TransRot180:
 		return [4][2]float32{{1, 1}, {0, 1}, {0, 0}, {1, 0}}
 	case entity.TransRot270:
-		return [4][2]float32{{0, 1}, {0, 0}, {1, 0}, {1, 1}}
+		// Correction : rotation 270° horaire (1-v, u)
+		return [4][2]float32{{1, 0}, {1, 1}, {0, 1}, {0, 0}}
 	case entity.TransMirrorH:
 		return [4][2]float32{{1, 0}, {0, 0}, {0, 1}, {1, 1}}
 	case entity.TransMirrorD1:
@@ -197,15 +199,11 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 	// 2. Interpolation des coins pour une échelle de 75%
 	const scale = 0.75
 	vIcon := make([]ebiten.Vertex, 4)
-	uvCoords := GetTransformationGeometry(trans)
-	w, h := float32(ui.FaceSize), float32(ui.FaceSize)
 
 	for i := 0; i < 4; i++ {
 		vIcon[i] = vFace[i]
 		vIcon[i].DstX = cx + (vFace[i].DstX-cx)*scale
 		vIcon[i].DstY = cy + (vFace[i].DstY-cy)*scale
-		vIcon[i].SrcX = uvCoords[i][0] * w
-		vIcon[i].SrcY = uvCoords[i][1] * h
 	}
 
 	var icon *ebiten.Image

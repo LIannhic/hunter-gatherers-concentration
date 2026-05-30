@@ -248,9 +248,9 @@ func (w *World) UpdateDiscovery() {
 			if w.DreamPlane.DiscoveryStates[zoneID] != board.StateVisited {
 				w.DreamPlane.DiscoveryStates[zoneID] = board.StateAdjacent
 			}
-		} else if w.DreamPlane.DiscoveryStates[zoneID] != board.StateVisited {
-			w.DreamPlane.DiscoveryStates[zoneID] = board.StateHidden
 		}
+		// NOTE : On ne remet JAMAIS un état à Hidden si il était déjà Adjacent ou Visited.
+		// Cela permet de garder les sorties découvertes affichées sur la mini-carte.
 	}
 }
 
@@ -474,7 +474,7 @@ func (w *World) GeneratePlaytestLayout(id string) {
 	_, _ = w.SpawnCreature(grid.ID, "echo_hound", entity.Position{X: 2, Y: 1}) // Sa paire
 
 	// 2. Population automatique pour le reste
-	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "moss_monkey", "stonewarden"}
+	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "moss_monkey", "stonewarden", "flutterwing"}
 	resources := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
 
 	fmt.Println("[WORLD] Population de la zone de playtest...")
@@ -1762,7 +1762,7 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		Name:         name,
 		SourceID:     sourceID,
 		OriginalType: eType,
-		IsUsable:     name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName || name == player.MossMonkeyItemName || name == player.StonewardenItemName || name == player.LumiflyItemName || name == player.FleeingSpriteName,
+		IsUsable:     name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName || name == player.MossMonkeyItemName || name == player.StonewardenItemName || name == player.LumiflyItemName || name == player.FleeingSpriteName || name == player.FlutterwingItemName,
 		IsDeletable:  true,
 	}
 	// On garde le type d'origine en tag pour le rendu
@@ -2778,6 +2778,11 @@ func (e *Engine) Update() {
 	// Diminue la santé mentale à chaque tour
 	if e.world.Player != nil {
 		e.world.Player.ConsumeSanity(1)
+
+		// Décrémente la grâce (Flutterwing)
+		if e.world.Player.GraceTurns > 0 {
+			e.world.Player.GraceTurns--
+		}
 
 		// Met à jour les durées des effets visuels
 		for name, duration := range e.world.Player.VisualEffects {

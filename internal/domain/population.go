@@ -37,8 +37,8 @@ func (w *World) FillGridRandomly(gridID string) {
 
 	// 3. Types disponibles
 	resourceTypes := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
-	// Ajout de "stonewarden" à la liste des créatures spawnables
-	creatureTypes := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey", "stonewarden"}
+	// Ajout de "stonewarden" et "flutterwing" à la liste des créatures spawnables
+	creatureTypes := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey", "stonewarden", "flutterwing"}
 
 	posIdx := 0
 	totalTiles := len(positions)

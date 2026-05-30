@@ -31,7 +31,7 @@ Le plan onirique est un réseau de zones interconnectées. Pour s'orienter sans 
 - **États de Découverte** :
   - **Inconnu** : Zone cachée.
   - **Adjacent** : Silhouette grise (route possible identifiée).
-  - **Visité** : Affiche l'icône du biome (Forest, Cave, Swamp, etc.).
+  - **Visité** : Affiche l'icône du biome (Forest, Cave, Swamp, etc.). Les sorties découvertes restent affichées en permanence.
   - **Actuel** : Indicateur doré pulsant.
 
 ### Matrice de Dégâts (MATCH vs SKIP)
@@ -97,6 +97,13 @@ L'utilisation d'un butin de Shadowstalker permet de passer entre les plans :
 - **Protection** : Immunité totale aux dégâts pendant 1 tour.
 - **Feedback** : Le cadre de survol et de sélection sur la grille devient **gris pierre**.
 - **Message** : "Vous vous sentez évanescent."
+
+### Vision des Intentions (Bonus Fleeing Sprite)
+
+L'utilisation d'un butin de Fleeing Sprite illumine les dangers :
+- **Effet** : Rend visible les zones de menace de toutes les créatures de la grille pour 1 tour.
+- **Feedback** : Affiche des arcs blancs entre les créatures et les cases qu'elles ciblent.
+- **Message** : "L'éclat du Fleeing Sprite révèle les intentions de vos prédateurs."
 
 ## Verbes
 
@@ -182,6 +189,8 @@ Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il
 | **Stonewarden** | Passif | Patrouille | Bento | Stop | Gardien immobile qui patrouille si révélé |
 | **Echo Hound** | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations. |
 | **Moss Monkey** | Proximité (4) | Target Empty | Bento | Glisse | Saboteur qui rebouche les cases vides avec des leurres. Fuit si le plateau est saturé de pièges. |
+| **Flutterwing** | Proximité (2) | Répulsion joueur | Over | Glisse | Créature timide dont l'essence apaise l'esprit. |
+| **Fleeing Sprite** | Proximité (2) | Répulsion joueur | Over | Glisse | Étincelle d'énergie vive révélant les dangers. |
 
 Pour les ressources :
 

@@ -30,6 +30,7 @@ var ItemAbilities = map[string]LootAbility{
 	player.MossMonkeyItemName:     &MossMonkeyAbility{},
 	player.StonewardenItemName:    &StonewardenAbility{},
 	player.FleeingSpriteName:      &FleeingSpriteAbility{},
+	player.FlutterwingItemName:    &FlutterwingAbility{},
 }
 
 // --- ABILITY : DREAMBERRY ---
@@ -328,4 +329,17 @@ func (a *FleeingSpriteAbility) Execute(world *domain.World) (string, error) {
 	fmt.Println("[ABILITY] Activation du Fleeing Sprite - ThreatVisionTurns set to 1")
 	world.Player.ThreatVisionTurns = 1
 	return "L'éclat du Fleeing Sprite révèle les intentions de vos prédateurs.", nil
+}
+
+// --- ABILITY : FLUTTERWING ---
+
+type FlutterwingAbility struct{}
+
+func (a *FlutterwingAbility) CanExecute(world *domain.World) bool { return true }
+
+func (a *FlutterwingAbility) Execute(world *domain.World) (string, error) {
+	const sanityRestoration = 10
+	world.Player.RestoreSanity(sanityRestoration)
+	world.Player.GraceTurns = 3
+	return "Un souffle apaisant vous enveloppe. Les créatures hésiteront à vous attaquer.", nil
 }

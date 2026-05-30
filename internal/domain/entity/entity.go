@@ -436,7 +436,9 @@ func Compose(base, apply Transformation) Transformation {
 	if base > 7 || apply > 7 {
 		return base
 	}
-	return d4Table[base][apply]
+	// CORRECTION : La table D4 est structurée tel que d4Table[Deuxième_Op][Première_Op]
+	// Pour que le joueur agisse SUR la tuile, son clic est la deuxième opération.
+	return d4Table[apply][base]
 }
 
 // ToTransformation convertit une direction de flip en transformation D4

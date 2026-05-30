@@ -295,6 +295,35 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.AddTag("flying")
 		c.AddTag("passive")
 
+	case "flutterwing":
+		c.SetBehavior(component.Behavior{
+			State:      "dancing",
+			Aggression: 0,
+		})
+		c.SetMobility(component.Mobility{
+			CanMove: true,
+			Speed:   1,
+		})
+		c.SetMovementProfile(&MovementProfile{
+			Trigger: MovementTrigger{Type: TriggerProximity, Radius: 2},
+			Navigation: NavigationLogic{
+				Type:   NavRepulsion,
+				Target: TargetPlayer,
+			},
+			Mode: MovementMode{Type: ModeOver},
+			Perception: PerceptionProfile{
+				Stealth:  StealthManifest,
+				Acoustic: AcousticSilent,
+			},
+			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Orientation: Orientation{Direction: Forward},
+			Collision:   CollisionHandler{Type: CollideSlide},
+		})
+		c.SetThreatZone(ThreatFrontal) // Très peu menaçant
+		c.AddTag("flying")
+		c.AddTag("passive")
+		c.AddTag("elusive")
+
 	case "shadowstalker":
 		c.SetBehavior(component.Behavior{
 			State:       "hunting",

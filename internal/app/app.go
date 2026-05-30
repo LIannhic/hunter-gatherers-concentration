@@ -157,6 +157,7 @@ func NewApplication() (*Application, error) {
 			player.NewSpecterItem(),
 			player.NewStonewardenItem(),
 			player.NewFleeingSpriteItem(),
+			player.NewFlutterwingItem(),
 		}
 		for _, item := range items {
 			_ = app.World.AddLootItem(item)
@@ -705,7 +706,7 @@ func (app *Application) updatePlaying() error {
 								GridID:    app.World.CurrentGridID,
 								ItemIndex: inventoryIdx,
 							}
-						case "dreamberry", "moonstone", "crystal_shard", "whispering_herb", "specter", "burrower", "shadowstalker", "stonewarden", "moss_monkey", "lumifly", "fleeing_sprite":
+						case "dreamberry", "moonstone", "crystal_shard", "whispering_herb", "specter", "burrower", "shadowstalker", "stonewarden", "moss_monkey", "lumifly", "fleeing_sprite", "flutterwing":
 							cmd = &usecase.UseLootItemCommand{
 								World:     app.World,
 								ItemIndex: inventoryIdx,

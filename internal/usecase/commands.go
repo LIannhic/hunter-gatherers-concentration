@@ -114,6 +114,12 @@ func (c *RevealTileCommand) Execute() error {
 
 		fmt.Printf("[DEBUG] Reveal Créature: %s en %v | Menacé ? %v\n", cre.Species, cre.GetPosition(), isThreatened)
 
+		// Si le joueur est sous l'effet de Grace (Flutterwing), il évite l'attaque
+		if isThreatened && c.World.Player.GraceTurns > 0 {
+			fmt.Printf("[ABILITY] Grâce active : l'attaque de %s est évitée !\n", cre.Species)
+			isThreatened = false
+		}
+
 		if isThreatened {
 			fmt.Printf("[COMBAT] Confrontation ! La créature %s attaque le joueur en %v\n", cre.Species, playerPos)
 			c.World.Player.TakeDamage(10, "physical")

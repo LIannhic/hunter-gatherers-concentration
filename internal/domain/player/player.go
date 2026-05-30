@@ -32,6 +32,8 @@ const (
    	EchoHoundItemName            = "echo_hound"
    	FleeingSpriteSourceID        = "fleeing_sprite"
    	FleeingSpriteName            = "fleeing_sprite"
+	FlutterwingItemSourceID      = "flutterwing"
+	FlutterwingItemName          = "flutterwing"
 	LumiflyItemSourceID          = "lumifly"
 	LumiflyItemName              = "lumifly"
 	MossMonkeyItemSourceID       = "moss_monkey"
@@ -135,6 +137,7 @@ type Player struct {
 	// Buffs temporaires
 	ImmunityTurns int // Nombre de tours d'immunité restants
 	ThreatVisionTurns int // Nombre de tours où les zones de menace sont visibles
+	GraceTurns int // Nombre de tours où les créatures n'attaquent pas lors de la révélation (Flutterwing)
 
 	// Effets visuels (Shaders)
 	VisualEffects map[string]int // "blur", "bubble", etc. -> Durée en tours
@@ -316,6 +319,17 @@ func NewFleeingSpriteItem() *LootItem {
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         FleeingSpriteName,
 		SourceID:     FleeingSpriteSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+}
+
+func NewFlutterwingItem() *LootItem {
+	return &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         FlutterwingItemName,
+		SourceID:     FlutterwingItemSourceID,
 		OriginalType: entity.TypeCreature,
 		IsUsable:     true,
 		IsDeletable:  true,

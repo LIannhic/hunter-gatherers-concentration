@@ -10,6 +10,7 @@ package assets
 
 import (
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -96,6 +97,15 @@ var (
 		Shadow:    color.RGBA{70, 70, 80, 255},    // Gris sombre
 		Eye:       color.RGBA{100, 200, 255, 255}, // Bleu éthéré
 		Bg:        color.RGBA{45, 45, 50, 255},
+	}
+
+	// Fleeing Sprite - Esprit fuyant
+	FleeingSpritePalette = CreaturePalette{
+		Body:      color.RGBA{200, 255, 255, 200}, // Cyan clair translucide
+		Highlight: color.RGBA{255, 255, 255, 255}, // Blanc pur
+		Shadow:    color.RGBA{100, 200, 255, 150}, // Bleu ciel
+		Eye:       color.RGBA{255, 150, 0, 255},   // Orange (énergie)
+		Bg:        color.RGBA{35, 40, 50, 255},
 	}
 )
 
@@ -381,6 +391,37 @@ func generateStonewarden(size int, p CreaturePalette) *ebiten.Image {
 	vector.DrawFilledCircle(img, centerX-10, centerY+5, 4, mossColor, true)
 	vector.DrawFilledCircle(img, centerX+12, centerY-2, 3, mossColor, true)
 	vector.DrawFilledCircle(img, centerX-5, centerY+20, 5, mossColor, true)
+
+	return img
+}
+
+// generateFleeingSprite crée l'icône d'un esprit fuyant (étincelle vive)
+func generateFleeingSprite(size int, p CreaturePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+
+	centerX := float32(size / 2)
+	centerY := float32(size / 2)
+
+	// Éclats d'énergie (forme en étoile)
+	sparkColor := p.Body
+	for i := 0; i < 4; i++ {
+		angle := float64(i) * 3.14159 / 2
+		dx := float32(math.Cos(angle)) * 20
+		dy := float32(math.Sin(angle)) * 20
+		vector.StrokeLine(img, centerX-dx, centerY-dy, centerX+dx, centerY+dy, 4, sparkColor, true)
+	}
+
+	// Noyau central
+	vector.DrawFilledCircle(img, centerX, centerY, 12, p.Highlight, true)
+
+	// Traînée de mouvement (vitesse)
+	vector.DrawFilledCircle(img, centerX-15, centerY+10, 6, p.Shadow, true)
+	vector.DrawFilledCircle(img, centerX-25, centerY+18, 4, p.Shadow, true)
+
+	// Yeux expressifs
+	vector.DrawFilledCircle(img, centerX-3, centerY-2, 3, p.Eye, true)
+	vector.DrawFilledCircle(img, centerX+3, centerY-2, 3, p.Eye, true)
 
 	return img
 }

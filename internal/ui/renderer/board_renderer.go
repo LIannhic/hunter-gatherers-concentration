@@ -382,10 +382,10 @@ func (r *BoardRenderer) ApplyTransformation(geom *ebiten.GeoM, t entity.Transfor
 	case entity.TransMirrorV:
 		geom.Scale(1, -1)
 	case entity.TransMirrorD1: // Diagonale \
-		geom.Rotate(math.Pi / 2)
+		geom.Rotate(-math.Pi / 2)
 		geom.Scale(1, -1)
 	case entity.TransMirrorD2: // Diagonale /
-		geom.Rotate(-math.Pi / 2)
+		geom.Rotate(math.Pi / 2)
 		geom.Scale(1, -1)
 	}
 }

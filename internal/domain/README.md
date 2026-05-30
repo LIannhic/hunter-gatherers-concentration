@@ -356,6 +356,8 @@ Certains butins peuvent être utilisés directement depuis l'inventaire pour oct
 
 - **Shadowstalker** : Octroie l'état **Évanescent** pendant 1 tour. Le joueur ne subit aucun dégât (physique ou d'erreur de match). Le cadre de sélection du plateau devient **gris** pour signaler cet état.
 - **Echo Hound** : Déclenche un scanner révélant les positions des entités cachées.
+- **Fleeing Sprite** : Révèle visuellement les zones de menace de toutes les créatures sur la grille actuelle pendant 1 tour via des arcs blancs.
+- **Flutterwing** : Restaure 10 Sanité et accorde l'état **Grâce** (3 tours), permettant d'éviter les attaques lors des révélations.
 - **Burrower** : Force une créature à laisser des traces de boue lors de son prochain déplacement.
 - **Spectre** : Fait disparaître une paire de créatures du plateau.
 - **Ressources** : Restaurent de la santé, de la mana ou de la santé mentale.
@@ -367,9 +369,10 @@ Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement. Elles
 ### Orientation Persistante et Mathématiques D4
 
 Le moteur gère une accumulation réelle des transformations géométriques :
-- **Composition à Droite** : Chaque nouveau mouvement (flip) est composé avec l'état actuel de l'entité (`current * apply`).
+- **Composition SUR l'état** : Chaque nouveau mouvement (flip) est appliqué sur l'état actuel de l'entité (`apply * current`). Cela respecte la logique physique où le joueur manipule une tuile déjà orientée.
 - **Fermeture Physique** : La fermeture d'une tuile (via la pente du terrain) est une transformation réelle qui modifie l'orientation logique face cachée.
 - **Réversibilité** : Grâce aux propriétés du groupe $D_4$, deux flips identiques s'annulent ($T^2 = I$), permettant de retrouver l'état d'origine si le joueur et le terrain agissent sur le même axe.
+- **Nomenclature Relative** : Les créatures utilisent des directions relatives (`Forward`, `Backward`, `Left`, `Right`) pour définir leurs zones de menace. Ces directions sont transformées en coordonnées absolues du plateau via la matrice D4 de l'entité.
 
 ### Distinction Invisibilité vs Profondeur
 
