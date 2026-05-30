@@ -125,19 +125,15 @@ func (c *RevealTileCommand) Execute() error {
 				c.World.Player.VisualEffects["bubble"] = 3
 			}
 
-			// Feedback visuel de l'attaque
-			track := entity.NewTrack("intent_beam", 2, entity.Position{X: c.Position.X, Y: c.Position.Y}, playerPos)
-			track.SetGridID(c.GridID)
-			c.World.Entities.Register(track)
-
-			// Publie un événement de dégâts pour l'UI
+			// Publie un événement de dégâts pour l'UI (le renderer gérera le feedback visuel)
 			c.World.EventBus.Publish(event.Event{
 				Type:     event.PlayerDamaged,
 				SourceID: string(cre.GetID()),
 				Payload: map[string]interface{}{
-					"damage": 10,
-					"type":   "physical",
-					"reason": "confrontation",
+					"damage":   10,
+					"type":     "physical",
+					"reason":   "confrontation",
+					"position": playerPos, // Ajoute la position pour le renderer
 				},
 			})
 		}
