@@ -2,33 +2,42 @@
 
 package main
 
-var Center vec2     // Normalized [0,1]
-var Intensity float32
-var Resolution vec2 // Size in pixels
+var Time float
+var Center vec2
+var Intensity float
+var Resolution vec2
 
 func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	center := Center * Resolution
 
-	pos := dstPos.xy - center
+	pos := srcPos - center
 	dist := length(pos)
 
-	// Rayon d'action du vortex en pixels (environ 2.5 cases)
-	radius := 180.0
+	// Rayon plus étendu (environ 4 cases)
+	radius := 350.0
 
-	if dist < radius {
-		// Calcul de l'angle de rotation basé sur la distance
-		// Plus on est proche du centre, plus la rotation est forte (spirale)
-		percent := (radius - dist) / radius
-		theta := percent * percent * 8.0 * Intensity
+	// Rayon de l'oeil du cyclone (la tuile portail reste visible)
+	eyeRadius := 45.0
 
-		// Matrice de rotation inverse pour transformer la lecture du pixel
+	if dist < radius && dist > eyeRadius {
+		// Normalisation entre eyeRadius et radius
+		percent := (radius - dist) / (radius - eyeRadius)
+
+		// Torsion plus légère et progressive (sinusoïdale pour la douceur)
+		// On réduit la force de torsion de 12.0 à 4.0
+		swirl := percent * percent * 4.0 * Intensity
+
+		// Rotation continue dans le temps
+		spin := Time * 1.5
+
+		theta := swirl + spin
+
 		s := sin(theta)
 		c := cos(theta)
 
-		// Coordonnées de lecture relatives au centre
 		rotatedPos := vec2(
-			pos.x * c - pos.y * s,
-			pos.x * s + pos.y * c
+			pos.x*c - pos.y*s,
+			pos.x*s + pos.y*c,
 		)
 
 		return imageSrc0At(rotatedPos + center)

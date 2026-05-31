@@ -933,8 +933,9 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 			float64(my) >= ui.PlaymatY && float64(my) < ui.PlaymatY+ui.PlaymatH
 
 		// Recherche d'un portail portable déployé pour l'effet de vortex
+		// On n'affiche le vortex QUE si le timer de victoire est actif (portail en cours d'extraction)
 		var portalPos []float32
-		if grid != nil {
+		if grid != nil && app.Input.IsVictoryTimerActive() {
 			for _, e := range app.World.Entities.GetAllActive() {
 				if e.GetGridID() == grid.ID && e.HasTag("portable_portal") {
 					// Calcul de la position écran du centre de la tuile
