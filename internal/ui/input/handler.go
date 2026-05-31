@@ -532,10 +532,11 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 		if h.OnTurnEnd != nil {
 			h.OnTurnEnd()
 		}
-	case actionbuttons.BtnMenu:
-		fmt.Println("[ACTION] Bouton Menu activé")
-		if h.OnExitToMenu != nil {
-			h.OnExitToMenu()
+	case actionbuttons.BtnMerge:
+		fmt.Println("[ACTION] Bouton Merge activé")
+		h.processMergeAttempt()
+		if h.world.TurnTimer != nil {
+			h.world.TurnTimer.Reset()
 		}
 	}
 }
@@ -596,6 +597,14 @@ func (h *Handler) processSkip() {
 							creatureCount++
 						}
 
+						resourceCount := 0
+						if isRes1 {
+							resourceCount++
+						}
+						if isRes2 {
+							resourceCount++
+						}
+
 						if creatureCount > 0 {
 							fmt.Printf("[DEBUG] SKIP d'une paire valide contenant des créatures (Pos: %v, %v)\n", pos1, pos2)
 							damage := creatureCount * 10
@@ -609,6 +618,22 @@ func (h *Handler) processSkip() {
 									"damage": damage,
 									"type":   "creature_fail",
 									"reason": "skipped_valid_match",
+								},
+							})
+						}
+
+						if resourceCount > 0 {
+							manaLoss := resourceCount * 5
+							fmt.Printf("[ALCHIMIE] Skip d'un match VALIDE avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
+							h.world.Player.ConsumeMana(manaLoss)
+
+							h.world.EventBus.Publish(event.Event{
+								Type:     event.PlayerDamaged,
+								SourceID: "system",
+								Payload: map[string]interface{}{
+									"mana_loss": manaLoss,
+									"type":      "resource_fail",
+									"reason":    "skipped_valid_match",
 								},
 							})
 						}
@@ -692,6 +717,57 @@ func (h *Handler) hideAllTilesInGrid() {
 	}
 	// On réinitialise les tuiles révélées puisque tout est masqué
 	h.revealedTiles = nil
+}
+
+// processMergeAttempt tente de fusionner les 2 tuiles révélées
+func (h *Handler) processMergeAttempt() {
+	if len(h.revealedTiles) != 2 {
+		h.isProcessing = false
+		return
+	}
+
+	pos1 := h.revealedTiles[0]
+	pos2 := h.revealedTiles[1]
+
+	gridID := h.selectedGridID
+	if gridID == "" {
+		gridID = h.world.CurrentGridID
+	}
+
+	cmd := &usecase.MergeTilesCommand{
+		World:    h.world,
+		AssocEng: h.assocEngine,
+		GridID:   gridID,
+		Pos1:     pos1,
+		Pos2:     pos2,
+		OnSuccess: func() {
+			fmt.Printf("[MERGE] ✅ Succès !\n")
+			// Après fusion, la commande UseCase a déjà refermé les tuiles logiquement.
+			// On vide la mémoire tampon de l'input handler.
+			h.revealedTiles = nil
+			h.isProcessing = false
+			h.ClearSelection()
+
+			if h.OnTurnEnd != nil {
+				h.OnTurnEnd()
+			}
+		},
+		OnFailure: func() {
+			fmt.Printf("[MERGE] ❌ Échec !\n")
+			h.revealedTiles = nil
+			h.isProcessing = false
+			h.ClearSelection()
+			if h.OnTurnEnd != nil {
+				h.OnTurnEnd()
+			}
+		},
+	}
+
+	if err := cmd.Execute(); err != nil {
+		fmt.Printf("[MERGE] %v\n", err)
+		h.revealedTiles = nil
+		h.isProcessing = false
+	}
 }
 
 // processMatchAttempt tente d'associer les 2 tuiles révélées

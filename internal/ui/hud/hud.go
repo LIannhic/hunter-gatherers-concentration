@@ -475,6 +475,14 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	// Portrait Holder
 	vector.StrokeRect(screen, ui.PortraitX, ui.PortraitY, ui.PortraitW, ui.PortraitH, 1, color.RGBA{100, 100, 100, 255}, true)
 
+	// Menu Icon / Button (M)
+	mx := ui.PortraitX + ui.MenuIconRelativeX
+	my := ui.PortraitY + ui.MenuIconRelativeY
+	btnMColor := color.RGBA{150, 150, 150, 255}
+	// On pourrait ajouter un effet de survol ici si on avait accès à la souris
+	vector.DrawFilledRect(screen, float32(mx), float32(my), float32(ui.MenuIconSize), float32(ui.MenuIconSize), btnMColor, true)
+	text.Draw(screen, "M", basicfont.Face7x13, int(mx)+15, int(my)+25, color.Black)
+
 	// Turn and Difficulty (aligned)
 	infoX := int(ui.PortraitX) + 60
 	infoY := int(ui.PortraitY) + 25
@@ -533,10 +541,10 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	}
 
 	// Menu Icon
-	mx := ui.PortraitX + ui.MenuIconRelativeX
-	my := ui.PortraitY + ui.MenuIconRelativeY
-	vector.DrawFilledRect(screen, float32(mx), float32(my), float32(ui.MenuIconSize), float32(ui.MenuIconSize), color.RGBA{150, 150, 150, 255}, true)
-	text.Draw(screen, "M", basicfont.Face7x13, int(mx)+15, int(my)+25, color.Black)
+	mxIcon := ui.PortraitX + ui.MenuIconRelativeX
+	myIcon := ui.PortraitY + ui.MenuIconRelativeY
+	vector.DrawFilledRect(screen, float32(mxIcon), float32(myIcon), float32(ui.MenuIconSize), float32(ui.MenuIconSize), color.RGBA{150, 150, 150, 255}, true)
+	text.Draw(screen, "M", basicfont.Face7x13, int(mxIcon)+15, int(myIcon)+25, color.Black)
 }
 
 func (h *HUD) renderInventory(screen *ebiten.Image) {
@@ -882,6 +890,18 @@ func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
 
 // HandleClick gère les clics sur les éléments de l'HUD
 func (h *HUD) HandleClick(x, y int) bool {
+	// Clic sur l'icône Menu (M) dans le portrait
+	mxIcon := ui.PortraitX + ui.MenuIconRelativeX
+	myIcon := ui.PortraitY + ui.MenuIconRelativeY
+	fx, fy := float64(x), float64(y)
+	if fx >= float64(mxIcon) && fx <= float64(mxIcon)+ui.MenuIconSize &&
+		fy >= float64(myIcon) && fy <= float64(myIcon)+ui.MenuIconSize {
+		// On ne peut pas appeler ReturnToMenu ici car HUD ne connaît pas app.
+		// On laisse app.go gérer via ses propres callbacks (Input.OnExitToMenu déjà lié à l'icône M)
+		// On retourne juste true pour dire que le clic a été consommé.
+		return true
+	}
+
 	if h.showDetails {
 		winW, winH := 320, 450
 		winX := (ui.ScreenWidth - winW) / 2

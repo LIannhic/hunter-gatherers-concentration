@@ -1762,9 +1762,12 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		Name:         name,
 		SourceID:     sourceID,
 		OriginalType: eType,
-		IsUsable:     name == player.EchoHoundItemName || name == player.DreamberryItemName || name == player.MoonstoneItemName || name == player.CrystalShardItemName || name == player.WhisperingHerbItemName || name == player.SpecterItemName || name == player.BurrowerItemName || name == player.ShadowstalkerItemName || name == player.MossMonkeyItemName || name == player.StonewardenItemName || name == player.LumiflyItemName || name == player.FleeingSpriteName || name == player.FlutterwingItemName,
+		IsUsable:     true, // Par défaut, tout ce qui est looté est utilisable s'il a une capacité associée
 		IsDeletable:  true,
 	}
+
+	// Liste restreinte de ce qui n'est PAS utilisable (si besoin)
+	// Pour l'instant, toutes les créatures et ressources ont des effets.
 	// On garde le type d'origine en tag pour le rendu
 	loot.AddTag(fmt.Sprintf("original_type_%d", eType))
 	loot.AddTag(name)

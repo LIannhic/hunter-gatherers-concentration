@@ -239,18 +239,32 @@ func (c *MatchTilesCommand) Execute() error {
 
 	// Cas 1 : Deux ressources
 	if isRes1 && isRes2 {
-		result, err := c.AssocEng.TryAssociate(res1, res2)
-		if err == nil && result.Success {
-			isMatch = true
-			matchType = result.Type.String()
+		// NOUVEAU : On n'autorise que l'association par SIMILARITÉ IDENTIQUE pour le Match simple
+		if res1.ResourceType == res2.ResourceType {
+			// On vérifie aussi que les deux ont le même statut de cumul (fusionné avec fusionné, ou normal avec normal)
+			cumul1 := entity1.GetState() & entity.Cumulated
+			cumul2 := entity2.GetState() & entity.Cumulated
+			if cumul1 == cumul2 {
+				isMatch = true
+				matchType = "resource_capture"
+			} else {
+				fmt.Printf("[DEBUG-MATCH] Échec : Statuts de cumul différents (E1:%v, E2:%v)\n", cumul1 != 0, cumul2 != 0)
+			}
 		}
 	}
 
 	// Cas 2 : Deux créatures
 	if !isMatch && isCre1 && isCre2 {
 		if cre1.Species == cre2.Species {
-			isMatch = true
-			matchType = "creature_capture"
+			// Idem pour les créatures : normal avec normal, cumulé avec cumulé
+			cumul1 := entity1.GetState() & entity.Cumulated
+			cumul2 := entity2.GetState() & entity.Cumulated
+			if cumul1 == cumul2 {
+				isMatch = true
+				matchType = "creature_capture"
+			} else {
+				fmt.Printf("[DEBUG-MATCH] Échec : Statuts de cumul différents (E1:%v, E2:%v)\n", cumul1 != 0, cumul2 != 0)
+			}
 		}
 	}
 
@@ -367,6 +381,145 @@ func (c *MatchTilesCommand) Execute() error {
 	}
 
 	return errors.New("association échouée")
+}
+
+// --- MERGE TILES COMMAND ---
+
+type MergeTilesCommand struct {
+	World      *domain.World
+	AssocEng   *domain.AssocEngine
+	GridID     string
+	Pos1, Pos2 board.Position
+	OnSuccess  func()
+	OnFailure  func()
+}
+
+func (c *MergeTilesCommand) CanExecute() bool {
+	if c.World.Player.Stats.Mana <= 0 {
+		return false
+	}
+
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
+		return false
+	}
+
+	tile1, err1 := grid.Get(c.Pos1)
+	tile2, err2 := grid.Get(c.Pos2)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+
+	if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
+		return false
+	}
+
+	id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+	id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+	e1, ok1 := c.World.Entities.Get(entity.ID(id1))
+	e2, ok2 := c.World.Entities.Get(entity.ID(id2))
+	if !ok1 || !ok2 {
+		return false
+	}
+
+	// Uniquement si pas déjà cumulés
+	if e1.GetState()&entity.Cumulated != 0 || e2.GetState()&entity.Cumulated != 0 {
+		return false
+	}
+
+	return e1.GetState()&entity.Revealed != 0 && e2.GetState()&entity.Revealed != 0
+}
+
+func (c *MergeTilesCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("impossible de fusionner ces tuiles")
+	}
+
+	c.World.Player.ConsumeMana(3) // Coût augmenté à 3
+
+	grid, _ := c.World.GetGrid(c.GridID)
+	tile1, _ := grid.Get(c.Pos1)
+	tile2, _ := grid.Get(c.Pos2)
+
+	id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+	id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+	e1, _ := c.World.Entities.Get(entity.ID(id1))
+	e2, _ := c.World.Entities.Get(entity.ID(id2))
+
+	isMatch := false
+	res1, isRes1 := e1.(*domain.Resource)
+	res2, isRes2 := e2.(*domain.Resource)
+	cre1, isCre1 := e1.(*domain.Creature)
+	cre2, isCre2 := e2.(*domain.Creature)
+
+	if isRes1 && isRes2 {
+		result, err := c.AssocEng.TryAssociate(res1, res2)
+		if err == nil && result.Success {
+			isMatch = true
+		}
+	} else if isCre1 && isCre2 && cre1.Species == cre2.Species {
+		isMatch = true
+	}
+
+	if isMatch {
+		fmt.Printf("[MERGE] ✅ Fusion réussie en %v !\n", c.Pos1)
+		// On marque la tuile 1 comme cumulée
+		e1.SetState(e1.GetState() | entity.Cumulated)
+		e1.AddTag("cumulated")
+
+		// On supprime la tuile 2 (elle a été absorbée)
+		c.World.RemoveEntity(e2.GetID())
+
+		// NOUVEAU : Après une fusion, on referme TOUTES les tuiles révélées
+		// Cela inclut la tuile fusionnée.
+		gridID := c.GridID
+		if grid, ok := c.World.GetGrid(gridID); ok {
+			for pos, plot := range grid.Plots {
+				if len(plot.EntitiesID) == 0 {
+					continue
+				}
+				topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+				if ent, exists := c.World.Entities.Get(entity.ID(topID)); exists {
+					if ent.GetState()&entity.Revealed != 0 {
+						// On ferme avec l'animation de pente
+						_, _ = c.World.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection())
+						c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+							entity.Position(pos), string(ent.GetID()), gridID, plot.Tilt.ToFlipDirection()))
+					}
+				}
+			}
+		}
+
+		if c.OnSuccess != nil {
+			c.OnSuccess()
+		}
+		return nil
+	}
+
+	// Échec : Association invalide (même punition que le match)
+	damage := 10
+	if isCre1 || isCre2 {
+		c.World.Player.TakeDamage(damage, "creature_fail")
+	} else {
+		c.World.Player.ConsumeMana(5)
+	}
+
+	// Recache les deux
+	p1, _ := grid.Get(c.Pos1)
+	p2, _ := grid.Get(c.Pos2)
+	_, _ = c.World.FlipTile(c.GridID, c.Pos1, p1.Tilt.ToFlipDirection())
+	_, _ = c.World.FlipTile(c.GridID, c.Pos2, p2.Tilt.ToFlipDirection())
+
+	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+		entity.Position(c.Pos1), id1, c.GridID, p1.Tilt.ToFlipDirection()))
+	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+		entity.Position(c.Pos2), id2, c.GridID, p2.Tilt.ToFlipDirection()))
+
+	if c.OnFailure != nil {
+		c.OnFailure()
+	}
+
+	return errors.New("fusion échouée")
 }
 
 // --- DISCARD TRAP COMMAND ---

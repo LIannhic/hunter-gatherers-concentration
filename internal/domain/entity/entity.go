@@ -18,10 +18,11 @@ func NewID() ID {
 type TileState int
 
 const (
-	Hidden   TileState = 1 << iota // 1
-	Revealed                       // 2
-	Matched                        // 4
-	Blocked                        // 8
+	Hidden    TileState = 1 << iota // 1
+	Revealed                        // 2
+	Matched                         // 4
+	Blocked                         // 8
+	Cumulated                       // 16
 )
 
 func (s TileState) String() string {
@@ -37,6 +38,9 @@ func (s TileState) String() string {
 	}
 	if s&Blocked != 0 {
 		res += "blocked "
+	}
+	if s&Cumulated != 0 {
+		res += "cumulated "
 	}
 	if res == "" {
 		return "unknown"
