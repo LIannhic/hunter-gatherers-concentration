@@ -932,11 +932,25 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 		isOverPlaymat := float64(mx) >= ui.PlaymatX && float64(mx) < ui.PlaymatX+ui.PlaymatW &&
 			float64(my) >= ui.PlaymatY && float64(my) < ui.PlaymatY+ui.PlaymatH
 
+		// Recherche d'un portail portable déployé pour l'effet de vortex
+		var portalPos []float32
+		if grid != nil {
+			for _, e := range app.World.Entities.GetAllActive() {
+				if e.GetGridID() == grid.ID && e.HasTag("portable_portal") {
+					// Calcul de la position écran du centre de la tuile
+					px, py := app.Renderer.GetTileCenter(board.Position(e.GetPosition()), grid)
+					portalPos = []float32{float32(px) / sw, float32(py) / sh}
+					break
+				}
+			}
+		}
+
 		params := renderer.GlobalEffectParams{
 			SanityRatio: ratio,
 			Biome:       biome,
 			UseBlur:     app.World.Player.VisualEffects["blur"] > 0,
 			UseBubble:   app.World.Player.VisualEffects["bubble"] > 0 && isOverPlaymat,
+			PortalPos:   portalPos,
 			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},
 		}

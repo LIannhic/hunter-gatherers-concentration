@@ -20,6 +20,8 @@ var (
 	heatShaderSource []byte
 	//go:embed shader/wave.kage
 	waveShaderSource []byte
+	//go:embed shader/vortex.kage
+	vortexShaderSource []byte
 )
 
 type EffectRenderer struct {
@@ -42,6 +44,7 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 		"bubble":  bubbleShaderSource,
 		"heat":    heatShaderSource,
 		"wave":    waveShaderSource,
+		"vortex":  vortexShaderSource,
 	}
 
 	for name, src := range sources {
@@ -92,6 +95,7 @@ type GlobalEffectParams struct {
 	Biome       string
 	UseBlur     bool
 	UseBubble   bool
+	PortalPos   []float32 // [x, y] normalized, nil if none
 	MousePos    []float32 // [x, y] normalized
 	ScreenSize  []float32 // [width, height] pixels
 }
@@ -142,6 +146,15 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	if params.UseBlur {
 		// Blur is often applied last to smooth things out
 		r.applyShader(src, dst, "blur", intensity, nil, params.ScreenSize)
+		src, dst = dst, src
+		anyApplied = true
+	}
+
+	// 3. Special Static Effects (Vortex for Portal)
+	if params.PortalPos != nil {
+		// Le vortex est toujours à intensité max (ou peut être couplé à Sanity si on veut)
+		vIntensity := float32(1.0)
+		r.applyShader(src, dst, "vortex", vIntensity, params.PortalPos, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}

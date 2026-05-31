@@ -1,0 +1,44 @@
+//kage:unit pixels
+
+package main
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	origin, size := imageSrcRegionOnTexture()
+	center := origin + size * 0.5
+
+	// Si on passe un centre spécifique via Uniform
+	customCenter := Center * Resolution
+	if customCenter.x > 0.0 || customCenter.y > 0.0 {
+		center = customCenter
+	}
+
+	pos := dstPos.xy - center
+	dist := length(pos)
+
+	// Rayon d'action du vortex (3 cases environ)
+	radius := 150.0
+
+	if dist < radius {
+		// Calcul de l'angle de rotation basé sur la distance
+		// Plus on est proche du centre, plus la rotation est forte
+		percent := (radius - dist) / radius
+		theta := percent * percent * 5.0 * Intensity
+
+		// Matrice de rotation
+		s := sin(theta)
+		c := cos(theta)
+		rotatedPos := vec2(
+			pos.x * c - pos.y * s,
+			pos.x * s + pos.y * c
+		)
+
+		// On récupère le pixel à la position pivotée
+		return imageSrc0At(rotatedPos + center)
+	}
+
+	return imageSrc0At(dstPos.xy)
+}
+
+var Intensity float32
+var Center vec2     // Normalized [0,1]
+var Resolution vec2 // Size in pixels

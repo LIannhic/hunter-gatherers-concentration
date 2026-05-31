@@ -411,9 +411,8 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 		// Toujours rendu sur le plateau (Board area)
 		r.renderEmptyGrid(screen, world.CurrentGridID, world, false)
 
-		isPortalZone := world.DreamPlane != nil && (world.CurrentGridID == world.DreamPlane.StartZoneID || world.CurrentGridID == world.DreamPlane.EndZoneID)
 		getCenter := func(pos board.Position) (float64, float64) {
-			return r.getTileCenter(pos, grid, isPortalZone)
+			return r.GetTileCenter(pos, grid)
 		}
 
 		// --- 3. STRATE : UNDER (Souterraine) ---
@@ -524,8 +523,7 @@ func (r *BoardRenderer) renderEffectsOver(screen *ebiten.Image, world *domain.Wo
 		if r.trackRenderer != nil {
 			getCenter := func(pos board.Position) (float64, float64) {
 				grid, _ := world.GetGrid(world.CurrentGridID)
-				isPortal := world.DreamPlane != nil && (world.CurrentGridID == world.DreamPlane.StartZoneID || world.CurrentGridID == world.DreamPlane.EndZoneID)
-				return r.getTileCenter(pos, grid, isPortal)
+				return r.GetTileCenter(pos, grid)
 			}
 			r.trackRenderer.RenderAttackThreats(screen, world, getCenter)
 
@@ -783,9 +781,10 @@ func (r *BoardRenderer) calculateTileScreenPos(pos board.Position, grid *board.G
 	return sx, sy
 }
 
-// getTileCenter retourne le centre d'une case en coordonnées écran, avec rotation globale appliquée
-func (r *BoardRenderer) getTileCenter(pos board.Position, grid *board.Grid, isPortal bool) (float64, float64) {
-	x, y := r.calculateTileScreenPos(pos, grid, isPortal)
+// GetTileCenter retourne le centre d'une case en coordonnées écran, avec rotation globale appliquée
+func (r *BoardRenderer) GetTileCenter(pos board.Position, grid *board.Grid) (float64, float64) {
+	isPortalZone := grid.ID == "zone_start" || grid.ID == "zone_end" // Simplification pour l'export
+	x, y := r.calculateTileScreenPos(pos, grid, isPortalZone)
 	cx, cy := x+r.tileSize/2, y+r.tileSize/2
 
 	if r.boardRotation != 0 {
