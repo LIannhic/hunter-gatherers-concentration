@@ -415,6 +415,14 @@ func (c *MergeTilesCommand) Execute() error {
 		// On supprime la tuile 2 (elle a été absorbée)
 		c.World.RemoveEntity(e2.GetID())
 
+		// Notification de fusion
+		c.World.EventBus.Publish(event.NewTileMergedEvent(
+			entity.Position(c.Pos1),
+			string(e1.GetID()),
+			e1.GetMatchID(),
+			e1.GetType(),
+		))
+
 		// NOUVEAU : Après une fusion, on referme TOUTES les tuiles révélées
 		// Cela inclut la tuile fusionnée.
 		gridID := c.GridID
