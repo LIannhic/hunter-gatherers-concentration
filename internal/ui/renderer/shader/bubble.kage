@@ -1,35 +1,27 @@
+//kage:unit pixels
+
 package main
 
-var Center vec2
+var Center vec2     // Normalized [0,1]
 var Intensity float
-var Resolution vec2
+var Resolution vec2 // Size in pixels
 
-func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
-    // Calcul du ratio d'aspect dynamique
-    aspect := Resolution.x / Resolution.y
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+    center := Center * Resolution
 
-    // Passage dans un espace carré (isotrope) pour les calculs de distance
-    uv := vec2(texCoord.x * aspect, texCoord.y)
-    center := vec2(Center.x * aspect, Center.y)
+    pos := dstPos.xy - center
+    dist := length(pos)
 
-    delta := uv - center
-    dist := length(delta)
-
-    // Rayon normalisé par rapport à la hauteur
-    radius := 0.09 * Intensity
+    // Rayon en pixels (environ 65 pixels à intensité max)
+    radius := 65.0 * Intensity
 
     if dist < radius {
-        // Calcul de la distortion dans l'espace isotrope
+        // Calcul de la distortion sphérique
         strength := 1.0 - sqrt(1.0 - pow(dist / radius, 2.0))
 
-        // Déformation de la coordonnée de lecture
-        warped := uv - delta * strength
-
-        // Retour vers l'espace UV normalisé (rectangulaire)
-        warped.x /= aspect
-
-        return imageSrc0At(warped)
+        // On déplace le point de lecture vers le centre pour l'effet de loupe/bulle
+        return imageSrc0At(dstPos.xy - pos * strength * 0.5)
     }
 
-    return imageSrc0At(texCoord)
+    return imageSrc0At(dstPos.xy)
 }

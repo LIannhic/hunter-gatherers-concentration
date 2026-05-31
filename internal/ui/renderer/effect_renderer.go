@@ -183,5 +183,8 @@ func (r *EffectRenderer) applyShader(src, dst *ebiten.Image, name string, intens
 		op.Uniforms["Center"] = center
 	}
 
-	dst.DrawRectShader(src.Bounds().Dx(), src.Bounds().Dy(), shader, op)
+	// Important : DrawRectShader doit utiliser les dimensions réelles de l'image source
+	// pour que les coordonnées (dstPos, srcPos) soient correctes.
+	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()
+	dst.DrawRectShader(sw, sh, shader, op)
 }
