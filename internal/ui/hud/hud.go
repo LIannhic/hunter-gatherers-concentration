@@ -260,6 +260,10 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		{"Moonstone", "resource_moonstone"},
 		{"Whisper Herb", "resource_whispering_herb"},
 		{"Shard", "resource_crystal_shard"},
+		{"Moss Truffle", "resource_moss_truffle"},
+		{"Void Bloom", "resource_void_bloom"},
+		{"Echo Crystal", "resource_echo_crystal"},
+		{"Sand Core", "resource_sand_core"},
 	}
 
 	colWidth := 150

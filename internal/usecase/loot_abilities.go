@@ -31,6 +31,10 @@ var ItemAbilities = map[string]LootAbility{
 	player.StonewardenItemName:    &StonewardenAbility{},
 	player.FleeingSpriteName:      &FleeingSpriteAbility{},
 	player.FlutterwingItemName:    &FlutterwingAbility{},
+	player.MossTruffleItemName:    &MossTruffleAbility{},
+	player.EchoCrystalItemName:    &EchoCrystalAbility{},
+	player.VoidBloomItemName:      &VoidBloomAbility{},
+	player.SandCoreItemName:       &SandCoreAbility{},
 }
 
 // --- ABILITY : DREAMBERRY ---
@@ -342,4 +346,38 @@ func (a *FlutterwingAbility) Execute(world *domain.World) (string, error) {
 	world.Player.RestoreSanity(sanityRestoration)
 	world.Player.GraceTurns = 3
 	return "Un souffle apaisant vous enveloppe. Les créatures hésiteront à vous attaquer.", nil
+}
+
+// --- ABILITY : MOSS TRUFFLE ---
+type MossTruffleAbility struct{}
+func (a *MossTruffleAbility) CanExecute(world *domain.World) bool { return true }
+func (a *MossTruffleAbility) Execute(world *domain.World) (string, error) {
+	world.Player.Heal(15)
+	return "Truffe de mousse consommée : une saveur boisée qui régénère le corps (+15 HP).", nil
+}
+
+// --- ABILITY : ECHO CRYSTAL ---
+type EchoCrystalAbility struct{}
+func (a *EchoCrystalAbility) CanExecute(world *domain.World) bool { return true }
+func (a *EchoCrystalAbility) Execute(world *domain.World) (string, error) {
+	world.Player.RestoreMana(15)
+	return "Cristal d'écho absorbé : résonne avec votre énergie intérieure (+15 Mana).", nil
+}
+
+// --- ABILITY : VOID BLOOM ---
+type VoidBloomAbility struct{}
+func (a *VoidBloomAbility) CanExecute(world *domain.World) bool { return true }
+func (a *VoidBloomAbility) Execute(world *domain.World) (string, error) {
+	world.Player.RestoreSanity(15)
+	return "Fleur du vide consommée : une essence éthérée qui calme l'esprit (+15 Sanité).", nil
+}
+
+// --- ABILITY : SAND CORE ---
+type SandCoreAbility struct{}
+func (a *SandCoreAbility) CanExecute(world *domain.World) bool { return true }
+func (a *SandCoreAbility) Execute(world *domain.World) (string, error) {
+	world.Player.Heal(5)
+	world.Player.RestoreMana(5)
+	world.Player.RestoreSanity(5)
+	return "Noyau de sable absorbé : une énergie équilibrée (+5 à toutes les stats).", nil
 }

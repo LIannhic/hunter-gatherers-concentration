@@ -310,6 +310,14 @@ func (c *MatchTilesCommand) Execute() error {
 		creatureCount++
 	}
 
+	resourceCount := 0
+	if isRes1 {
+		resourceCount++
+	}
+	if isRes2 {
+		resourceCount++
+	}
+
 	if creatureCount > 0 {
 		damage := creatureCount * 10
 		fmt.Printf("[COMBAT] Match invalide avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
@@ -322,6 +330,22 @@ func (c *MatchTilesCommand) Execute() error {
 				"damage": damage,
 				"type":   "creature_fail",
 				"reason": "invalid_match",
+			},
+		})
+	}
+
+	if resourceCount > 0 {
+		manaLoss := 5
+		fmt.Printf("[ALCHIMIE] Match invalide avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
+		c.World.Player.ConsumeMana(manaLoss)
+
+		c.World.EventBus.Publish(event.Event{
+			Type:     event.PlayerDamaged,
+			SourceID: "system",
+			Payload: map[string]interface{}{
+				"mana_loss": manaLoss,
+				"type":      "resource_fail",
+				"reason":    "invalid_match",
 			},
 		})
 	}

@@ -184,6 +184,14 @@ func (m *Manager) generateAllAssets() {
 	m.images["resource_shadow_essence"] = generateShadowEssence(size, ShadowEssencePalette)
 	// Crystal Shard
 	m.images["resource_crystal_shard"] = generateCrystalShard(size, CrystalShardPalette)
+	// Moss Truffle
+	m.images["resource_moss_truffle"] = generateMossTruffle(size, MossTrufflePalette)
+	// Void Bloom
+	m.images["resource_void_bloom"] = generateVoidBloom(size, VoidBloomPalette)
+	// Echo Crystal
+	m.images["resource_echo_crystal"] = generateEchoCrystal(size, EchoCrystalPalette)
+	// Sand Core
+	m.images["resource_sand_core"] = generateSandCore(size, SandCorePalette)
 
 	// === CRÉATURES ===
 	// Lumifly

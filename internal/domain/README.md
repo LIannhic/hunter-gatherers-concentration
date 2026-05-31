@@ -360,7 +360,14 @@ Certains butins peuvent être utilisés directement depuis l'inventaire pour oct
 - **Flutterwing** : Restaure 10 Sanité et accorde l'état **Grâce** (3 tours), permettant d'éviter les attaques lors des révélations.
 - **Burrower** : Force une créature à laisser des traces de boue lors de son prochain déplacement.
 - **Spectre** : Fait disparaître une paire de créatures du plateau.
-- **Ressources** : Restaurent de la santé, de la mana ou de la santé mentale.
+- **Ressources Globales** : Restaurent de la santé, de la mana ou de la santé mentale (+5).
+- **Ressources Exclusives** : Restaurent des statistiques de manière plus puissante (+15) ou équilibrée.
+
+### Alchimie et Pénalités de Ressources
+
+Tout comme les créatures, l'interaction avec les ressources est soumise à une rigueur alchimique :
+- **Match Invalide** : Tenter d'appairer des ressources incompatibles provoque une déstabilisation magique (-5 Mana par ressource révélée).
+- **Skip de Match Valide** : Ignorer une paire de ressources compatible gaspille leur potentiel énergétique (-5 Mana par ressource révélée).
 
 ### Animation de fermeture et relief
 

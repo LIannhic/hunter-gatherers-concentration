@@ -25,6 +25,16 @@ const (
 	WhisperingHerbItemSourceID   = "whispering_herb"
 	WhisperingHerbItemName       = "whispering_herb"
 
+	// Butin ressources exclusives
+	MossTruffleItemSourceID     = "moss_truffle"
+	MossTruffleItemName         = "moss_truffle"
+	EchoCrystalItemSourceID      = "echo_crystal"
+	EchoCrystalItemName          = "echo_crystal"
+	VoidBloomItemSourceID        = "void_bloom"
+	VoidBloomItemName            = "void_bloom"
+	SandCoreItemSourceID         = "sand_core"
+	SandCoreItemName             = "sand_core"
+
 	// Butin créatures
 	BurrowerItemSourceID         = "burrower"
    	BurrowerItemName             = "burrower"
@@ -331,6 +341,50 @@ func NewFlutterwingItem() *LootItem {
 		Name:         FlutterwingItemName,
 		SourceID:     FlutterwingItemSourceID,
 		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+}
+
+func NewMossTruffleItem() *LootItem {
+	return &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         MossTruffleItemName,
+		SourceID:     MossTruffleItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+}
+
+func NewEchoCrystalItem() *LootItem {
+	return &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         EchoCrystalItemName,
+		SourceID:     EchoCrystalItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+}
+
+func NewVoidBloomItem() *LootItem {
+	return &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         VoidBloomItemName,
+		SourceID:     VoidBloomItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+}
+
+func NewSandCoreItem() *LootItem {
+	return &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         SandCoreItemName,
+		SourceID:     SandCoreItemSourceID,
+		OriginalType: entity.TypeResource,
 		IsUsable:     true,
 		IsDeletable:  true,
 	}

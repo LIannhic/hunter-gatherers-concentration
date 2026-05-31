@@ -23,6 +23,15 @@ L'expérience propose une profondeur stratégique s'appuyant sur une double bouc
 Le gameplay repose sur une gestion rigoureuse des ressources et du temps, dictée par un système en tour par tour. Chaque interaction, qu’il s’agisse de retourner une tuile ou d’utiliser un objet, consomme une unité de ressource (temps ou mana), forçant le joueur à planifier ses mouvements au sein d’une limite de tours impartis. La survie dépend de la gestion d'une barre de santé, physique ou mentale, qui s’érode au fil des erreurs ou des confrontations.
 L’aspect central de l’association étendue enrichit la mécanique de mémoire classique : le joueur doit identifier des paires dont la corrélation peut être identique, logique (clé et serrure), élémentaire ou narrative. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
 
+### Équilibre de la Population
+
+Chaque zone (grille) respecte désormais une répartition équilibrée et déterministe de sa population :
+- **40% de Ressources** : Objectifs principaux de récolte.
+- **40% de Créatures** : Menaces et opportunités (incluant l'espèce exclusive du biome).
+- **20% de Pièges** : Obstacles à la progression.
+
+Cette répartition est calculée individuellement pour chaque grille lors de sa génération, garantissant un défi constant quelle que soit la zone explorée.
+
 ### Minimap et Exploration (Fog of War)
 
 Le plan onirique est un réseau de zones interconnectées. Pour s'orienter sans briser le mystère, la minimap utilise un système de **brouillard de guerre dynamique** :
@@ -36,15 +45,16 @@ Le plan onirique est un réseau de zones interconnectées. Pour s'orienter sans 
 
 ### Matrice de Dégâts (MATCH vs SKIP)
 
-Le jeu punit l'inattention et la précipitation via une matrice de décision stricte lors de l'interaction avec des paires de créatures :
+Le jeu punit l'inattention et la précipitation via une matrice de décision stricte lors de l'interaction avec des paires de créatures ou de ressources :
 
 | État de la paire | Action: **MATCH** | Action: **SKIP** |
 | :--- | :--- | :--- |
-| **VALIDE** | 0 Dégât (Succès) | Dégâts de groupe (Erreur) |
-| **INVALIDE** | Dégâts de groupe (Échec) | 0 Dégât (Prudence) |
+| **VALIDE** | 0 Dégât (Succès) | Pénalité (Erreur) |
+| **INVALIDE** | Pénalité (Échec) | 0 Dégât (Prudence) |
 
-- **Dégâts de groupe** : `nombre de créatures révélées * 10`.
-- **Match Valide** : Les créatures sont capturées (Loot).
+- **Dégâts (Créatures)** : `nombre de créatures révélées * 10` points de vie.
+- **Mana (Ressources)** : `nombre de ressources révélées * 5` points de mana.
+- **Match Valide** : Les entités sont capturées/récoltées (Loot).
 - **Match Invalide** : Les tuiles se referment violemment.
 - **Skip** : Permet de refermer les tuiles sagement si aucune paire n'est identifiée.
 
@@ -180,17 +190,30 @@ Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il
 
 ### Bestiaire
 
-| Créature | Déclencheur | Navigation | Mode | Collision | Description |
-|----------|-------------|------------|------|-----------|-------------|
-| **Lumifly** | Auto | Errance (nord) | Over | Glisse | Insecte lumineux qui vole au-dessus du plateau |
-| **Shadowstalker** | Proximité (4) | Attraction joueur | Shadow | Rebond | Prédateur qui chasse discrètement le joueur |
-| **Burrower** | Vue | Errance | Under | Phase (terre) | Créature fouisseuse qui se cache sous terre |
-| **Specter** | Echo | Errance | Shadow | Phase (murs) | Fantôme qui traverse les murs |
-| **Stonewarden** | Passif | Patrouille | Bento | Stop | Gardien immobile qui patrouille si révélé |
-| **Echo Hound** | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations. |
-| **Moss Monkey** | Proximité (4) | Target Empty | Bento | Glisse | Saboteur qui rebouche les cases vides avec des leurres. Fuit si le plateau est saturé de pièges. |
-| **Flutterwing** | Proximité (2) | Répulsion joueur | Over | Glisse | Créature timide dont l'essence apaise l'esprit. |
-| **Fleeing Sprite** | Proximité (2) | Répulsion joueur | Over | Glisse | Étincelle d'énergie vive révélant les dangers. |
+| Créature | Biome | Déclencheur | Navigation | Mode | Collision | Description |
+|----------|-------|-------------|------------|------|-----------|-------------|
+| **Lumifly** | Global | Auto | Errance (nord) | Over | Glisse | Insecte lumineux qui vole au-dessus du plateau |
+| **Shadowstalker** | Global | Proximité (4) | Attraction joueur | Shadow | Rebond | Prédateur qui chasse discrètement le joueur |
+| **Burrower** | Désert | Vue | Errance | Under | Phase (terre) | Créature fouisseuse qui se cache sous terre (Exclusif) |
+| **Specter** | Grotte | Echo | Errance | Shadow | Phase (murs) | Fantôme qui traverse les murs (Exclusif) |
+| **Stonewarden** | Global | Passif | Patrouille | Bento | Stop | Gardien immobile qui patrouille si révélé |
+| **Echo Hound** | Marais | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations (Exclusif). |
+| **Moss Monkey** | Forêt | Proximité (4) | Target Empty | Bento | Glisse | Saboteur qui rebouche les cases vides avec des leurres (Exclusif). Fuit si saturé. |
+| **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | Créature timide dont l'essence apaise l'esprit. |
+| **Fleeing Sprite** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | Étincelle d'énergie vive révélant les dangers. |
+
+### Botanique et Minéralogie
+
+| Ressource | Biome | Effet du Butin | Description |
+|-----------|-------|----------------|-------------|
+| **Dreamberry** | Global | +5 Mana | Baie onirique violette, base de l'alchimie. |
+| **Moonstone** | Global | +5 Sanité | Pierre de lune bleutée, stabilise l'esprit. |
+| **Whispering Herb** | Global | Lore | Herbe murmurante, révèle des secrets. |
+| **Crystal Shard** | Global | +5 Santé | Éclat de cristal, régénère les tissus. |
+| **Moss Truffle** | Forêt | +15 Santé | Truffe rare poussant sous la mousse (Exclusif). |
+| **Void Bloom** | Grotte | +15 Sanité | Fleur indigo défiant les lois de la physique (Exclusif). |
+| **Echo Crystal** | Marais | +15 Mana | Cristal résonnant avec les courants éthérés (Exclusif). |
+| **Sand Core** | Désert | +5 All Stats | Noyau d'énergie pure extrait du sable (Exclusif). |
 
 Pour les ressources :
 
