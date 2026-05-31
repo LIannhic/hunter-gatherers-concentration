@@ -152,6 +152,7 @@ func (m *Manager) generateAllAssets() {
 	m.images["tile_dolmen"] = m.images["tile_dolmen_default"]
 	m.images["tile_obelisk"] = m.images["tile_obelisk_default"]
 	m.images["tile_portal"] = m.images["tile_portal_default"]
+	m.images["resource_portable_portal"] = m.images["tile_portal_default"]
 	m.images["tile_exit"] = m.images["tile_exit_default"]
 
 	// Image pour case vide (sol nu avec quadrillage)
