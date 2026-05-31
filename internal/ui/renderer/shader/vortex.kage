@@ -34,5 +34,5 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 		return imageSrc0At(rotatedPos + center)
 	}
 
-	return imageSrc0At(dstPos.xy)
+	return imageSrc0At(srcPos)
 }

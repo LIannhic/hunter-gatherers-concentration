@@ -14,5 +14,6 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 
     offset := vec2(sin(dstPos.y * freq + Time * 5.0) * amp, 0.0)
 
-    return imageSrc0At(dstPos.xy + offset)
+    // Utilisation de srcPos pour lire l'image source, car imageSrc0At attend des coordonnées source
+    return imageSrc0At(srcPos + offset)
 }

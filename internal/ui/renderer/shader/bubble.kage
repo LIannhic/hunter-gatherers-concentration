@@ -20,8 +20,9 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
         strength := 1.0 - sqrt(1.0 - pow(dist / radius, 2.0))
 
         // On déplace le point de lecture vers le centre pour l'effet de loupe/bulle
-        return imageSrc0At(dstPos.xy - pos * strength * 0.5)
+        // On utilise srcPos pour la lecture
+        return imageSrc0At(srcPos - pos * strength * 0.5)
     }
 
-    return imageSrc0At(dstPos.xy)
+    return imageSrc0At(srcPos)
 }
