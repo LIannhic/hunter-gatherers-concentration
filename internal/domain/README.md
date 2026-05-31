@@ -95,6 +95,7 @@ func (s *LifecycleSystem) Update(world *World) {
 - Une séparation claire : le plateau fournit la géométrie, les entités portent la logique
 - Un système plus flexible pour les entités spéciales (ex: les portails de commencement qui se bloquent après un délai)
 - **Unification de l'interface `Hoverable`** : Toutes les entités interactives (tuiles, butin) et les sorties implémentent `Hoverable`, permettant un effet d'inclinaison (tilt) unifié au survol.
+- **Système de Cumul (Merge)** : Une mécanique permettant de fusionner des paires identiques pour augmenter leur valeur visuelle et stratégique avant la capture.
 
 ---
 
@@ -350,7 +351,12 @@ Le domaine communique l'intention de profondeur au moteur de rendu via les évé
 - **Calque Normal** : Pour les tuiles physiques (Memory), les ressources et les déplacements standards.
 - **Calque Over** : Pour les entités volantes ou les effets de surface (griffures).
 
-### Effets des Objets de Butin (Loot)
+### Fusion et Cumul (MERGE)
+
+Une nouvelle étape de gameplay s'insère avant la capture :
+- **Principe** : Fusionner 2 entités normales identiques via le bouton **MERGE**.
+- **Effet** : Une entité est retirée, l'autre passe en statut `Cumulated` (plus grande, bordure dorée).
+- **Match** : Le bouton **MATCH** ne valide désormais que des paires de même rang (Normal+Normal ou Cumulé+Cumulé).
 
 Certains butins peuvent être utilisés directement depuis l'inventaire pour octroyer des bonus :
 

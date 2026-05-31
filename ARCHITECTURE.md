@@ -85,6 +85,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Permet la recherche rapide des entités par position
   - **Inventory Grid** : L'inventaire est désormais une grille logicielle (`InventoryGridID`), permettant un traitement spatial uniforme (hover, highlights).
   - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles. Les transformations sont cumulatives (`apply * current`).
+  - **Cumul (Merge)** : Les entités peuvent être fusionnées pour devenir plus grandes (scale 1.25x) et changer de statut (`Cumulated`). Ce statut est persistant et influence les règles de match.
 
 - **Systems** : Mettent à jour l'état du monde
   - **CreatureAISystem** : Gère les comportements de base des créatures
@@ -141,7 +142,8 @@ if revealCmd.CanExecute() {
 
 **Commandes principales :**
 - `RevealTileCommand` : Révèle une entité, met à jour la position périphérique du joueur et vérifie la **Confrontation** (dégâts si dans la `ThreatZone`).
-- `MatchTilesCommand` : Tente d'appairer deux entités et applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide).
+- `MatchTilesCommand` : Tente d'appairer deux entités identiques de même niveau de cumul. Applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide).
+- `MergeTilesCommand` : Fusionne deux entités identiques normales en une seule version cumulée.
 - `SwitchGridCommand` : Change de grille active.
 - `UsePortablePortalCommand` : Active un portail portable pour créer une zone de dégagement et extraire le joueur du plan
 

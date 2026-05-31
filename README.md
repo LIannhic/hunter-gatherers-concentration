@@ -85,10 +85,18 @@ Quatre boutons fixes occupent les coins du Playmat. Leur accessibilité est pure
 
 | Bouton | Position | Comportement |
 |--------|----------|--------------|
-| **MATCH** | Haut-gauche | Actif uniquement quand 2 tuiles sont retournées. Valide la paire si les entités sont identiques (coûte du Mana). |
-| **SKIP** | Haut-droite | Actif uniquement quand 2 tuiles sont retournées. Referme les tuiles et consomme le tour (coûte de la Santé Mentale). Affiche le remplissage temporel. |
+| **MATCH** | Haut-gauche | Actif uniquement quand 2 tuiles cumulées sont retournées. Capture la paire. |
+| **SKIP** | Haut-droite | Actif uniquement quand 2 tuiles sont retournées. Referme les tuiles et consomme le tour. |
 | **TURN** | Bas-gauche | Toujours actif. Force la fin du tour. |
-| **MENU** | Bas-droite | Toujours actif. Retour au menu principal. |
+| **MERGE** | Bas-droite | Actif uniquement quand 2 tuiles identiques normales sont retournées. Fusionne la paire en une version plus forte. |
+
+### Fusion et Cumul (MERGE)
+
+Le système de progression immédiate sur le plateau repose sur la fusion :
+- **Action** : Cliquez sur **MERGE** (Coût : 3 Mana) pour fusionner deux tuiles identiques normales.
+- **Résultat** : Une tuile est absorbée, l'autre devient une version **Cumulée** (plus grande, teinte dorée).
+- **Conséquence** : Effectuer une fusion termine automatiquement le tour.
+- **Loot** : Seules deux tuiles déjà cumulées peuvent être capturées via le bouton **MATCH**.
 
 ### Troubles cognitifs (Status Effects)
 
