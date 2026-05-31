@@ -1477,3 +1477,5 @@ func (m *exitMatchable) GetLogicKey() string     { return "" }
 func (m *exitMatchable) GetElement() string      { return "" }
 func (m *exitMatchable) GetNarrativeTag() string { return "" }
 func (m *exitMatchable) GetMatchTypes() []string { return []string{"orientation"} }
+func (m *exitMatchable) IsCumulated() bool       { return false }
+func (m *exitMatchable) GetCategory() string     { return "navigation" }

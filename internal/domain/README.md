@@ -356,7 +356,7 @@ Le domaine communique l'intention de profondeur au moteur de rendu via les évé
 Une nouvelle étape de gameplay s'insère avant la capture :
 - **Principe** : Fusionner 2 entités normales identiques via le bouton **MERGE**.
 - **Effet** : Une entité est retirée, l'autre passe en statut `Cumulated` (plus grande, bordure dorée).
-- **Match** : Le bouton **MATCH** ne valide désormais que des paires de même rang (Normal+Normal ou Cumulé+Cumulé).
+- **Match** : Le bouton **MATCH** ne valide désormais que des paires de même rang (Normal+Normal ou Cumulé+Cumulé). Les associations sont désormais gérées de manière centralisée par l'**AssocEngine** dans la couche Domain.
 
 Certains butins peuvent être utilisés directement depuis l'inventaire pour octroyer des bonus :
 

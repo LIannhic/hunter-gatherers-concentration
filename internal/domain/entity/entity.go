@@ -405,6 +405,16 @@ type Entity interface {
 	HasTag(string) bool
 	RemoveTag(string)
 
+	IsCumulated() bool
+
+	// Association compliance
+	GetMatchID() string
+	GetLogicKey() string
+	GetElement() string
+	GetNarrativeTag() string
+	GetMatchTypes() []string
+	GetCategory() string
+
 	// Hoverable compliance (Pseudo-ECS logic)
 	GetHoverID() string
 	IsHoverAllowed() bool
@@ -578,12 +588,32 @@ func (e *BaseEntity) RemoveTag(tag string) {
 	}
 }
 
+func (e *BaseEntity) IsCumulated() bool {
+	return e.State&Cumulated != 0
+}
+
 func (e *BaseEntity) GetHoverID() string {
 	return string(e.ID)
 }
 
 func (e *BaseEntity) IsHoverAllowed() bool {
 	return e.State&Blocked == 0
+}
+
+// Matchable compliance (Default implementations)
+func (e *BaseEntity) GetMatchID() string {
+	if e.EType == TypeTrap {
+		return "trap"
+	}
+	return ""
+}
+func (e *BaseEntity) GetLogicKey() string      { return "" }
+func (e *BaseEntity) GetElement() string       { return "" }
+func (e *BaseEntity) GetNarrativeTag() string  { return "" }
+func (e *BaseEntity) GetMatchTypes() []string { return []string{"identical"} }
+
+func (e *BaseEntity) GetCategory() string {
+	return e.EType.String()
 }
 
 // Manager gère toutes les entités

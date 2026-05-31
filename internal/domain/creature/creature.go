@@ -82,6 +82,13 @@ func (c *Creature) GetComponent(name string) interface{} {
 	return nil
 }
 
+// Association compliance
+func (c *Creature) GetMatchID() string       { return c.Species }
+func (c *Creature) GetLogicKey() string      { return "" }
+func (c *Creature) GetElement() string       { return "" }
+func (c *Creature) GetNarrativeTag() string  { return "" }
+func (c *Creature) GetMatchTypes() []string { return []string{"identical"} }
+
 // Action représente une intention de la créature
 type Action struct {
 	Type      string          // "move", "attack", "transform", "flee", "idle"

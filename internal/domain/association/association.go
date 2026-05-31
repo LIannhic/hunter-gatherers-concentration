@@ -9,11 +9,13 @@ import (
 type Type int
 
 const (
-	Identical Type = iota // Paire identique (Memory classique)
-	Logical               // Clé + Serrure, Marteau + Enclume
-	Elemental             // Feu + Bois, Eau + Plante
-	Narrative             // Indices d'histoire, symboles liés
-	Orientation           // Moitiés de flèches de navigation
+	Identical   Type = iota // Paire identique (Memory classique)
+	Logical                 // Clé + Serrure, Marteau + Enclume
+	Elemental               // Feu + Bois, Eau + Plante
+	Narrative               // Indices d'histoire, symboles liés
+	Orientation             // Moitiés de flèches de navigation
+	Creature                // Capture de créature
+	Trap                    // Neutralisation de piège
 )
 
 func (t Type) String() string {
@@ -28,6 +30,10 @@ func (t Type) String() string {
 		return "narrative"
 	case Orientation:
 		return "orientation"
+	case Creature:
+		return "creature_capture"
+	case Trap:
+		return "trap_neutralization"
 	}
 	return "unknown"
 }
@@ -63,6 +69,8 @@ type Matchable interface {
 	GetElement() string
 	GetNarrativeTag() string
 	GetMatchTypes() []string
+	IsCumulated() bool
+	GetCategory() string
 }
 
 // --- Implémentations concrètes des stratégies ---
@@ -73,17 +81,25 @@ type IdenticalStrategy struct{}
 func (s *IdenticalStrategy) Type() Type { return Identical }
 
 func (s *IdenticalStrategy) CanAssociate(a, b Matchable) bool {
-	return a.GetMatchID() == b.GetMatchID() && a.GetMatchID() != ""
+	return a.GetMatchID() == b.GetMatchID() && a.GetMatchID() != "" && a.IsCumulated() == b.IsCumulated()
 }
 
 func (s *IdenticalStrategy) Resolve(a, b Matchable) (Result, error) {
 	if !s.CanAssociate(a, b) {
-		return Result{Success: false}, errors.New("pas une paire identique")
+		return Result{Success: false}, errors.New("pas une paire identique ou niveau de cumul différent")
 	}
+
+	matchType := Identical
+	if a.GetCategory() == "creature" {
+		matchType = Creature
+	} else if a.GetCategory() == "trap" {
+		matchType = Trap
+	}
+
 	return Result{
 		Success: true,
-		Type:    Identical,
-		Message: "Paire identique trouvée !",
+		Type:    matchType,
+		Message: fmt.Sprintf("Paire identique de %s trouvée !", a.GetCategory()),
 		Effects: []Effect{
 			{Type: "collect", Target: "player"},
 		},

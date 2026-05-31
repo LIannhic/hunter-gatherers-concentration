@@ -95,8 +95,8 @@ Quatre boutons fixes occupent les coins du Playmat. Leur accessibilité est pure
 Le système de progression immédiate sur le plateau repose sur la fusion :
 - **Action** : Cliquez sur **MERGE** (Coût : 3 Mana) pour fusionner deux tuiles identiques normales.
 - **Résultat** : Une tuile est absorbée, l'autre devient une version **Cumulée** (plus grande, teinte dorée).
-- **Conséquence** : Effectuer une fusion termine automatiquement le tour.
-- **Loot** : Seules deux tuiles déjà cumulées peuvent être capturées via le bouton **MATCH**.
+- **Conséquence** : Effectuer une fusion termine automatiquement le tour et referme toutes les tuiles.
+- **Loot** : Pour capturer une paire via **MATCH**, les deux tuiles doivent avoir le même rang (soit deux Normales, soit deux Cumulées).
 
 ### Troubles cognitifs (Status Effects)
 

@@ -229,52 +229,10 @@ func (c *MatchTilesCommand) Execute() error {
 	entity1, _ := c.World.Entities.Get(entity.ID(topID1))
 	entity2, _ := c.World.Entities.Get(entity.ID(topID2))
 
-	res1, isRes1 := entity1.(*domain.Resource)
-	res2, isRes2 := entity2.(*domain.Resource)
-	cre1, isCre1 := entity1.(*domain.Creature)
-	cre2, isCre2 := entity2.(*domain.Creature)
+	// Refactorisation DDD : La logique d'association est déléguée au Domaine (AssocEngine)
+	result, err := c.AssocEng.TryAssociate(entity1, entity2)
 
-	isMatch := false
-	matchType := ""
-
-	// Cas 1 : Deux ressources
-	if isRes1 && isRes2 {
-		// NOUVEAU : On n'autorise que l'association par SIMILARITÉ IDENTIQUE pour le Match simple
-		if res1.ResourceType == res2.ResourceType {
-			// On vérifie aussi que les deux ont le même statut de cumul (fusionné avec fusionné, ou normal avec normal)
-			cumul1 := entity1.GetState() & entity.Cumulated
-			cumul2 := entity2.GetState() & entity.Cumulated
-			if cumul1 == cumul2 {
-				isMatch = true
-				matchType = "resource_capture"
-			} else {
-				fmt.Printf("[DEBUG-MATCH] Échec : Statuts de cumul différents (E1:%v, E2:%v)\n", cumul1 != 0, cumul2 != 0)
-			}
-		}
-	}
-
-	// Cas 2 : Deux créatures
-	if !isMatch && isCre1 && isCre2 {
-		if cre1.Species == cre2.Species {
-			// Idem pour les créatures : normal avec normal, cumulé avec cumulé
-			cumul1 := entity1.GetState() & entity.Cumulated
-			cumul2 := entity2.GetState() & entity.Cumulated
-			if cumul1 == cumul2 {
-				isMatch = true
-				matchType = "creature_capture"
-			} else {
-				fmt.Printf("[DEBUG-MATCH] Échec : Statuts de cumul différents (E1:%v, E2:%v)\n", cumul1 != 0, cumul2 != 0)
-			}
-		}
-	}
-
-	// Cas 3 : Deux pièges
-	if !isMatch && entity1.GetType() == entity.TypeTrap && entity2.GetType() == entity.TypeTrap {
-		isMatch = true
-		matchType = "trap_neutralization"
-	}
-
-	if isMatch {
+	if err == nil && result.Success {
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
 
@@ -286,10 +244,8 @@ func (c *MatchTilesCommand) Execute() error {
 		}
 
 		name := "unknown"
-		if r, ok := entity1.(*domain.Resource); ok {
-			name = r.ResourceType
-		} else if cr, ok := entity1.(*domain.Creature); ok {
-			name = cr.Species
+		if r := entity1.GetMatchID(); r != "" {
+			name = r
 		}
 
 		c.World.EventBus.Publish(event.Event{
@@ -302,7 +258,7 @@ func (c *MatchTilesCommand) Execute() error {
 				"grid_id":     c.GridID,
 				"name":        name,
 				"entity_type": entity1.GetType(),
-				"assoc_type":  matchType,
+				"assoc_type":  result.Type.String(),
 			},
 		})
 
@@ -317,18 +273,18 @@ func (c *MatchTilesCommand) Execute() error {
 
 	// Échec : Association invalide
 	creatureCount := 0
-	if isCre1 {
+	if entity1.GetType() == entity.TypeCreature {
 		creatureCount++
 	}
-	if isCre2 {
+	if entity2.GetType() == entity.TypeCreature {
 		creatureCount++
 	}
 
 	resourceCount := 0
-	if isRes1 {
+	if entity1.GetType() == entity.TypeResource {
 		resourceCount++
 	}
-	if isRes2 {
+	if entity2.GetType() == entity.TypeResource {
 		resourceCount++
 	}
 
@@ -349,7 +305,7 @@ func (c *MatchTilesCommand) Execute() error {
 	}
 
 	if resourceCount > 0 {
-		manaLoss := 5
+		manaLoss := resourceCount * 5
 		fmt.Printf("[ALCHIMIE] Match invalide avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
 		c.World.Player.ConsumeMana(manaLoss)
 
@@ -446,20 +402,9 @@ func (c *MergeTilesCommand) Execute() error {
 	e1, _ := c.World.Entities.Get(entity.ID(id1))
 	e2, _ := c.World.Entities.Get(entity.ID(id2))
 
-	isMatch := false
-	res1, isRes1 := e1.(*domain.Resource)
-	res2, isRes2 := e2.(*domain.Resource)
-	cre1, isCre1 := e1.(*domain.Creature)
-	cre2, isCre2 := e2.(*domain.Creature)
-
-	if isRes1 && isRes2 {
-		result, err := c.AssocEng.TryAssociate(res1, res2)
-		if err == nil && result.Success {
-			isMatch = true
-		}
-	} else if isCre1 && isCre2 && cre1.Species == cre2.Species {
-		isMatch = true
-	}
+	// Refactorisation DDD : On utilise le moteur d'association
+	result, err := c.AssocEng.TryAssociate(e1, e2)
+	isMatch := (err == nil && result.Success)
 
 	if isMatch {
 		fmt.Printf("[MERGE] ✅ Fusion réussie en %v !\n", c.Pos1)
@@ -497,8 +442,15 @@ func (c *MergeTilesCommand) Execute() error {
 	}
 
 	// Échec : Association invalide (même punition que le match)
-	damage := 10
-	if isCre1 || isCre2 {
+	damage := 0
+	if e1.GetType() == entity.TypeCreature {
+		damage += 10
+	}
+	if e2.GetType() == entity.TypeCreature {
+		damage += 10
+	}
+
+	if damage > 0 {
 		c.World.Player.TakeDamage(damage, "creature_fail")
 	} else {
 		c.World.Player.ConsumeMana(5)
