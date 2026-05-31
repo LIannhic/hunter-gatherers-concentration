@@ -1253,9 +1253,8 @@ func (w *World) DeployPortablePortalAt(gridID string, center board.Position) (en
 		}
 	}
 
-	if forced {
-		w.clear3x3DeploymentArea(grid, center)
-	}
+	// On vide systématiquement la zone 3x3 autour du portail pour libérer de l'espace (Effet séisme)
+	w.clear3x3DeploymentArea(grid, center)
 
 	portal, err := w.SpawnStructure(gridID, "portable_portal", entity.Position{X: center.X, Y: center.Y})
 	if err != nil {
