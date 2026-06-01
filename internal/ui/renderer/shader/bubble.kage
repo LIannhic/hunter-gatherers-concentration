@@ -13,7 +13,7 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
     dist := length(pos)
 
     // Rayon en pixels (environ 65 pixels à intensité max)
-    radius := 65.0 * Intensity
+    radius := 196.0 * Intensity
 
     if dist < radius {
         // Calcul de la distortion sphérique

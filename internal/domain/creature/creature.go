@@ -369,7 +369,6 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Speed:   1,
 		})
 
-		// Pour dessiner et contourner un espace de 3x3 cases,
 		// il faut faire 2 pas (translations) par côté.
 		squarePattern3x3 := []entity.Position{
 			{X: 1, Y: 0},  // 1 pas à Droite
