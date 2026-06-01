@@ -75,12 +75,16 @@ type Handler struct {
 
 	// Victory timer (V0.2 : Déclenché par le déploiement du portail portable)
 	victoryTimer *domain.TurnTimer
+
+	// Direction par laquelle le joueur est entré dans la zone actuelle
+	entranceDir entity.Direction
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
 	h := &Handler{
 		world:       world,
 		assocEngine: assocEng,
+		entranceDir: -1, // Aucune entrée par défaut
 	}
 
 	// Bloque l'input pendant les animations (start/end)
@@ -96,6 +100,58 @@ func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
 					h.world.TurnTimer.Reset()
 				}
 				h.skipPending = false
+			}
+		})
+
+		// Restauration de la logique de scellage
+		world.EventBus.SubscribeFunc(event.GridEntered, func(e event.Event) {
+			gridID := e.Payload["grid_id"].(string)
+			arrivalDir, ok := e.Payload["arrival_dir"].(entity.Direction)
+			if !ok || arrivalDir < 0 {
+				h.entranceDir = -1
+				return
+			}
+
+			// L'entrée est la direction OPPOSÉE
+			h.entranceDir = world.DreamPlane.OppositeDirection(arrivalDir)
+
+			// Si la zone n'est pas "ouverte", on lance l'animation de scellage (Révélé -> Caché)
+			if !world.IsNavigationOpen(gridID) {
+				fmt.Printf("[NAVIGATION] Scellage de l'entrée %v...\n", h.entranceDir)
+				h.triggerSealingAnimation(gridID, h.entranceDir, true)
+			}
+		})
+
+		world.EventBus.SubscribeFunc(event.NavigationOpened, func(e event.Event) {
+			gridID := e.Payload["grid_id"].(string)
+			grid, _ := h.world.GetGrid(gridID)
+			if grid == nil {
+				return
+			}
+
+			// On déscelle les sorties qui sont dans un état "ouvert" (Matched ou Revealed)
+			for d := entity.DirNorth; d <= entity.DirWest; d++ {
+				states := grid.ExitsState[d]
+				// Si une des tuiles de la sortie est déjà "active" (pas cachée et bloquée), on anime
+				if states[0]&entity.Matched != 0 || states[0]&entity.Revealed != 0 {
+					h.triggerSealingAnimation(gridID, d, false)
+				}
+			}
+		})
+
+		world.EventBus.SubscribeFunc(event.NavigationClosed, func(e event.Event) {
+			gridID := e.Payload["grid_id"].(string)
+			grid, _ := h.world.GetGrid(gridID)
+			if grid == nil {
+				return
+			}
+
+			// On scelle les sorties qui étaient "ouvertes"
+			for d := entity.DirNorth; d <= entity.DirWest; d++ {
+				states := grid.ExitsState[d]
+				if states[0]&entity.Matched != 0 || states[0]&entity.Revealed != 0 {
+					h.triggerSealingAnimation(gridID, d, true)
+				}
 			}
 		})
 	}
@@ -1465,6 +1521,79 @@ func (h *Handler) ResetGameState() {
 	h.revealedTiles = nil
 	h.isProcessing = false
 	h.victoryTimer = nil
+	h.entranceDir = -1
+}
+
+// triggerSealingAnimation gère l'animation de bascule des tuiles d'entrée
+func (h *Handler) triggerSealingAnimation(gridID string, dir entity.Direction, isSealing bool) {
+	grid, ok := h.world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	// Direction de flip : vers l'extérieur du plateau
+	var flipDir entity.FlipDirection
+	switch dir {
+	case board.North:
+		flipDir = entity.FlipTop
+	case board.South:
+		flipDir = entity.FlipBottom
+	case board.East:
+		flipDir = entity.FlipRight
+	case board.West:
+		flipDir = entity.FlipLeft
+	}
+
+	// Animation inverse pour le déscellage
+	if !isSealing {
+		flipDir = h.invertFlipDirection(flipDir)
+	}
+
+	for i := 0; i < 2; i++ {
+		entityID := fmt.Sprintf("exit_%s_%d", board.DirectionToName(dir), i)
+
+		// 1. Détermine les états
+		var endState entity.TileState
+		if isSealing {
+			// Révélé -> Caché + Bloqué
+			endState = entity.Hidden | entity.Matched | entity.Blocked
+		} else {
+			// Caché + Bloqué -> Révélé
+			endState = entity.Revealed | entity.Matched
+		}
+
+		// 2. Mise à jour de la grille (via une copie du tableau car map index n'est pas adressable directement)
+		states := grid.ExitsState[dir]
+		states[i] = endState
+		grid.ExitsState[dir] = states
+
+		// 3. Déclenche l'animation visuelle
+		h.world.EventBus.PublishImmediate(event.Event{
+			Type:     event.TileRevealed,
+			SourceID: "system",
+			Payload: map[string]interface{}{
+				"position":       entity.Position{}, // Position virtuelle
+				"entity_id":      entityID,
+				"grid_id":        gridID,
+				"flip_direction": flipDir,
+			},
+		})
+	}
+}
+
+// invertFlipDirection retourne la direction opposée pour le déscellage
+func (h *Handler) invertFlipDirection(d entity.FlipDirection) entity.FlipDirection {
+	switch d {
+	case entity.FlipTop:
+		return entity.FlipBottom
+	case entity.FlipBottom:
+		return entity.FlipTop
+	case entity.FlipLeft:
+		return entity.FlipRight
+	case entity.FlipRight:
+		return entity.FlipLeft
+	}
+	return d
 }
 
 // exitMatchable est un wrapper pour soumettre les sorties au moteur d'association
