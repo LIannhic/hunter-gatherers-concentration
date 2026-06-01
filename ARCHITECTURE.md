@@ -171,15 +171,13 @@ pos, ok := world.FindAvailable3x3DeploymentArea(gridID)
 pos, ok := world.findBest3x3DeploymentArea(gridID)
 ```
 
-#### Déploiement du Portail
+#### Déploiement du Portail et Effet Séisme
 
-```go
-// Déploie à la meilleure position trouvée automatiquement
-portal, err := world.DeployPortablePortal(gridID)
+Lors du déploiement (`DeployPortablePortalAt`), la méthode `clear3x3DeploymentArea` est appelée systématiquement. Elle retire toutes les entités des 8 parcelles adjacentes pour garantir une zone de sécurité visuelle et logique.
 
-// Déploie à une position spécifique (centre de la zone 3x3)
-portal, err := world.DeployPortablePortalAt(gridID, center)
-```
+#### Feedback Graphique (Vortex)
+
+Un shader spécial `vortex.kage` est déclenché par l'application (`app.go`) uniquement lorsque le portail est actif (`IsVictoryTimerActive`). Le shader utilise les coordonnées réelles du portail (via `GetTileCenter`) pour ancrer la distorsion.
 
 #### Activation via Commande
 

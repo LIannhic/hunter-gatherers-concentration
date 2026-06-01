@@ -79,6 +79,14 @@ Pour rompre le rythme classique du Memory et simuler l'urgence de la survie en p
   - Le bouton **Skip** se remplit progressivement d'une couleur violette, puis passe au rouge brique en phase d'alerte.
   - La jauge de **Santé Mentale** tremble de plus en plus fort lorsque le timer descend sous les 3 secondes (phase de panique).
 
+### Système de Portail Portable
+
+Le portail portable permet au joueur de s'extraire rapidement du plan actif.
+- **Déploiement** : Nécessite une zone 3x3.
+- **Effet Séisme** : Lors de l'activation, toutes les entités présentes sur les 8 parcelles entourant le portail sont immédiatement supprimées pour libérer l'espace.
+- **Feedback Visuel** : Un shader de type **Vortex** crée un tourbillon de distorsion centré sur le portail pendant toute la durée de l'extraction.
+- **Extraction** : Une fois déployé, un compte à rebours de 5 secondes se lance avant la victoire.
+
 ### Boutons d'action réactifs du Playmat
 
 Quatre boutons fixes occupent les coins du Playmat. Leur accessibilité est purement réactive :
