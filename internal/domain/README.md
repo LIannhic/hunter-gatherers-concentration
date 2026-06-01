@@ -72,6 +72,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Grid` : Plateau individuel (Tuiles, Biomes, Pentes)
   - `DreamPlane` : Réseau de grilles connectées. Gère les `DiscoveryStates` (Hidden, Adjacent, Visited) pour la minimap.
   - `LayoutGenerator` : Algorithmes de génération de la structure du plan onirique.
+  - **Persistance de Navigation** : Gère la révélation automatique des entrées et le scellage dynamique des sorties via les événements `NavigationOpened`/`NavigationClosed`.
 - **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
   - `TileState` : Hidden, Revealed, Matched, Blocked
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
@@ -377,7 +378,9 @@ Tout comme les créatures, l'interaction avec les ressources est soumise à une 
 
 ### Animation de fermeture et relief
 
-Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement. Elles utilisent la propriété `Tilt` (pente) de la parcelle. Cela simule une tuile qui "retombe" selon la gravité du terrain.
+Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement :
+- **Pente (Tilt)** : Elles utilisent la propriété `Tilt` de la parcelle pour une retombée "naturelle".
+- **Navigation** : Les entrées/sorties se scellent (Révélé -> Caché) de l'intérieur vers l'extérieur tant que la zone n'est pas sécurisée, et s'ouvrent à nouveau (Caché -> Révélé) une fois les objectifs atteints.
 
 ### Orientation Persistante et Mathématiques D4
 

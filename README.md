@@ -37,10 +37,11 @@ Cette répartition est calculée individuellement pour chaque grille lors de sa 
 Le plan onirique est un réseau de zones interconnectées. Pour s'orienter sans briser le mystère, la minimap utilise un système de **brouillard de guerre dynamique** :
 
 - **Rendu Centré** : La zone actuelle est toujours fixée au centre de la minimap (grille 9x9). Le reste du monde glisse autour lors des transitions.
+- **Persistance de l'Entrée** : En entrant dans une nouvelle zone, la sortie par laquelle le joueur arrive est **automatiquement révélée et appairée**, symbolisant le chemin connu.
 - **États de Découverte** :
   - **Inconnu** : Zone cachée.
-  - **Adjacent** : Silhouette grise (route possible identifiée).
-  - **Visité** : Affiche l'icône du biome (Forest, Cave, Swamp, etc.). Les sorties découvertes restent affichées en permanence.
+  - **Adjacent** : Silhouette grise (route possible identifiée). Les sorties découvertes restent affichées en permanence.
+  - **Visité** : Affiche l'icône du biome (Forest, Cave, Swamp, etc.).
   - **Actuel** : Indicateur doré pulsant.
 
 ### Matrice de Dégâts (MATCH vs SKIP)
