@@ -153,32 +153,46 @@ func (w *World) IsNavigationOpen(gridID string) bool {
 		return false
 	}
 
+	isOpen := false
 	if grid.NavigationForcedOpen {
-		return true
-	}
-	if w.DreamPlane != nil && (gridID == w.DreamPlane.StartZoneID || gridID == w.DreamPlane.EndZoneID) {
-		return true
-	}
+		isOpen = true
+	} else if w.DreamPlane != nil && (gridID == w.DreamPlane.StartZoneID || gridID == w.DreamPlane.EndZoneID) {
+		isOpen = true
+	} else {
+		activeEntities := w.Entities.GetAllActive()
 
-	activeEntities := w.Entities.GetAllActive()
-
-	remaining := 0
-	for _, ent := range activeEntities {
-		if ent.GetGridID() != gridID {
-			continue
+		remaining := 0
+		for _, ent := range activeEntities {
+			if ent.GetGridID() != gridID {
+				continue
+			}
+			if ent.GetType() == entity.TypeCreature || ent.GetType() == entity.TypeResource {
+				remaining++
+			}
 		}
-		if ent.GetType() == entity.TypeCreature || ent.GetType() == entity.TypeResource {
-			remaining++
+
+		total := remaining + grid.MatchedTargetsCount
+		if total == 0 {
+			isOpen = true
+		} else {
+			ratio := float64(grid.MatchedTargetsCount) / float64(total)
+			isOpen = ratio >= w.Difficulty.NavThreshold
 		}
 	}
 
-	total := remaining + grid.MatchedTargetsCount
-	if total == 0 {
-		return true
+	// NOUVEAU : Détection de transition d'état pour les animations de scellage
+	if grid.LastNavigationOpen != isOpen {
+		grid.LastNavigationOpen = isOpen
+		if isOpen {
+			fmt.Printf("[NAVIGATION] La zone %s est désormais libre d'accès !\n", gridID)
+			w.EventBus.PublishImmediate(event.NewNavigationOpenedEvent(gridID))
+		} else {
+			fmt.Printf("[NAVIGATION] La zone %s est de nouveau scellée !\n", gridID)
+			w.EventBus.PublishImmediate(event.NewNavigationClosedEvent(gridID))
+		}
 	}
 
-	ratio := float64(grid.MatchedTargetsCount) / float64(total)
-	return ratio >= w.Difficulty.NavThreshold
+	return isOpen
 }
 
 // GetGrid retourne un grid par son ID
@@ -203,11 +217,36 @@ func (w *World) GetCurrentGrid() (*board.Grid, bool) {
 
 // SetCurrentGrid change le grid actuel du joueur
 func (w *World) SetCurrentGrid(gridID string) bool {
-	if _, ok := w.Grids[gridID]; ok {
+	return w.SetCurrentGridFrom(gridID, -1) // -1 pour direction inconnue
+}
+
+// SetCurrentGridFrom change la grille active en spécifiant la direction d'arrivée
+func (w *World) SetCurrentGridFrom(gridID string, arrivalDir entity.Direction) bool {
+	if grid, ok := w.Grids[gridID]; ok {
 		w.CurrentGridID = gridID
 		w.UpdateDiscovery()
-		// Déclenche l'événement d'entrée pour les systèmes (comme Preview)
-		w.EventBus.PublishImmediate(event.NewGridEnteredEvent(gridID))
+
+		// NOUVEAU : Persistance de l'entrée
+		// Si on arrive d'une direction cardinale, l'entrée correspondante dans la nouvelle grille
+		// est immédiatement considérée comme découverte et ouverte.
+		if arrivalDir >= entity.DirNorth && arrivalDir <= entity.DirWest {
+			// L'entrée est la direction OPPOSÉE à celle empruntée pour arriver ici.
+			entranceDir := w.DreamPlane.OppositeDirection(arrivalDir)
+			grid.ExitsState[entranceDir] = [2]entity.TileState{
+				entity.Revealed | entity.Matched,
+				entity.Revealed | entity.Matched,
+			}
+		}
+
+		// Déclenche l'événement d'entrée pour les systèmes
+		w.EventBus.PublishImmediate(event.Event{
+			Type:     event.GridEntered,
+			SourceID: gridID,
+			Payload: map[string]interface{}{
+				"grid_id":     gridID,
+				"arrival_dir": arrivalDir,
+			},
+		})
 		return true
 	}
 	return false
@@ -2776,6 +2815,9 @@ func (e *Engine) Update() {
 
 	e.world.EventBus.ProcessQueue()
 	e.world.Turn++
+
+	// Rafraîchit l'état de navigation à la fin du tour pour détecter les changements de population
+	e.world.IsNavigationOpen(e.world.CurrentGridID)
 
 	// Diminue la santé mentale à chaque tour
 	if e.world.Player != nil {

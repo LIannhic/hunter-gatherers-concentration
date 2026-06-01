@@ -31,6 +31,8 @@ const (
 	WorldGenerated     Type = "world_generated"
 	CreatureFled       Type = "creature_fled"
 	ItemMessage        Type = "item_message"
+	NavigationOpened   Type = "navigation_opened"
+	NavigationClosed   Type = "navigation_closed"
 	// Animation events pour l'UI
 	AnimationStarted Type = "animation_started"
 	AnimationEnded   Type = "animation_ended"
@@ -325,6 +327,28 @@ func NewWorldGeneratedEvent(planeID string, zoneCount int) Event {
 		SourceID: planeID,
 		Payload: map[string]interface{}{
 			"zone_count": zoneCount,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewNavigationOpenedEvent(gridID string) Event {
+	return Event{
+		Type:     NavigationOpened,
+		SourceID: "system",
+		Payload: map[string]interface{}{
+			"grid_id": gridID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewNavigationClosedEvent(gridID string) Event {
+	return Event{
+		Type:     NavigationClosed,
+		SourceID: "system",
+		Payload: map[string]interface{}{
+			"grid_id": gridID,
 		},
 		Timestamp: time.Now(),
 	}

@@ -26,6 +26,7 @@ type Grid struct {
 	ExitsTransform        map[Direction][2]entity.Transformation
 	NavigationForcedOpen  bool
 	MatchedTargetsCount   int
+	LastNavigationOpen    bool // NOUVEAU: État mémorisé pour détecter les changements (Sealing/Unsealing)
 }
 
 // NewGrid instancie et configure une nouvelle grille avec ses pentes initiales selon le biome.

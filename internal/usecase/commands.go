@@ -240,6 +240,9 @@ func (c *MatchTilesCommand) Execute() error {
 			if grid, ok := c.World.GetGrid(c.GridID); ok {
 				grid.MatchedTargetsCount += 2
 				fmt.Printf("[DEBUG-MATCH] Grid: %s | Match Valide | MatchedTargetsTotal: %d\n", c.GridID, grid.MatchedTargetsCount)
+
+				// Rafraîchit l'état de navigation et émet les événements si nécessaire
+				c.World.IsNavigationOpen(c.GridID)
 			}
 		}
 
@@ -414,6 +417,9 @@ func (c *MergeTilesCommand) Execute() error {
 
 		// On supprime la tuile 2 (elle a été absorbée)
 		c.World.RemoveEntity(e2.GetID())
+
+		// Rafraîchit l'état de navigation
+		c.World.IsNavigationOpen(c.GridID)
 
 		// Notification de fusion
 		c.World.EventBus.Publish(event.NewTileMergedEvent(
@@ -924,7 +930,7 @@ func (c *SwitchZoneCommand) Execute() error {
 	}
 
 	targetID, _ := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)
-	c.World.SetCurrentGrid(targetID)
+	c.World.SetCurrentGridFrom(targetID, c.Direction)
 
 	grid, _ := c.World.GetGrid(targetID)
 	newPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
