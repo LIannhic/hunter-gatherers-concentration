@@ -466,9 +466,9 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	}
 
 	statsY := y + 150
-	text.Draw(screen, fmt.Sprintf("Ressources collectées : %d", resourceCount), basicfont.Face7x13, x+100, statsY, color.White)
-	text.Draw(screen, fmt.Sprintf("Créatures capturées : %d", creatureCount), basicfont.Face7x13, x+100, statsY+30, color.White)
-	text.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d éclats", totalValue), basicfont.Face7x13, x+100, statsY+70, color.RGBA{255, 255, 100, 255})
+	text.Draw(screen, fmt.Sprintf("Ressources collectees : %d", resourceCount), basicfont.Face7x13, x+100, statsY, color.White)
+	text.Draw(screen, fmt.Sprintf("Creatures capturees : %d", creatureCount), basicfont.Face7x13, x+100, statsY+30, color.White)
+	text.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d eclats", totalValue), basicfont.Face7x13, x+100, statsY+70, color.RGBA{255, 255, 100, 255})
 
 	// Boutons
 	btnW, btnH := 160, 40
