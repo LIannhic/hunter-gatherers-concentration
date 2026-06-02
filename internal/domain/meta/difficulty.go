@@ -23,9 +23,9 @@ func GetSettings(level DifficultyLevel) DifficultySettings {
 	case LevelEasy:
 		return DifficultySettings{Level: LevelEasy, PreviewDuration: 1.3, PreviewRatio: 1.0, NavThreshold: 0.5, TurnTimerDuration: 15.0}
 	case LevelNormal:
-		return DifficultySettings{Level: LevelNormal, PreviewDuration: 0.8, PreviewRatio: 0.5, NavThreshold: 0.6, TurnTimerDuration: 10.0}
+		return DifficultySettings{Level: LevelNormal, PreviewDuration: 0.8, PreviewRatio: 1.0, NavThreshold: 0.6, TurnTimerDuration: 10.0}
 	case LevelHard:
-		return DifficultySettings{Level: LevelHard, PreviewDuration: 0.3, PreviewRatio: 0.8, NavThreshold: 0.7, TurnTimerDuration: 5.0}
+		return DifficultySettings{Level: LevelHard, PreviewDuration: 0.3, PreviewRatio: 1.0, NavThreshold: 0.7, TurnTimerDuration: 5.0}
 	case LevelInsane:
 		return DifficultySettings{Level: LevelInsane, PreviewDuration: 0.1, PreviewRatio: 1.0, NavThreshold: 0.8, TurnTimerDuration: 5.0}
 	default:

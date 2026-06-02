@@ -399,7 +399,7 @@ type Entity interface {
 	SetState(TileState)
 	GetTransformation() Transformation
 	SetTransformation(Transformation)
-	GetOrientation() Direction // Gardé pour compatibilité, déduit de la Transformation
+	GetOrientation() Direction // Orientation cardinale
 	SetOrientation(Direction)
 	AddTag(string)
 	HasTag(string) bool
@@ -533,19 +533,10 @@ func (e *BaseEntity) GetTransformation() Transformation  { return e.Transform }
 func (e *BaseEntity) SetTransformation(t Transformation) { e.Transform = t }
 
 func (e *BaseEntity) GetOrientation() Direction {
-	// Déduit une direction simplifiée pour la compatibilité (ex: pour le pathfinding)
-	switch e.Transform {
-	case TransIdentity:
-		return DirNorth
-	case TransRot90:
-		return DirEast
-	case TransRot180:
-		return DirSouth
-	case TransRot270:
-		return DirWest
-	default:
-		return DirNorth // Fallback
-	}
+	// Déduit une direction cardinale vers laquelle pointe le "Haut" de l'objet
+	// après application de la transformation D4.
+	// On transforme DirNorth (0, -1) pour voir où il finit.
+	return TransformDirection(DirNorth, e.Transform)
 }
 
 func (e *BaseEntity) SetOrientation(o Direction) {

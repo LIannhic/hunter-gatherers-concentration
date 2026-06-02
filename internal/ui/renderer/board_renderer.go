@@ -708,24 +708,40 @@ func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, di
 
 		// Si c'est la flèche de sortie, on applique la rotation/miroir aux UV
 		if tileState&entity.Revealed != 0 && tileImg == r.assets.GetImage("tile_exit_"+themeName) {
-			// Rotation de base selon la direction de la sortie
-			var trans entity.Transformation = entity.TransIdentity
+			var finalTrans entity.Transformation
+
 			switch dir {
+			case entity.DirNorth:
+				// Inversé : i=0 est le miroir (gauche), i=1 est l'identité (droite)
+				if i == 0 {
+					finalTrans = entity.TransMirrorH
+				} else {
+					finalTrans = entity.TransIdentity
+				}
 			case entity.DirEast:
-				trans = entity.TransRot90
+				// Inversé + Rotation 180° sur le bas (i=1)
+				if i == 0 {
+					finalTrans = entity.Compose(entity.TransRot270, entity.TransMirrorH)
+				} else {
+					finalTrans = entity.Compose(entity.TransRot270, entity.TransRot180)
+				}
 			case entity.DirSouth:
-				trans = entity.TransRot180
+				// Déjà correct : i=0 est l'original, i=1 est le miroir
+				if i == 0 {
+					finalTrans = entity.TransRot180
+				} else {
+					finalTrans = entity.Compose(entity.TransRot180, entity.TransMirrorH)
+				}
 			case entity.DirWest:
-				trans = entity.TransRot270
+				// Inversé + Rotation 180° sur le bas (i=1)
+				if i == 0 {
+					finalTrans = entity.Compose(entity.TransRot90, entity.TransRot180)
+				} else {
+					finalTrans = entity.Compose(entity.TransRot90, entity.TransMirrorH)
+				}
 			}
 
-			uvCoords := GetTransformationGeometry(trans)
-			// Effet miroir pour la deuxième tuile afin de compléter la flèche
-			if i == 1 {
-				// On compose avec un miroir horizontal local
-				uvCoords = GetTransformationGeometry(entity.Compose(trans, entity.TransMirrorH))
-			}
-
+			uvCoords := GetTransformationGeometry(finalTrans)
 			for j := 0; j < 4; j++ {
 				geo.V[j].SrcX = uvCoords[j][0] * ui.FaceSize
 				geo.V[j].SrcY = uvCoords[j][1] * ui.FaceSize
@@ -1013,53 +1029,6 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	shouldShowContent := visualState&entity.Revealed != 0 || visualState&entity.Matched != 0
 	if shouldShowContent && ent.GetType() != entity.TypeTrap {
 		r.renderFlippingEntityTriangles(screen, geo.V[:4], ent, ent.GetTransformation())
-	}
-}
-
-func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y float64, e entity.Entity) {
-	centerX := float32(x + r.tileSize/2)
-
-	switch ent := e.(type) {
-	case *domain.Creature:
-		icon := r.assets.GetCreatureIcon(ent.Species)
-		op := &ebiten.DrawImageOptions{}
-
-		// 1. Centrage de l'asset
-		w, h := icon.Bounds().Dx(), icon.Bounds().Dy()
-		op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
-
-		// 2. Application de la transformation D4 (Orientation)
-		r.ApplyTransformation(&op.GeoM, ent.GetTransformation())
-
-		// 3. Mise à l'échelle et placement final
-		op.GeoM.Scale(0.75, 0.75)
-		op.GeoM.Translate(x+r.tileSize/2, y+r.tileSize/2)
-		screen.DrawImage(icon, op)
-
-		behaviorColor := color.RGBA{200, 200, 200, 255}
-		switch ent.Behavior.State {
-		case "hunting":
-			behaviorColor = color.RGBA{255, 100, 100, 255}
-		case "fleeing":
-			behaviorColor = color.RGBA{100, 100, 255, 255}
-		case "pollinating":
-			behaviorColor = color.RGBA{100, 255, 100, 255}
-		}
-		vector.DrawFilledCircle(screen, centerX, float32(y+10), 4, behaviorColor, true)
-
-	case *domain.Resource:
-		stageName := ent.Lifecycle.GetCurrentStageName()
-		icon := r.assets.GetResourceIcon(ent.ResourceType, stageName)
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-r.tileSize/2, -r.tileSize/2)
-		op.GeoM.Scale(0.75, 0.75)
-		op.GeoM.Translate(x+r.tileSize/2, y+r.tileSize/2)
-		screen.DrawImage(icon, op)
-
-		if len(stageName) > 0 {
-			label := string(stageName[0])
-			text.Draw(screen, label, basicfont.Face7x13, int(x+r.tileSize-12), int(y+r.tileSize-5), color.White)
-		}
 	}
 }
 

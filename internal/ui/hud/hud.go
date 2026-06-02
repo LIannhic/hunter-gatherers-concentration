@@ -50,6 +50,8 @@ type HUD struct {
 	pulseFrame        int            // Compteur de frames pour l'animation de pulse
 	infoMessage       string         // Message d'item affiché à l'écran
 	infoMessageTimer  int            // Timer du message d'item
+
+	assetPage        int // Page actuelle de l'atlas des assets
 }
 
 // NewHUD crée un nouveau HUD
@@ -65,6 +67,7 @@ func NewHUD(world *domain.World) *HUD {
 		selectedLoots:        make(map[int]bool),
 		selectedLootIndex:    -1,
 		confirmClearAll:      false,
+		assetPage:            0,
 	}
 
 	// S'abonne aux événements d'inventaire plein
@@ -166,6 +169,7 @@ func (h *HUD) ToggleAssetsDetails() {
 		h.showDetails = false
 		h.showInventoryDetails = false
 		h.showVictory = false
+		h.assetPage = 0 // Reset à la première page
 	}
 }
 
@@ -226,10 +230,8 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{30, 30, 40, 255}, true)
 	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 2, color.RGBA{100, 100, 150, 255}, true)
 
-	text.Draw(screen, "ATLAS DES ASSETS (T pour fermer)", basicfont.Face7x13, x+20, y+30, color.RGBA{200, 200, 255, 255})
-
-	// Liste des assets à montrer
-	assetsToDraw := []struct {
+	// Liste complète des assets
+	allAssets := []struct {
 		name string
 		key  string
 	}{
@@ -266,16 +268,39 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		{"Sand Core", "resource_sand_core"},
 	}
 
-	colWidth := 150
-	rowHeight := 120
-	itemsPerRow := 5
+	// Pagination
+	itemsPerPage := 8
+	maxPages := (len(allAssets) + itemsPerPage - 1) / itemsPerPage
+	if h.assetPage >= maxPages {
+		h.assetPage = 0
+	}
+
+	startIdx := h.assetPage * itemsPerPage
+	endIdx := startIdx + itemsPerPage
+	if endIdx > len(allAssets) {
+		endIdx = len(allAssets)
+	}
+
+	assetsToDraw := allAssets[startIdx:endIdx]
+
+	title := fmt.Sprintf("ATLAS DES ASSETS - Page %d/%d (T pour fermer)", h.assetPage+1, maxPages)
+	text.Draw(screen, title, basicfont.Face7x13, x+20, y+30, color.RGBA{200, 200, 255, 255})
+
+	// Boutons de navigation
+	if maxPages > 1 {
+		text.Draw(screen, "[ PAGE SUIVANTE ]", basicfont.Face7x13, x+650, y+30, color.RGBA{150, 255, 150, 255})
+	}
+
+	colWidth := 180
+	rowHeight := 180
+	itemsPerRow := 4
 
 	for i, asset := range assetsToDraw {
 		row := i / itemsPerRow
 		col := i % itemsPerRow
 
-		ax := x + 30 + col*colWidth
-		ay := y + 60 + row*rowHeight
+		ax := x + 50 + col*colWidth
+		ay := y + 80 + row*rowHeight
 
 		// Cadre de l'asset
 		vector.StrokeRect(screen, float32(ax), float32(ay), 88, 88, 1, color.RGBA{60, 60, 80, 255}, true)
@@ -298,12 +323,11 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 			}
 		}
 
-		// Nom de l'asset
-		text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+105, color.White)
+		// Nom de l'asset (décalé vers le bas pour éviter le chevauchement)
+		text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+110, color.White)
 
-		// TODO: En pratique, il faudrait passer Application ou AssetsManager au HUD
-		// Pour l'instant on montre la structure.
-		text.Draw(screen, "["+asset.key+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
+		// ID de l'asset (décalé encore plus bas)
+		text.Draw(screen, "["+asset.key+"]", basicfont.Face7x13, ax, ay+130, color.RGBA{150, 150, 150, 255})
 	}
 }
 
@@ -890,6 +914,18 @@ func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
 
 // HandleClick gère les clics sur les éléments de l'HUD
 func (h *HUD) HandleClick(x, y int) bool {
+	// Gestion de la pagination de l'atlas des assets
+	if h.showAssetsDetails {
+		winW, winH := 800, 500
+		winX := (ui.ScreenWidth - winW) / 2
+		winY := (ui.ScreenHeight - winH) / 2
+
+		// Bouton Page Suivante
+		if x >= winX+640 && x <= winX+780 && y >= winY+10 && y <= winY+50 {
+			h.assetPage++
+			return true
+		}
+	}
 	// Clic sur l'icône Menu (M) dans le portrait
 	mxIcon := ui.PortraitX + ui.MenuIconRelativeX
 	myIcon := ui.PortraitY + ui.MenuIconRelativeY

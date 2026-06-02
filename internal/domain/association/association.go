@@ -289,16 +289,29 @@ type OrientationStrategy struct{}
 func (s *OrientationStrategy) Type() Type { return Orientation }
 
 func (s *OrientationStrategy) CanAssociate(a, b Matchable) bool {
-	tagA, tagB := a.GetMatchID(), b.GetMatchID()
-	// On attend des tags comme "exit_north_0" et "exit_north_1"
-	if len(tagA) < 11 || len(tagB) < 11 {
+	// 1. On vérifie si ce sont des éléments de navigation (Sorties)
+	if a.GetCategory() == "navigation" && b.GetCategory() == "navigation" {
+		tagA, tagB := a.GetMatchID(), b.GetMatchID()
+		// On attend des tags comme "exit_north_0" et "exit_north_1"
+		if len(tagA) < 11 || len(tagB) < 11 {
+			return false
+		}
+		prefixA := tagA[:len(tagA)-1]
+		prefixB := tagB[:len(tagB)-1]
+
+		// Même direction mais index différent (0 et 1)
+		if prefixA == prefixB && tagA != tagB && (prefixA == "exit_north_" || prefixA == "exit_south_" || prefixA == "exit_east_" || prefixA == "exit_west_") {
+			// On vérifie que les deux tuiles ont une orientation cohérente vers cette direction
+			// Pour les sorties, on attend que le "Haut" de l'asset pointe vers l'extérieur du plateau.
+			// TODO: Implémenter la vérification stricte de GetOrientation() == targetDir.
+			return true
+		}
 		return false
 	}
-	prefixA := tagA[:len(tagA)-1]
-	prefixB := tagB[:len(tagB)-1]
 
-	// Même direction mais index différent
-	return prefixA == prefixB && tagA != tagB && (prefixA == "exit_north_" || prefixA == "exit_south_" || prefixA == "exit_east_" || prefixA == "exit_west_")
+	// 2. TODO : Implémenter la logique générique pour toutes les tuiles
+	// basées sur leur GetOrientation() réelle et la direction de la sortie
+	return false
 }
 
 func (s *OrientationStrategy) Resolve(a, b Matchable) (Result, error) {

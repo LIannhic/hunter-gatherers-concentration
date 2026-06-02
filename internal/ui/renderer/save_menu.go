@@ -44,19 +44,19 @@ type SaveMenu struct {
 
 func NewSaveMenu() *SaveMenu {
 	sm := &SaveMenu{
-		width:  800,
-		height: 600,
+		width:  1280,
+		height: 720,
 		slotRects: []Rect{
-			{X: 150, Y: 150, W: 500, H: 100},
-			{X: 150, Y: 260, W: 500, H: 100},
-			{X: 150, Y: 370, W: 500, H: 100},
+			{X: 365, Y: 150, W: 500, H: 100},
+			{X: 365, Y: 260, W: 500, H: 100},
+			{X: 365, Y: 370, W: 500, H: 100},
 		},
 		deleteRects: []Rect{
-			{X: 660, Y: 150, W: 40, H: 100},
-			{X: 660, Y: 260, W: 40, H: 100},
-			{X: 660, Y: 370, W: 40, H: 100},
+			{X: 875, Y: 150, W: 40, H: 100},
+			{X: 875, Y: 260, W: 40, H: 100},
+			{X: 875, Y: 370, W: 40, H: 100},
 		},
-		backRect: Rect{X: 20, Y: 20, W: 100, H: 40},
+		backRect: Rect{X: 235, Y: 90, W: 140, H: 60},
 	}
 	return sm
 }
@@ -85,7 +85,7 @@ func (m *SaveMenu) Render(screen *ebiten.Image) {
 	screen.DrawImage(overlay, nil)
 
 	// Titre
-	text.Draw(screen, "GESTION DES PROFILS", basicfont.Face7x13, 320, 80, color.RGBA{200, 180, 100, 255})
+	text.Draw(screen, "GESTION DES PROFILS", basicfont.Face7x13, 580, 125, color.RGBA{200, 180, 100, 255})
 
 	// Bouton Retour
 	m.drawBackButton(screen)
@@ -102,8 +102,9 @@ func (m *SaveMenu) Render(screen *ebiten.Image) {
 }
 
 func (m *SaveMenu) drawBackButton(screen *ebiten.Image) {
-	vector.StrokeRect(screen, float32(m.backRect.X), float32(m.backRect.Y), float32(m.backRect.W), float32(m.backRect.H), 1, color.White, true)
-	text.Draw(screen, "< RETOUR", basicfont.Face7x13, m.backRect.X+15, m.backRect.Y+25, color.White)
+	vector.DrawFilledRect(screen, float32(m.backRect.X), float32(m.backRect.Y), float32(m.backRect.W), float32(m.backRect.H), color.RGBA{40, 40, 60, 255}, true)
+	vector.StrokeRect(screen, float32(m.backRect.X), float32(m.backRect.Y), float32(m.backRect.W), float32(m.backRect.H), 2, color.White, true)
+	text.Draw(screen, "< RETOUR", basicfont.Face7x13, m.backRect.X+15, m.backRect.Y+35, color.White)
 }
 
 func (m *SaveMenu) drawSlot(screen *ebiten.Image, id int) {
@@ -134,7 +135,7 @@ func (m *SaveMenu) drawSlot(screen *ebiten.Image, id int) {
 		text.Draw(screen, fmt.Sprintf("SLOT %d", id), basicfont.Face7x13, r.X+20, r.Y+30, color.RGBA{100, 150, 255, 255})
 		dateStr := slotMeta.UpdatedAt.Format("02/01/2006 15:04")
 		text.Draw(screen, "Dernier jeu : "+dateStr, basicfont.Face7x13, r.X+20, r.Y+55, color.White)
-		stats := fmt.Sprintf("Expéditions : %d | Morts : %d", slotMeta.SessionCount, slotMeta.DeathCount)
+		stats := fmt.Sprintf("Expeditions : %d | Morts : %d", slotMeta.SessionCount, slotMeta.DeathCount)
 		text.Draw(screen, stats, basicfont.Face7x13, r.X+20, r.Y+80, color.Gray{180})
 
 		// Bouton Supprimer (X)
@@ -176,7 +177,7 @@ func (m *SaveMenu) HandleClick(x, y int) SaveMenuAction {
 	}
 
 	// Bouton Retour
-	if x >= m.backRect.X && x <= m.backRect.X+m.backRect.W && y >= m.backRect.Y && y <= m.backRect.Y+m.backRect.H {
+	if m.backRect.Contains(x, y) {
 		return SaveMenuAction{Type: ActionBack}
 	}
 
@@ -184,7 +185,7 @@ func (m *SaveMenu) HandleClick(x, y int) SaveMenuAction {
 	for i := 1; i <= 3; i++ {
 		// Supprimer ?
 		dr := m.deleteRects[i-1]
-		if x >= dr.X && x <= dr.X+dr.W && y >= dr.Y && y <= dr.Y+dr.H {
+		if dr.Contains(x, y) {
 			// Vérifier si le slot existe
 			for _, meta := range m.metas {
 				if meta.SlotID == i {
@@ -196,7 +197,7 @@ func (m *SaveMenu) HandleClick(x, y int) SaveMenuAction {
 
 		// Charger / Nouveau ?
 		sr := m.slotRects[i-1]
-		if x >= sr.X && x <= sr.X+sr.W && y >= sr.Y && y <= sr.Y+sr.H {
+		if sr.Contains(x, y) {
 			exists := false
 			for _, meta := range m.metas {
 				if meta.SlotID == i {
