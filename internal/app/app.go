@@ -147,22 +147,22 @@ func NewApplication() (*Application, error) {
 	app.Input.OnFillInventory = func() {
 		fmt.Println("[DEBUG] Remplissage de l'inventaire avec divers objets.")
 		items := []*player.LootItem{
-			player.NewCrystalShardItem(0),
-			player.NewDreamberryItem(0),
-			player.NewMoonstoneItem(0),
-			player.NewWhisperingHerbItem(0),
-			player.NewBurrowerItem(0),
-			player.NewEchoHoundItem(0),
-			player.NewMossMonkeyItem(0),
-			player.NewShadowstalkerItem(0),
-			player.NewSpecterItem(0),
-			player.NewStonewardenItem(0),
-			player.NewFleeingSpriteItem(0),
-			player.NewFlutterwingItem(0),
-			player.NewMossTruffleItem(0),
-			player.NewEchoCrystalItem(0),
-			player.NewVoidBloomItem(0),
-			player.NewSandCoreItem(0),
+			player.NewCrystalShardItem(1),
+			player.NewDreamberryItem(1),
+			player.NewMoonstoneItem(1),
+			player.NewWhisperingHerbItem(2),
+			player.NewBurrowerItem(2),
+			player.NewEchoHoundItem(2),
+			player.NewMossMonkeyItem(2),
+			player.NewShadowstalkerItem(2),
+			player.NewSpecterItem(2),
+			player.NewStonewardenItem(2),
+			player.NewFleeingSpriteItem(2),
+			player.NewFlutterwingItem(2),
+			player.NewMossTruffleItem(2),
+			player.NewEchoCrystalItem(2),
+			player.NewVoidBloomItem(2),
+			player.NewSandCoreItem(2),
 		}
 		for _, item := range items {
 			_ = app.World.AddLootItem(item)

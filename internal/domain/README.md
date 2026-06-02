@@ -336,6 +336,7 @@ L'inventaire agit comme un tampon entre la session de récolte onirique et le fo
 - **Multi-sélection** : Permet de sélectionner plusieurs objets pour une suppression groupée.
 - **Sécurité** : Certains objets (ex: Portail Portatif) possèdent le tag `IsDeletable: false` et ne peuvent pas être supprimés par le joueur.
 - **Affichage** : Utilise un système de clipping et de défilement fluide (pixel par pixel) pour suggérer la profondeur de la réserve.
+- **Support des Niveaux** : Les constructeurs d'objets (`NewXXXItem`) acceptent un paramètre de niveau pour instancier directement des butins puissants.
 
 ---
 
