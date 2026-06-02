@@ -26,6 +26,14 @@ type BoardRenderer interface {
 	RenderInventoryLoot(target *ebiten.Image, world *domain.World, selectedIdx int, selection map[int]bool, confirmAll bool)
 }
 
+// ScrollingMessage représente un message qui défile dans une zone dédiée
+type ScrollingMessage struct {
+	Text      string
+	X         float64
+	Scrolls   int // Nombre de passages effectués
+	TargetBox int // 0: Gauche (Portrait/Inventaire), 1: Droite (Jauges/Minimap)
+}
+
 // HUD affiche les informations de jeu
 type HUD struct {
 	world    *domain.World
@@ -38,6 +46,7 @@ type HUD struct {
 	fullFeedbackTimer    int // Timer pour le retour visuel d'inventaire plein
 
 	inventoryOffscreen *ebiten.Image // Buffer pour le clipping de l'inventaire
+	messageBuffers     [2]*ebiten.Image // Buffers pour les messages défilants
 
 	// Gestion de la suppression et sélection
 	selectedLoots     map[int]bool // Indices sélectionnés
@@ -48,8 +57,10 @@ type HUD struct {
 	getTimerRemaining func() float64 // Temps restant du timer
 	getTimerPanic     func() bool    // true si < 3s
 	pulseFrame        int            // Compteur de frames pour l'animation de pulse
-	infoMessage       string         // Message d'item affiché à l'écran
-	infoMessageTimer  int            // Timer du message d'item
+
+	// Système de messages défilants
+	messages         []*ScrollingMessage
+	messageBoxWidth  float64
 
 	// Feedback de coût (Segment clignotant)
 	PotentialManaCost   int
@@ -68,11 +79,16 @@ func NewHUD(world *domain.World) *HUD {
 		showAssetsDetails:    false,
 		showVictory:          false,
 		fullFeedbackTimer:    0,
-		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 331),
-		selectedLoots:        make(map[int]bool),
-		selectedLootIndex:    -1,
-		confirmClearAll:      false,
-		assetPage:            0,
+		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 281),
+		messageBuffers: [2]*ebiten.Image{
+			ebiten.NewImage(int(ui.MessageBoxWLeft), int(ui.MessageBoxHLeft)),
+			ebiten.NewImage(int(ui.MessageBoxWRight), int(ui.MessageBoxHRight)),
+		},
+		selectedLoots:    make(map[int]bool),
+		selectedLootIndex: -1,
+		confirmClearAll:   false,
+		assetPage:         0,
+		messageBoxWidth:   ui.MessageBoxWLeft,
 	}
 
 	// S'abonne aux événements d'inventaire plein
@@ -83,8 +99,31 @@ func NewHUD(world *domain.World) *HUD {
 	// S'abonne aux messages d'item pour les effets de butin
 	world.EventBus.SubscribeFunc(event.ItemMessage, func(e event.Event) {
 		if msg, ok := e.Payload["message"].(string); ok {
-			h.infoMessage = msg
-			h.infoMessageTimer = 120 // 2 secondes à 60 fps
+			h.AddMessage(msg)
+		}
+	})
+
+	// S'abonne aux dégâts reçus
+	world.EventBus.SubscribeFunc(event.PlayerDamaged, func(e event.Event) {
+		reason, _ := e.Payload["reason"].(string)
+		var msg string
+		if dmg, ok := e.Payload["damage"].(int); ok && dmg > 0 {
+			msg = fmt.Sprintf("DEGATS ! -%d HP (%s)", dmg, reason)
+		} else if mana, ok := e.Payload["mana_loss"].(int); ok && mana > 0 {
+			msg = fmt.Sprintf("INSTABILITE ! -%d Mana (%s)", mana, reason)
+		}
+		if msg != "" {
+			h.AddMessage(msg)
+		}
+	})
+
+	// S'abonne aux associations réussies
+	world.EventBus.SubscribeFunc(event.AssociationMade, func(e event.Event) {
+		success, _ := e.Payload["success"].(bool)
+		if success {
+			assocType, _ := e.Payload["type"].(string)
+			msg := fmt.Sprintf("SUCCES ! Association %s", strings.ToUpper(assocType))
+			h.AddMessage(msg)
 		}
 	})
 
@@ -96,13 +135,43 @@ func (h *HUD) Update() {
 	if h.fullFeedbackTimer > 0 {
 		h.fullFeedbackTimer--
 	}
-	if h.infoMessageTimer > 0 {
-		h.infoMessageTimer--
-		if h.infoMessageTimer == 0 {
-			h.infoMessage = ""
+
+	h.updateMessages()
+
+	h.pulseFrame++
+}
+
+func (h *HUD) updateMessages() {
+	speed := 2.0
+	for i := 0; i < len(h.messages); i++ {
+		m := h.messages[i]
+		m.X += speed
+
+		// Si le message est complètement sorti à droite
+		if m.X > h.messageBoxWidth {
+			m.Scrolls++
+			// On le fait disparaître après 2 passages
+			if m.Scrolls >= 2 {
+				h.messages = append(h.messages[:i], h.messages[i+1:]...)
+				i--
+				continue
+			}
+			// Sinon on le reset à gauche (approximativement, on utilise la largeur du texte plus tard)
+			// Pour faire simple, on le remet à une position négative arbitraire
+			m.X = -300
 		}
 	}
-	h.pulseFrame++
+}
+
+func (h *HUD) AddMessage(text string) {
+	// Alternance simple entre box gauche et droite
+	target := len(h.messages) % 2
+	h.messages = append(h.messages, &ScrollingMessage{
+		Text:      text,
+		X:         -200, // Démarre hors champ à gauche
+		Scrolls:   0,
+		TargetBox: target,
+	})
 }
 
 // SetTimerCallbacks injecte les accesseurs au compte à rebours temps réel.
@@ -205,6 +274,7 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	h.renderInventory(screen)
 	h.renderGauges(screen)
 	h.renderMiniMap(screen)
+	h.renderMessages(screen)
 
 	if h.showDetails {
 		h.renderDetailWindow(screen)
@@ -221,9 +291,31 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	if h.showVictory {
 		h.renderVictoryWindow(screen)
 	}
-	if h.infoMessageTimer > 0 && h.infoMessage != "" {
-		text.Draw(screen, h.infoMessage, basicfont.Face7x13, 24, ui.ScreenHeight-24, color.RGBA{255, 255, 230, 255})
+}
+
+func (h *HUD) renderMessages(screen *ebiten.Image) {
+	// 1. Dessiner les cadres
+	vector.StrokeRect(screen, ui.MessageBoxXLeft, ui.MessageBoxYLeft, ui.MessageBoxWLeft, ui.MessageBoxHLeft, 1, color.RGBA{80, 80, 100, 255}, true)
+	vector.StrokeRect(screen, ui.MessageBoxXRight, ui.MessageBoxYRight, ui.MessageBoxWRight, ui.MessageBoxHRight, 1, color.RGBA{80, 80, 100, 255}, true)
+
+	// 2. Nettoyer les buffers
+	h.messageBuffers[0].Fill(color.Transparent)
+	h.messageBuffers[1].Fill(color.Transparent)
+
+	// 3. Dessiner les messages dans leurs buffers respectifs (Clipping automatique)
+	for _, m := range h.messages {
+		target := h.messageBuffers[m.TargetBox]
+		text.Draw(target, m.Text, basicfont.Face7x13, int(m.X), int(ui.MessageBoxHLeft/2+5), color.RGBA{200, 255, 200, 255})
 	}
+
+	// 4. Afficher les buffers
+	opLeft := &ebiten.DrawImageOptions{}
+	opLeft.GeoM.Translate(ui.MessageBoxXLeft, ui.MessageBoxYLeft)
+	screen.DrawImage(h.messageBuffers[0], opLeft)
+
+	opRight := &ebiten.DrawImageOptions{}
+	opRight.GeoM.Translate(ui.MessageBoxXRight, ui.MessageBoxYRight)
+	screen.DrawImage(h.messageBuffers[1], opRight)
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
@@ -682,13 +774,8 @@ func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string
 	// Gauge Holder background
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(ui.GaugeW), float32(ui.GaugeH), color.RGBA{30, 30, 30, 255}, true)
 
-	// Rule: 100 hp = 200 px recalculate if over 200 hp for always = 400 px.
-	var totalPx float32
-	if max <= 200 {
-		totalPx = float32(max) * 2
-	} else {
-		totalPx = 400
-	}
+	// Scaling rule: Always use ui.GaugeH for mapping values to pixels
+	totalPx := float32(ui.GaugeH)
 
 	var fillHeight float32
 	if max > 0 {
@@ -696,7 +783,7 @@ func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string
 	}
 
 	// Draw background of the actual gauge
-	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(totalPx)), float32(ui.GaugeW), totalPx, color.RGBA{50, 50, 50, 255}, true)
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(ui.GaugeW), totalPx, color.RGBA{50, 50, 50, 255}, true)
 
 	// Fill from bottom
 	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(fillHeight)), float32(ui.GaugeW), fillHeight, clr, true)

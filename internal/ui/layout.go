@@ -21,20 +21,20 @@ const (
 // Inventory Panel
 const (
 	InventoryX = 10
-	InventoryY = 290
+	InventoryY = 340
 	InventoryW = 270
-	InventoryH = 420
+	InventoryH = 370
 
 	LootSlotSize    = 87.5
 	LootSlotPadding = 1.875
 	LootSlotsPerRow = 3
 
 	LootCounterRelativeX = 5
-	LootCounterRelativeY = 371
+	LootCounterRelativeY = 321
 	LootCounterSize      = 43.75
 
 	DeleteLootRelativeX = 221
-	DeleteLootRelativeY = 371
+	DeleteLootRelativeY = 321
 	DeleteLootSize      = 43.75
 )
 
@@ -106,10 +106,10 @@ const (
 	GaugesX = 1000
 	GaugesY = 10
 	GaugesW = 270
-	GaugesH = 420
+	GaugesH = 370
 
 	GaugeW = 76.67
-	GaugeH = 400
+	GaugeH = 350
 
 	HealthGaugeRelativeX = 10
 	HealthGaugeRelativeY = 10
@@ -119,6 +119,18 @@ const (
 
 	SanityGaugeRelativeX = 183.32
 	SanityGaugeRelativeY = 10
+)
+
+// Message Boxes
+const (
+	MessageBoxXLeft    = 10
+	MessageBoxYLeft    = 290
+	MessageBoxWLeft    = 270
+	MessageBoxHLeft    = 40
+	MessageBoxXRight   = 1000
+	MessageBoxYRight   = 390
+	MessageBoxWRight   = 270
+	MessageBoxHRight   = 40
 )
 
 // Minimap

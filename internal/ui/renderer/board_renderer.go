@@ -1065,9 +1065,9 @@ func (r *BoardRenderer) ScreenToGrid(screenX, screenY int, world *domain.World) 
 	if float64(screenX) >= ui.InventoryX && float64(screenX) <= ui.InventoryX+ui.InventoryW &&
 		float64(screenY) >= ui.InventoryY && float64(screenY) <= ui.InventoryY+ui.InventoryH {
 
-		// Zone des slots (commence à InventoryY + 40)
+		// Zone des slots (commence à InventoryY + 40, s'arrête avant les boutons à InventoryY + 321)
 		slotZoneY := ui.InventoryY + 40
-		if float64(screenY) >= float64(slotZoneY) && float64(screenY) <= float64(slotZoneY+331) {
+		if float64(screenY) >= float64(slotZoneY) && float64(screenY) <= float64(ui.InventoryY+321) {
 			localY := float64(screenY) - float64(slotZoneY) + float64(world.Player.Inventory.ScrollOffset)
 			localX := float64(screenX) - ui.InventoryX - 5
 
