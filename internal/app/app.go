@@ -20,6 +20,7 @@ import (
 	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/debug"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/hud"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/input"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/renderer"
@@ -50,6 +51,7 @@ type Application struct {
 	SaveMenu       *renderer.SaveMenu
 	Input          *input.Handler
 	HUD            *hud.HUD
+	DebugWindow    *debug.DebugWindow
 
 	// Game State
 	State domain.GameState
@@ -93,6 +95,7 @@ func NewApplication() (*Application, error) {
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
 	app.HUD.SetAssetsManager(app.Assets)
+	app.DebugWindow = debug.NewDebugWindow(app.World)
 
 	// Inscription du renderer aux événements de scan
 	app.Renderer.SubscribeToEvents(app.World)
@@ -238,15 +241,17 @@ func (app *Application) setupCallbacks() {
 		app.Engine.Update()
 	}
 
-	// Spawn et remplissage aléatoire complet d'une grille
+	// Spawn et remplissage aléatoire d'une grille (Utilise la liste de debug)
 	app.Input.OnSpawnEntities = func(gridID string) {
-		fmt.Printf("[ACTION] Random fill button pressed on grid %s\n", gridID)
+		fmt.Printf("[ACTION] Debug fill button pressed on grid %s\n", gridID)
 		app.debug.Action()
 
 		if gridID == "" {
 			gridID = app.World.CurrentGridID
 		}
-		app.World.FillGridRandomly(gridID)
+
+		// Nouvelle logique de spawn filtré par le debug
+		app.spawnFilteredEntities(gridID)
 	}
 
 	// Spawn de toutes les variétés de créatures (Shift+S)
@@ -294,7 +299,18 @@ func (app *Application) setupCallbacks() {
 			gridID = app.World.CurrentGridID
 		}
 
-		creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey"}
+		creatures := []string{}
+		for c, allowed := range app.World.Debug.AllowedCreatures {
+			if allowed {
+				creatures = append(creatures, c)
+			}
+		}
+
+		if len(creatures) == 0 {
+			fmt.Println("[DEBUG] Aucune créature autorisée dans les paramètres de debug.")
+			return
+		}
+
 		species := creatures[app.randSource.Intn(len(creatures))]
 
 		pos := app.findEmptyPosition(gridID)
@@ -643,6 +659,22 @@ func (app *Application) updatePlaying() error {
 		return nil
 	}
 
+	// Toggle Debug Window
+	if inpututil.IsKeyJustPressed(ebiten.KeyF12) {
+		app.World.Debug.Visible = !app.World.Debug.Visible
+	}
+
+	if app.World.Debug.Visible {
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+			mx, my := ebiten.CursorPosition()
+			if app.DebugWindow.HandleClick(mx, my) {
+				return nil
+			}
+		}
+		// On ne traite pas les autres inputs si la fenêtre de debug est ouverte et qu'elle a consommé le clic
+		// mais on laisse passer le reste pour permettre de voir les effets en temps réel.
+	}
+
 	app.Engine.UpdateFrame()
 
 	if app.World.TurnTimer != nil {
@@ -665,6 +697,17 @@ func (app *Application) updatePlaying() error {
 			fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
 			app.Input.ResetTimerSkip()
 			app.World.TurnTimer.Reset()
+		}
+
+		// Update max time from debug if overridden
+		if app.World.Debug.OverrideDifficulty {
+			if app.World.TurnTimer.MaxTime != app.World.Debug.Difficulty.TurnTimerDuration {
+				app.World.TurnTimer.SetMaxTime(app.World.Debug.Difficulty.TurnTimerDuration)
+			}
+		} else {
+			if app.World.TurnTimer.MaxTime != app.World.Difficulty.TurnTimerDuration {
+				app.World.TurnTimer.SetMaxTime(app.World.Difficulty.TurnTimerDuration)
+			}
 		}
 	}
 
@@ -915,6 +958,10 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 	app.Input.Draw(screen)
 	app.HUD.Render(screen)
 
+	if app.World.Debug.Visible {
+		app.DebugWindow.Render(screen)
+	}
+
 	// Application des shaders globaux (Biome + Attaques créatures + Sanité)
 	if app.EffectRenderer != nil && app.World.Player != nil {
 		ratio := float32(app.World.Player.Stats.Sanity) / float32(app.World.Player.Stats.MaxSanity)
@@ -950,12 +997,20 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 		params := renderer.GlobalEffectParams{
 			SanityRatio: ratio,
 			Biome:       biome,
-			UseBlur:     app.World.Player.VisualEffects["blur"] > 0,
-			UseBubble:   app.World.Player.VisualEffects["bubble"] > 0 && isOverPlaymat,
+			UseBlur:     app.World.Player.VisualEffects["blur"] > 0 || app.World.Debug.ActiveShaders["blur"],
+			UseBubble:   (app.World.Player.VisualEffects["bubble"] > 0 || app.World.Debug.ActiveShaders["bubble"]) && isOverPlaymat,
 			PortalPos:   portalPos,
 			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},
 		}
+
+		// Shaders forcés par biome
+		if app.World.Debug.ActiveShaders["wave"] {
+			params.Biome = "swamp"
+		} else if app.World.Debug.ActiveShaders["heat"] {
+			params.Biome = "desert"
+		}
+
 		app.EffectRenderer.ProcessGlobalEffects(screen, params)
 	}
 
@@ -1018,6 +1073,86 @@ func (app *Application) findEmptyPosition(gridID string) *entity.Position {
 
 	pos := emptyPositions[app.randSource.Intn(len(emptyPositions))]
 	return &pos
+}
+
+func (app *Application) spawnFilteredEntities(gridID string) {
+	// 1. Liste les entités autorisées
+	allowed := []string{}
+	for e, ok := range app.World.Debug.AllowedCreatures {
+		if ok {
+			allowed = append(allowed, e)
+		}
+	}
+
+	if len(allowed) == 0 {
+		fmt.Println("[DEBUG] Aucune entité autorisée dans les paramètres de debug.")
+		return
+	}
+
+	// 2. Trouve toutes les positions vides
+	grid, ok := app.World.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	var emptyPositions []entity.Position
+	for y := 0; y < grid.Height; y++ {
+		for x := 0; x < grid.Width; x++ {
+			pos := board.Position{X: x, Y: y}
+			tile, _ := grid.Get(pos)
+			if len(tile.EntitiesID) == 0 && !tile.Modifier.Obstructed {
+				emptyPositions = append(emptyPositions, entity.Position{X: x, Y: y})
+			}
+		}
+	}
+
+	if len(emptyPositions) == 0 {
+		fmt.Println("[DEBUG] Aucune position libre sur la grille.")
+		return
+	}
+
+	// Mélange les positions
+	rand.Shuffle(len(emptyPositions), func(i, j int) {
+		emptyPositions[i], emptyPositions[j] = emptyPositions[j], emptyPositions[i]
+	})
+
+	posIdx := 0
+	creatures := map[string]bool{
+		"lumifly": true, "shadowstalker": true, "burrower": true, "specter": true,
+		"echo_hound": true, "fleeing_sprite": true, "moss_monkey": true, "stonewarden": true, "flutterwing": true,
+	}
+	resources := map[string]bool{
+		"dreamberry": true, "moonstone": true, "whispering_herb": true, "crystal_shard": true,
+		"moss_truffle": true, "void_bloom": true, "echo_crystal": true, "sand_core": true,
+	}
+
+	// Remplit autant que possible avec des paires
+	for posIdx < len(emptyPositions)-1 {
+		etype := allowed[app.randSource.Intn(len(allowed))]
+
+		if creatures[etype] {
+			_, _ = app.World.SpawnCreature(gridID, etype, emptyPositions[posIdx])
+			_, _ = app.World.SpawnCreature(gridID, etype, emptyPositions[posIdx+1])
+			posIdx += 2
+		} else if resources[etype] {
+			_, _ = app.World.SpawnResource(gridID, etype, emptyPositions[posIdx])
+			_, _ = app.World.SpawnResource(gridID, etype, emptyPositions[posIdx+1])
+			posIdx += 2
+		} else if etype == "trap" {
+			_, _ = app.World.SpawnTrap(gridID, emptyPositions[posIdx])
+			_, _ = app.World.SpawnTrap(gridID, emptyPositions[posIdx+1])
+			posIdx += 2
+		} else {
+			// Structures et autres entités uniques
+			_, _ = app.World.SpawnStructure(gridID, etype, emptyPositions[posIdx])
+			posIdx++
+		}
+	}
+
+	// Tente de placer la dernière entité si possible (Trap par défaut pour paires)
+	if posIdx < len(emptyPositions) {
+		_, _ = app.World.SpawnTrap(gridID, emptyPositions[posIdx])
+	}
 }
 
 // Layout retourne la dimension d'affichage réclamée par Ebitengine en fonction du contexte applicatif.

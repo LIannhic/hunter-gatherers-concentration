@@ -78,6 +78,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
   - `CumulationLevel` : Niveau de cumul (0 à 2) utilisé pour la fusion et le scaling visuel.
   - `Manager` : Stockage et accès rapide aux entités
+  - `DebugState` : État global de débogage permettant d'outrepasser les règles de difficulté, de filtrer les entités et de forcer les shaders.
   - `AddTag(string)`, `HasTag(string)`, `RemoveTag(string)` : Méthodes permettant de gérer les propriétés dynamiques ou visuelles des entités (ex: "moss_lure", "flying").
   - `ThreatZone` : (Creature) Liste de directions attaquées localement.
 - **`component/`** : Stockage et définition des composants (`Store`)

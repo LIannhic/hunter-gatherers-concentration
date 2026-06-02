@@ -77,6 +77,17 @@ type World struct {
 
 	// Référence vers l'engine (pour la communication entre systèmes)
 	Engine *Engine
+
+	// Debug
+	Debug DebugState
+}
+
+type DebugState struct {
+	Visible            bool
+	OverrideDifficulty bool
+	Difficulty         meta.DifficultySettings
+	AllowedCreatures   map[string]bool
+	ActiveShaders      map[string]bool
 }
 
 // NewWorld initialise un nouveau monde avec les réglages par défaut
@@ -100,6 +111,35 @@ func NewWorld() *World {
 		tilesFlippedThisTurn: make([]board.Position, 0),
 		lastTurnNumber:       0,
 		TurnTimer:            NewTurnTimer(meta.GetSettings(meta.LevelNormal).TurnTimerDuration),
+		Debug: DebugState{
+			Difficulty: meta.GetSettings(meta.LevelNormal),
+			AllowedCreatures: map[string]bool{
+				"lumifly":         true,
+				"shadowstalker":   true,
+				"burrower":        true,
+				"specter":         true,
+				"echo_hound":      true,
+				"fleeing_sprite":  true,
+				"moss_monkey":     true,
+				"stonewarden":     true,
+				"flutterwing":     true,
+				"dreamberry":      true,
+				"moonstone":       true,
+				"whispering_herb": true,
+				"crystal_shard":   true,
+				"moss_truffle":    true,
+				"void_bloom":      true,
+				"echo_crystal":    true,
+				"sand_core":       true,
+				"trap":            true,
+				"start_portal":    true,
+				"finish_portal":   true,
+				"dolmen":          true,
+				"obelisk":         true,
+				"portable_portal": true,
+			},
+			ActiveShaders: make(map[string]bool),
+		},
 	}
 
 	// Initialise la grille d'inventaire
@@ -177,7 +217,12 @@ func (w *World) IsNavigationOpen(gridID string) bool {
 			isOpen = true
 		} else {
 			ratio := float64(grid.MatchedTargetsCount) / float64(total)
-			isOpen = ratio >= w.Difficulty.NavThreshold
+
+			threshold := w.Difficulty.NavThreshold
+			if w.Debug.OverrideDifficulty {
+				threshold = w.Debug.Difficulty.NavThreshold
+			}
+			isOpen = ratio >= threshold
 		}
 	}
 
@@ -1679,6 +1724,10 @@ func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
 	}
 
 	settings := world.Difficulty
+	if world.Debug.OverrideDifficulty {
+		settings = world.Debug.Difficulty
+	}
+
 	// Si la durée est <= 0, on ne fait pas de prévisualisation
 	if settings.PreviewDuration <= 0 {
 		return

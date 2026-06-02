@@ -1058,16 +1058,15 @@ func (h *Handler) handleKeyboard() {
 		h.setDifficulty(meta.LevelInsane)
 	}
 
-	// S: Spawn entités de base, Shift+S: Spawn toutes les créatures
-	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
-		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			if h.OnSpawnAllCreatures != nil {
-				h.OnSpawnAllCreatures(h.GetCurrentGridID())
-			}
-		} else {
-			if h.OnSpawnEntities != nil {
-				h.OnSpawnEntities(h.GetCurrentGridID())
-			}
+	// S: Spawn entités via debug list, Shift+S: Spawn TOUTES les créatures
+	if inpututil.IsKeyJustPressed(ebiten.KeyS) && ebiten.IsKeyPressed(ebiten.KeyShift) {
+		if h.OnSpawnAllCreatures != nil {
+			h.OnSpawnAllCreatures(h.GetCurrentGridID())
+		}
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyS) && h.world.Debug.Visible {
+		// Spawn via la liste de debug si la fenêtre est ouverte
+		if h.OnSpawnEntities != nil {
+			h.OnSpawnEntities(h.GetCurrentGridID())
 		}
 	}
 
@@ -1174,9 +1173,12 @@ func (h *Handler) handleNavigationKeys() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
 		dir = board.North
 		pressed = true
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) && !ebiten.IsKeyPressed(ebiten.KeyShift) {
-		dir = board.South
-		pressed = true
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		// Sud : Uniquement si Shift n'est pas pressé ET que la fenêtre de debug n'est pas ouverte
+		if !ebiten.IsKeyPressed(ebiten.KeyShift) && !h.world.Debug.Visible {
+			dir = board.South
+			pressed = true
+		}
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) || inpututil.IsKeyJustPressed(ebiten.KeyA) {
 		dir = board.West
 		pressed = true

@@ -325,8 +325,9 @@ go build -o game ./cmd/game
 | Rotation plateau | + / - |
 | Reset rotation | R |
 | Remplir Inv (Debug) | B |
-| Spawn entités (debug) | S |
+| Spawn entités (debug) | S (Debug ouvert) |
 | Spawn toutes créatures (debug) | Shift+S |
 | Nettoyer plateau (debug) | C |
+| Fenêtre de Debug | F12 |
 | Retour menu | \ |
 Annulation de la PR #39
