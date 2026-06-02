@@ -57,6 +57,13 @@ func (c *RevealTileCommand) CanExecute() bool {
 		return false
 	}
 
+	// Vérifie le coût en mana pour révéler une tuile cumulée (Coût = Niveau)
+	if ent.GetCumulationLevel() > 0 {
+		if c.World.Player.Stats.Mana < ent.GetCumulationLevel() {
+			return false
+		}
+	}
+
 	state := ent.GetState()
 	// Si c'est un piège révélé, on peut toujours le recacher (flip inverse)
 	if ent.GetType() == entity.TypeTrap && state&entity.Revealed != 0 {
@@ -84,6 +91,17 @@ func (c *RevealTileCommand) Execute() error {
 
 	if !c.CanExecute() {
 		return errors.New("impossible de révéler cette tuile")
+	}
+
+	// Consommation de mana pour les tuiles cumulées
+	grid, _ := c.World.GetGrid(c.GridID)
+	tile, _ := grid.Get(c.Position)
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	ent, _ := c.World.Entities.Get(entity.ID(topID))
+
+	if ent.GetCumulationLevel() > 0 {
+		c.World.Player.ConsumeMana(ent.GetCumulationLevel())
+		fmt.Printf("[ALCHIMIE] Révélation d'une tuile Niv.%d : -%d Mana\n", ent.GetCumulationLevel(), ent.GetCumulationLevel())
 	}
 
 	// Calcule la position réelle du joueur en périphérie de la tuile et son ancrage
@@ -177,10 +195,6 @@ type MatchTilesCommand struct {
 }
 
 func (c *MatchTilesCommand) CanExecute() bool {
-	if c.World.Player.Stats.Mana <= 0 {
-		return false
-	}
-
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
 		return false
@@ -209,15 +223,19 @@ func (c *MatchTilesCommand) CanExecute() bool {
 		return false
 	}
 
+	// Vérifie le coût en mana
+	// Match = 1 mana.
+	if c.World.Player.Stats.Mana < 1 {
+		return false
+	}
+
 	return true
 }
 
 func (c *MatchTilesCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("impossible d'appairer ces tuiles")
+		return errors.New("impossible d'appairer ces tuiles (mana insuffisant ou invalide)")
 	}
-
-	c.World.Player.ConsumeMana(1)
 
 	grid, _ := c.World.GetGrid(c.GridID)
 	tile1, _ := grid.Get(c.Pos1)
@@ -229,21 +247,21 @@ func (c *MatchTilesCommand) Execute() error {
 	entity1, _ := c.World.Entities.Get(entity.ID(topID1))
 	entity2, _ := c.World.Entities.Get(entity.ID(topID2))
 
+	level := entity1.GetCumulationLevel()
+
+	c.World.Player.ConsumeMana(1)
+
 	// Refactorisation DDD : La logique d'association est déléguée au Domaine (AssocEngine)
 	result, err := c.AssocEng.TryAssociate(entity1, entity2)
 
 	if err == nil && result.Success {
+		// --- LOGIQUE DE MATCH FINAL (LOOT) ---
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
 
 		if entity1.GetType() == entity.TypeCreature || entity1.GetType() == entity.TypeResource {
-			if grid, ok := c.World.GetGrid(c.GridID); ok {
-				grid.MatchedTargetsCount += 2
-				fmt.Printf("[DEBUG-MATCH] Grid: %s | Match Valide | MatchedTargetsTotal: %d\n", c.GridID, grid.MatchedTargetsCount)
-
-				// Rafraîchit l'état de navigation et émet les événements si nécessaire
-				c.World.IsNavigationOpen(c.GridID)
-			}
+			grid.MatchedTargetsCount += 2
+			c.World.IsNavigationOpen(c.GridID)
 		}
 
 		name := "unknown"
@@ -262,6 +280,7 @@ func (c *MatchTilesCommand) Execute() error {
 				"name":        name,
 				"entity_type": entity1.GetType(),
 				"assoc_type":  result.Type.String(),
+				"level":       level,
 			},
 		})
 
@@ -354,10 +373,6 @@ type MergeTilesCommand struct {
 }
 
 func (c *MergeTilesCommand) CanExecute() bool {
-	if c.World.Player.Stats.Mana <= 0 {
-		return false
-	}
-
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
 		return false
@@ -381,20 +396,30 @@ func (c *MergeTilesCommand) CanExecute() bool {
 		return false
 	}
 
-	// Uniquement si pas déjà cumulés
-	if e1.GetState()&entity.Cumulated != 0 || e2.GetState()&entity.Cumulated != 0 {
+	// Uniquement si les entités sont bien révélées
+	if e1.GetState()&entity.Revealed == 0 || e2.GetState()&entity.Revealed == 0 {
 		return false
 	}
 
-	return e1.GetState()&entity.Revealed != 0 && e2.GetState()&entity.Revealed != 0
+	level := e1.GetCumulationLevel()
+	maxLevel := 2
+	if level >= maxLevel {
+		return false
+	}
+
+	// Coût augmenté : 3 * (Niveau + 1)
+	cost := 3 * (level + 1)
+	if c.World.Player.Stats.Mana < cost {
+		return false
+	}
+
+	return true
 }
 
 func (c *MergeTilesCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("impossible de fusionner ces tuiles")
+		return errors.New("impossible de fusionner ces tuiles (mana insuffisant ou invalide)")
 	}
-
-	c.World.Player.ConsumeMana(3) // Coût augmenté à 3
 
 	grid, _ := c.World.GetGrid(c.GridID)
 	tile1, _ := grid.Get(c.Pos1)
@@ -405,20 +430,27 @@ func (c *MergeTilesCommand) Execute() error {
 	e1, _ := c.World.Entities.Get(entity.ID(id1))
 	e2, _ := c.World.Entities.Get(entity.ID(id2))
 
+	level := e1.GetCumulationLevel()
+	cost := 3 * (level + 1)
+	c.World.Player.ConsumeMana(cost)
+
 	// Refactorisation DDD : On utilise le moteur d'association
 	result, err := c.AssocEng.TryAssociate(e1, e2)
 	isMatch := (err == nil && result.Success)
 
 	if isMatch {
-		fmt.Printf("[MERGE] ✅ Fusion réussie en %v !\n", c.Pos1)
-		// On marque la tuile 1 comme cumulée
-		e1.SetState(e1.GetState() | entity.Cumulated)
+		fmt.Printf("[ALCHIMIE] Fusion réussie en %v (Niveau %d -> %d)\n", c.Pos1, level, level+1)
+
+		// Mise à jour de l'entité survivante
+		e1.SetCumulationLevel(level + 1)
+		e1.SetState(entity.Hidden) // Se recache après fusion
 		e1.AddTag("cumulated")
 
-		// On supprime la tuile 2 (elle a été absorbée)
+		// On retire l'autre entité
 		c.World.RemoveEntity(e2.GetID())
 
-		// Rafraîchit l'état de navigation
+		// Navigation : Une fusion compte pour 1 point
+		grid.MatchedTargetsCount += 1
 		c.World.IsNavigationOpen(c.GridID)
 
 		// Notification de fusion
@@ -427,12 +459,20 @@ func (c *MergeTilesCommand) Execute() error {
 			string(e1.GetID()),
 			e1.GetMatchID(),
 			e1.GetType(),
+			level+1,
+		))
+
+		// Animation visuelle de retournement (fermeture)
+		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(c.Pos1),
+			string(e1.GetID()),
+			c.GridID,
+			tile1.Tilt.ToFlipDirection(),
 		))
 
 		// NOUVEAU : Après une fusion, on referme TOUTES les tuiles révélées
-		// Cela inclut la tuile fusionnée.
-		gridID := c.GridID
-		if grid, ok := c.World.GetGrid(gridID); ok {
+		// (Maintenu car utile pour le gameplay memory)
+		if grid, ok := c.World.GetGrid(c.GridID); ok {
 			for pos, plot := range grid.Plots {
 				if len(plot.EntitiesID) == 0 {
 					continue
@@ -441,9 +481,9 @@ func (c *MergeTilesCommand) Execute() error {
 				if ent, exists := c.World.Entities.Get(entity.ID(topID)); exists {
 					if ent.GetState()&entity.Revealed != 0 {
 						// On ferme avec l'animation de pente
-						_, _ = c.World.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection())
+						_, _ = c.World.FlipTile(c.GridID, pos, plot.Tilt.ToFlipDirection())
 						c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-							entity.Position(pos), string(ent.GetID()), gridID, plot.Tilt.ToFlipDirection()))
+							entity.Position(pos), string(ent.GetID()), c.GridID, plot.Tilt.ToFlipDirection()))
 					}
 				}
 			}

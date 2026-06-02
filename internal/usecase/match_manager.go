@@ -93,27 +93,51 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 	if result.Success {
 		fmt.Printf("[SUCCÈS] Type: %s | Message: %s\n", result.Type.String(), result.Message)
 
-		// L'état appartient aux entités
-		ent.SetState(entity.Matched)
-		ent1.SetState(entity.Matched)
+		level := ent.GetCumulationLevel()
+		maxLevel := 2
+
+		if level < maxLevel {
+			// --- FUSION ---
+			ent.SetCumulationLevel(level + 1)
+			ent.SetState(entity.Hidden)
+			mm.entities.Remove(secondID)
+
+			mm.eventBus.PublishImmediate(event.Event{
+				Type:     event.TileMerged,
+				SourceID: string(firstID),
+				Payload: map[string]interface{}{
+					"position":    entity.Position(pos),
+					"entity_id":   string(firstID),
+					"name":        ent.GetType().String(),
+					"entity_type": ent.GetType(),
+					"level":       level + 1,
+				},
+				Timestamp: time.Now(),
+			})
+		} else {
+			// --- MATCH FINAL ---
+			ent.SetState(entity.Matched)
+			ent1.SetState(entity.Matched)
+
+			// On envoie les deux IDs pour que le LootSystem puisse identifier la paire
+			mm.eventBus.PublishImmediate(event.Event{
+				Type:     event.TileMatched,
+				SourceID: string(secondID),
+				Payload: map[string]interface{}{
+					"position":    entity.Position(pos),
+					"entity_id":   string(secondID),
+					"other_id":    string(firstID),
+					"name":        ent.GetType().String(), // Fallback simple
+					"entity_type": ent.GetType(),
+					"level":       level,
+				},
+				Timestamp: time.Now(),
+			})
+		}
 
 		for _, eff := range result.Effects {
 			fmt.Printf("  -> Effet détecté : %s sur la cible %s\n", eff.Type, eff.Target)
 		}
-
-		// On envoie les deux IDs pour que le LootSystem puisse identifier la paire
-		mm.eventBus.PublishImmediate(event.Event{
-			Type:     event.TileMatched,
-			SourceID: string(secondID),
-			Payload: map[string]interface{}{
-				"position":    entity.Position(pos),
-				"entity_id":   string(secondID),
-				"other_id":    string(firstID),
-				"name":        ent.GetType().String(), // Fallback simple
-				"entity_type": ent.GetType(),
-			},
-			Timestamp: time.Now(),
-		})
 	} else {
 		fmt.Printf("[ÉCHEC] Les tuiles ne correspondent pas. Raison : %v\n", err)
 
