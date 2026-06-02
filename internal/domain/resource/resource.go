@@ -121,8 +121,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 		r.SetMatchable(component.Matchable{
 			MatchID:    "dreamberry",
-			MatchTypes: []string{"identical", "elemental"},
-			Element:    "ethereal",
+			MatchTypes: []string{"identical"},
 		})
 
 	case "moonstone":
@@ -143,8 +142,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 		r.SetMatchable(component.Matchable{
 			MatchID:    "moonstone",
-			LogicKey:   "mineral",
-			MatchTypes: []string{"identical", "logical"},
+			MatchTypes: []string{"identical"},
 		})
 
 	case "whispering_herb":
@@ -164,10 +162,8 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 			DegradeRate:  2,
 		})
 		r.SetMatchable(component.Matchable{
-			MatchID:      "whispering_herb",
-			NarrativeTag: "healing",
-			MatchTypes:   []string{"identical", "narrative", "elemental"},
-			Element:      "life",
+			MatchID:    "whispering_herb",
+			MatchTypes: []string{"identical"},
 		})
 
 	case "crystal_shard":
@@ -189,7 +185,6 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		r.SetMatchable(component.Matchable{
 			MatchID:    "crystal_shard",
 			MatchTypes: []string{"identical"},
-			Element:    "ethereal",
 		})
 
 	case "moss_truffle":
@@ -216,7 +211,6 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		r.SetMatchable(component.Matchable{
 			MatchID:    "void_bloom",
 			MatchTypes: []string{"identical"},
-			Element:    "ethereal",
 		})
 
 	case "echo_crystal":
@@ -230,7 +224,6 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		r.SetMatchable(component.Matchable{
 			MatchID:    "echo_crystal",
 			MatchTypes: []string{"identical"},
-			Element:    "ethereal",
 		})
 
 	case "sand_core":

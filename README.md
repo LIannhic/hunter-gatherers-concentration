@@ -6,7 +6,7 @@
 
 ## Concept
 
-Le projet propose une expérience de puzzle-aventure en tour par tour, où la mécanique du "Memory" est réinventée pour devenir un outil d'exploration et de survie. Dans ce jeu, l'association de paires ne se limite pas à la simple identité visuelle ; elle devient un langage stratégique permettant d'interagir avec un environnement complexe. Le joueur doit faire preuve de mémoire, mais aussi d'intuition logique pour capturer des entités, récolter des composants et manufacturer des artefacts. En transformant un exercice cognitif en une boucle de gameplay profonde, le jeu invite à une réflexion calme mais tendue, où chaque erreur peut altérer la stabilité de l'expérience.
+Le projet propose une expérience de puzzle-aventure en tour par tour, où la mécanique du "Memory" est réinventée pour devenir un outil d'exploration et de survie. Dans ce jeu, l'association de paires identiques permet d'interagir avec un environnement complexe. Le joueur doit faire preuve de mémoire pour capturer des entités, récolter des composants et manufacturer des artefacts. En transformant un exercice cognitif en une boucle de gameplay profonde, le jeu invite à une réflexion calme mais tendue, où chaque erreur peut altérer la stabilité de l'expérience.
 
 ## Contexte
 
@@ -15,13 +15,13 @@ L’enjeu narratif réside dans la tension entre la grisaille du monde réel et 
 
 ## Fonctionnalités principales et Contenus
 
-Le projet se définit par un système de jeu hybride alliant le puzzle mental, la survie et la gestion. Le contenu principal repose sur une mécanique d'association étendue : le joueur ne se contente pas de mémoriser des visuels, mais doit comprendre les liens logiques, élémentaires et narratifs qui unissent les tuiles pour synthétiser des ressources complexes ou capturer des entités. Ce système est soutenu par un écosystème dynamique où les ressources ne sont pas de simples objets inertes, mais des entités vivantes capables de maturer, de se propager ou de réagir aux interactions environnementales. Le plateau de jeu devient ainsi un monde en constante mutation, influencé par des structures interactives telles que des terriers ou des zones de dissimulation qui modifient la visibilité et la sécurité du plan.
+Le projet se définit par un système de jeu hybride alliant le puzzle mental, la survie et la gestion. Le contenu principal repose sur une mécanique d'association de paires identiques : le joueur mémorise des visuels pour récolter des ressources ou capturer des entités. Ce système est soutenu par un écosystème dynamique où les ressources ne sont pas de simples objets inertes, mais des entités vivantes capables de maturer, de se propager ou de réagir aux interactions environnementales. Le plateau de jeu devient ainsi un monde en constante mutation, influencé par des structures interactives telles que des terriers ou des zones de dissimulation qui modifient la visibilité et la sécurité du plan.
 L'expérience propose une profondeur stratégique s'appuyant sur une double boucle de progression. En mission, le joueur doit composer avec des créatures aux comportements riches, capables de transformer le terrain ou de laisser des traces persistantes de leur passage, offrant un défi de lecture environnementale permanent. Hors mission, le contenu se déplace vers une gestion de méta-progression exigeante : le foyer familial devient un enjeu central où chaque ressource collectée doit être judicieusement allouée pour assurer la survie du groupe et l'évolution des capacités du protagoniste. Cette richesse de contenu vise à récompenser l'expertise du joueur, transformant chaque incursion en une opportunité de déchiffrer les secrets d'un univers où l'indice visuel et le cycle de vie des éléments sont aussi cruciaux que la mémoire pure.
 
 ## Mécanisme
 
 Le gameplay repose sur une gestion rigoureuse des ressources et du temps, dictée par un système en tour par tour. Chaque interaction, qu’il s’agisse de retourner une tuile ou d’utiliser un objet, consomme une unité de ressource (temps ou mana), forçant le joueur à planifier ses mouvements au sein d’une limite de tours impartis. La survie dépend de la gestion d'une barre de santé, physique ou mentale, qui s’érode au fil des erreurs ou des confrontations.
-L’aspect central de l’association étendue enrichit la mécanique de mémoire classique : le joueur doit identifier des paires dont la corrélation peut être identique, logique (clé et serrure), élémentaire ou narrative. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
+L’aspect central de l’association de paires identiques enrichit la mécanique de mémoire classique. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
 
 ### Équilibre de la Population
 
@@ -150,7 +150,7 @@ Pour le joueur :Pendant les parties (Actions directes)
 
 * Dévoiler : Révéler le contenu d’une tuile face cachée (consomme du temps ou du mana).
 * Prendre : Collecter des éléments ou capturer des créatures simples via l’identification d’une paire identique.
-* Associer : Créer un lien logique entre deux tuiles complémentaires (ex: Clé + Serrure) pour synthétiser des ressources ou capturer des entités complexes.
+* Associer : Créer un lien entre deux tuiles identiques pour synthétiser des composants ou capturer des entités.
 * Utiliser : Activer un outil, une ressource consommable ou une capacité de créature (ex: cri de l'Echo Hound) pour modifier le plateau ou protéger ses statistiques. Nécessite une confirmation par un second clic sur l'objet sélectionné.
 * Déployer portail : Activer un portail portable pour créer une zone de dégagement 3x3 et initier l’extraction du plan.
 * S’extraire : Initier la fin de l’incursion pour sécuriser le butin avant l’épuisement des ressources de survie.

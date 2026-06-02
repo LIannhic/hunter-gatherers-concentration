@@ -142,8 +142,10 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 ### Objectif
 
-Le cœur du jeu est le mécanisme d'association de tuiles (Memory). Différents types d'associations existent :
-- **Identical** : Paire identique
+Le cœur du jeu est le mécanisme d'association de tuiles (Memory). Pour le moment, seul le type d'association suivant est actif :
+- **Identical** : Paire identique (même ID)
+
+D'autres types d'associations sont prévus pour le futur et ne sont pas encore actifs :
 - **Logical** : Clé/Serrure, Marteau/Enclume
 - **Elemental** : Feu + Bois, Eau + Plante
 - **Narrative** : Fragments d'histoire

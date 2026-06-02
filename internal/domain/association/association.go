@@ -341,9 +341,11 @@ func NewEngine() *Engine {
 	return &Engine{
 		strategies: []Strategy{
 			&IdenticalStrategy{},
-			NewLogicalStrategy(),
-			NewElementalStrategy(),
-			NewNarrativeStrategy(),
+			// Note : Les stratégies Logique, Élémentaire et Narrative sont désactivées
+			// pour le moment. Toutes les tuiles s'associent par similarité.
+			// NewLogicalStrategy(),
+			// NewElementalStrategy(),
+			// NewNarrativeStrategy(),
 			&OrientationStrategy{},
 		},
 	}

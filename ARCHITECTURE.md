@@ -142,7 +142,7 @@ if revealCmd.CanExecute() {
 
 **Commandes principales :**
 - `RevealTileCommand` : Révèle une entité, met à jour la position périphérique du joueur et vérifie la **Confrontation** (dégâts si dans la `ThreatZone`).
-- `MatchTilesCommand` : Tente d'appairer deux entités identiques de même niveau de cumul. Applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide).
+- `MatchTilesCommand` : Tente d'appairer deux entités identiques de même niveau de cumul. Applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide). Pour le moment, seul l'appairage par similarité est actif.
 - `MergeTilesCommand` : Fusionne deux entités identiques normales en une seule version cumulée.
 - `SwitchGridCommand` : Change de grille active.
 - `UsePortablePortalCommand` : Active un portail portable pour créer une zone de dégagement et extraire le joueur du plan
