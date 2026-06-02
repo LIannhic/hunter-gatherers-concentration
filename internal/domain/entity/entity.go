@@ -401,6 +401,8 @@ type Entity interface {
 	SetTransformation(Transformation)
 	GetOrientation() Direction // Orientation cardinale
 	SetOrientation(Direction)
+	GetCumulationLevel() int
+	SetCumulationLevel(int)
 	AddTag(string)
 	HasTag(string) bool
 	RemoveTag(string)
@@ -480,6 +482,7 @@ type BaseEntity struct {
 	Active    bool
 	State     TileState // L'état appartient maintenant à l'entité
 	Transform Transformation
+	CumulationLevel int
 	Tags      []string
 	Metadata  map[string]interface{}
 }
@@ -532,6 +535,9 @@ func (e *BaseEntity) SetState(s TileState)   { e.State = s }
 func (e *BaseEntity) GetTransformation() Transformation  { return e.Transform }
 func (e *BaseEntity) SetTransformation(t Transformation) { e.Transform = t }
 
+func (e *BaseEntity) GetCumulationLevel() int { return e.CumulationLevel }
+func (e *BaseEntity) SetCumulationLevel(l int) { e.CumulationLevel = l }
+
 func (e *BaseEntity) GetOrientation() Direction {
 	// Déduit une direction cardinale vers laquelle pointe le "Haut" de l'objet
 	// après application de la transformation D4.
@@ -580,7 +586,7 @@ func (e *BaseEntity) RemoveTag(tag string) {
 }
 
 func (e *BaseEntity) IsCumulated() bool {
-	return e.State&Cumulated != 0
+	return e.CumulationLevel > 0
 }
 
 func (e *BaseEntity) GetHoverID() string {

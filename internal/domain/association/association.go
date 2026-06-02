@@ -69,6 +69,7 @@ type Matchable interface {
 	GetElement() string
 	GetNarrativeTag() string
 	GetMatchTypes() []string
+	GetCumulationLevel() int
 	IsCumulated() bool
 	GetCategory() string
 }
@@ -81,12 +82,12 @@ type IdenticalStrategy struct{}
 func (s *IdenticalStrategy) Type() Type { return Identical }
 
 func (s *IdenticalStrategy) CanAssociate(a, b Matchable) bool {
-	return a.GetMatchID() == b.GetMatchID() && a.GetMatchID() != "" && a.IsCumulated() == b.IsCumulated()
+	return a.GetMatchID() == b.GetMatchID() && a.GetMatchID() != ""
 }
 
 func (s *IdenticalStrategy) Resolve(a, b Matchable) (Result, error) {
 	if !s.CanAssociate(a, b) {
-		return Result{Success: false}, errors.New("pas une paire identique ou niveau de cumul différent")
+		return Result{Success: false}, errors.New("pas une paire identique")
 	}
 
 	matchType := Identical
@@ -349,6 +350,11 @@ func NewEngine() *Engine {
 }
 
 func (e *Engine) TryAssociate(a, b Matchable) (Result, error) {
+	// Centralisation du contrôle de cumul : seules les tuiles de même niveau s'associent
+	if a.GetCumulationLevel() != b.GetCumulationLevel() {
+		return Result{Success: false}, fmt.Errorf("niveaux de cumul incompatibles (%d vs %d)", a.GetCumulationLevel(), b.GetCumulationLevel())
+	}
+
 	// Essaie chaque stratégie dans l'ordre de spécificité
 	for _, strategy := range e.strategies {
 		if strategy.CanAssociate(a, b) {

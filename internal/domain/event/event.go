@@ -192,7 +192,7 @@ func NewEntityRevealedEvent(tilePos entity.Position, entityID string, gridID str
 	}
 }
 
-func NewTileMatchedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type) Event {
+func NewTileMatchedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type, level int) Event {
 	return Event{
 		Type:     TileMatched,
 		SourceID: entityID,
@@ -201,12 +201,13 @@ func NewTileMatchedEvent(tilePos entity.Position, entityID string, name string, 
 			"entity_id":   entityID,
 			"name":        name,
 			"entity_type": entityType,
+			"level":       level,
 		},
 		Timestamp: time.Now(),
 	}
 }
 
-func NewTileMergedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type) Event {
+func NewTileMergedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type, level int) Event {
 	return Event{
 		Type:     TileMerged,
 		SourceID: entityID,
@@ -215,6 +216,7 @@ func NewTileMergedEvent(tilePos entity.Position, entityID string, name string, e
 			"entity_id":   entityID,
 			"name":        name,
 			"entity_type": entityType,
+			"level":       level,
 		},
 		Timestamp: time.Now(),
 	}
