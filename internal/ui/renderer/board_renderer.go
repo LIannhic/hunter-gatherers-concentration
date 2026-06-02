@@ -970,12 +970,12 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	geo := r.generateIdleGeometry(tx, ty, entityID, theme.HiddenBorder)
 	r.ApplyBoardRotation(geo.V, cx, cy)
 
-	// --- CUMUL : Mise à l'échelle et couleur ---
-	if visualState&entity.Cumulated != 0 {
-		const cumulScale = 1.25
+	// --- CUMUL : Mise à l'échelle et couleur (Uniquement si RÉVÉLÉ) ---
+	if (visualState&entity.Revealed != 0 || visualState&entity.Matched != 0) && ent.GetCumulationLevel() > 0 {
+		cumulScale := 1.0 + 0.15*float64(ent.GetCumulationLevel())
 		for i := range geo.V {
-			geo.V[i].DstX = cx + (geo.V[i].DstX-cx)*cumulScale
-			geo.V[i].DstY = cy + (geo.V[i].DstY-cy)*cumulScale
+			geo.V[i].DstX = cx + (geo.V[i].DstX-cx)*float32(cumulScale)
+			geo.V[i].DstY = cy + (geo.V[i].DstY-cy)*float32(cumulScale)
 
 			// Teinte légèrement dorée/brillante
 			geo.V[i].ColorR *= 1.2

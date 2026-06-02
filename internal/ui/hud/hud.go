@@ -51,6 +51,11 @@ type HUD struct {
 	infoMessage       string         // Message d'item affiché à l'écran
 	infoMessageTimer  int            // Timer du message d'item
 
+	// Feedback de coût (Segment clignotant)
+	PotentialManaCost   int
+	PotentialHealthCost int
+	PotentialSanityCost int
+
 	assetPage        int // Page actuelle de l'atlas des assets
 }
 
@@ -142,6 +147,12 @@ func (h *HUD) IsDreamberrySelected() bool {
 
 func (h *HUD) ClearActiveLootSelection() {
 	h.selectedLootIndex = -1
+}
+
+func (h *HUD) SetPotentialCosts(mana, health, sanity int) {
+	h.PotentialManaCost = mana
+	h.PotentialHealthCost = health
+	h.PotentialSanityCost = sanity
 }
 
 // ToggleDetails bascule l'affichage de la fenêtre de détails
@@ -634,10 +645,10 @@ func (h *HUD) renderGauges(screen *ebiten.Image) {
 	}
 
 	// Health gauge
-	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255})
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255}, h.PotentialHealthCost)
 
 	// Mana gauge
-	h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255})
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255}, h.PotentialManaCost)
 
 	// Sanity gauge (avec pulse si panique)
 	var sanityX float64 = ui.GaugesX + ui.SanityGaugeRelativeX
@@ -647,7 +658,7 @@ func (h *HUD) renderGauges(screen *ebiten.Image) {
 		offset := h.computePanicOffset()
 		sanityX += offset
 	}
-	h.drawVerticalGauge(screen, sanityX, sanityY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255})
+	h.drawVerticalGauge(screen, sanityX, sanityY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255}, h.PotentialSanityCost)
 }
 
 // computePanicOffset calcule un décalage oscillant dont l'amplitude augmente
@@ -667,7 +678,7 @@ func (h *HUD) computePanicOffset() float64 {
 	return math.Sin(float64(h.pulseFrame)*freq) * maxAmp
 }
 
-func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string, val, max int, clr color.Color) {
+func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string, val, max int, clr color.Color, potentialCost int) {
 	// Gauge Holder background
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(ui.GaugeW), float32(ui.GaugeH), color.RGBA{30, 30, 30, 255}, true)
 
@@ -689,6 +700,20 @@ func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string
 
 	// Fill from bottom
 	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(fillHeight)), float32(ui.GaugeW), fillHeight, clr, true)
+
+	// --- FEEDBACK DE COÛT (Segment clignotant) ---
+	if potentialCost > 0 && max > 0 {
+		// Le segment clignote si on est en phase "on" (ex: toutes les 30 frames)
+		if (h.pulseFrame/15)%2 == 0 {
+			costHeight := (float32(potentialCost) / float32(max)) * totalPx
+			if costHeight > fillHeight {
+				costHeight = fillHeight
+			}
+
+			sy := y + ui.GaugeH - float64(fillHeight)
+			vector.DrawFilledRect(screen, float32(x), float32(sy), float32(ui.GaugeW), costHeight, color.RGBA{255, 255, 255, 180}, true)
+		}
+	}
 
 	// Label
 	text.Draw(screen, label, basicfont.Face7x13, int(x)+25, int(y)+int(ui.GaugeH)+15, color.White)

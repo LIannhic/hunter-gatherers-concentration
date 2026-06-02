@@ -60,6 +60,7 @@ type Handler struct {
 	OnVictory             func()                                     // Callback déclenché lors de l'activation du portail final
 	OnForceTurn           func()                                     // KeySpace: Forcer le prochain tour
 	OnToggleAutoMove      func()                                     // F10: Toggle mouvement auto
+	OnHoverButton         func(mana, health, sanity int)             // Feedback de coût au survol
 
 	// Gestionnaire réactif des boutons d'action
 	actionButtons *actionbuttons.Manager
@@ -185,6 +186,9 @@ func (h *Handler) Update() error {
 		}
 	}
 
+	// Feedback de coût au survol des boutons
+	h.updateButtonHover()
+
 	// Gestion du survol (Hover) pour les animations avancées
 	h.updateHover()
 
@@ -193,6 +197,58 @@ func (h *Handler) Update() error {
 	}
 	h.handleKeyboard()
 	return nil
+}
+
+func (h *Handler) updateButtonHover() {
+	if h.actionButtons == nil || h.OnHoverButton == nil {
+		return
+	}
+
+	states := h.actionButtons.ComputeStates()
+	x, y := ebiten.CursorPosition()
+	btnID, ok := h.actionButtons.HitTest(x, y, states)
+
+	if !ok {
+		h.OnHoverButton(0, 0, 0)
+		return
+	}
+
+	mana, hp, sanity := 0, 0, 0
+
+	// Calcul du coût potentiel basé sur l'état actuel (2 tuiles révélées)
+	if len(h.revealedTiles) == 2 {
+		grid, _ := h.world.GetGrid(h.GetCurrentGridID())
+		if grid != nil {
+			tile1, _ := grid.Get(h.revealedTiles[0])
+			tile2, _ := grid.Get(h.revealedTiles[1])
+			if len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
+				id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+				id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+				e1, _ := h.world.Entities.Get(entity.ID(id1))
+				e2, _ := h.world.Entities.Get(entity.ID(id2))
+
+				if e1 != nil && e2 != nil {
+					level := e1.GetCumulationLevel()
+
+					switch btnID {
+					case actionbuttons.BtnMatch:
+						mana = 1
+					case actionbuttons.BtnMerge:
+						mana = 3 * (level + 1)
+					case actionbuttons.BtnSkip, actionbuttons.BtnEndTurn:
+						// Estimation du risque maximum (les deux tuiles sont des créatures ou ressources)
+						hp = 20     // 2 créatures x 10
+						mana = 10   // 2 ressources x 5
+					}
+				}
+			}
+		}
+	} else if btnID == actionbuttons.BtnEndTurn {
+		// Pas de tuiles révélées, mais End Turn consomme toujours 1 SN par défaut
+		sanity = 1
+	}
+
+	h.OnHoverButton(mana, hp, sanity)
 }
 
 func (h *Handler) updateHover() {
@@ -887,47 +943,6 @@ func (h *Handler) processMatchAttempt() {
 		return
 	}
 
-	if e1.GetType() == entity.TypeTrap && e2.GetType() == entity.TypeTrap {
-		fmt.Println("[MATCH] ✅ Deux pièges appairés ! Ils sont supprimés.")
-		h.world.RemoveEntity(e1.GetID())
-		h.world.RemoveEntity(e2.GetID())
-		h.revealedTiles = nil
-		h.isProcessing = false
-		h.ClearSelection()
-		if h.OnTurnEnd != nil {
-			h.OnTurnEnd()
-		}
-		return
-	}
-
-	// CAS ÉCHEC : Un piège et autre chose (Ressource ou Créature)
-	if (e1.GetType() == entity.TypeTrap || e2.GetType() == entity.TypeTrap) &&
-		(e1.GetType() != entity.TypeTrap || e2.GetType() != entity.TypeTrap) {
-		fmt.Printf("[MATCH] ❌ Échec : %s et %s ne peuvent pas être appairés.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
-		h.revealedTiles = nil
-		h.isProcessing = false
-		h.ClearSelection()
-
-		// On recache les entités avec animation basée sur la pente (Slope)
-		p1, _ := grid.Get(pos1)
-		p2, _ := grid.Get(pos2)
-		fDir1 := p1.Tilt.ToFlipDirection()
-		fDir2 := p2.Tilt.ToFlipDirection()
-
-		_, _ = h.world.FlipTile(gridID, pos1, fDir1)
-		_, _ = h.world.FlipTile(gridID, pos2, fDir2)
-
-		h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-			entity.Position(pos1), string(e1.GetID()), gridID, fDir1))
-		h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-			entity.Position(pos2), string(e2.GetID()), gridID, fDir2))
-
-		if h.OnTurnEnd != nil {
-			h.OnTurnEnd()
-		}
-		return
-	}
-
 	fmt.Printf("[MATCH] Comparaison de la paire : %s vs %s\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
 
 	cmd := &usecase.MatchTilesCommand{
@@ -1606,5 +1621,6 @@ func (m *exitMatchable) GetLogicKey() string     { return "" }
 func (m *exitMatchable) GetElement() string      { return "" }
 func (m *exitMatchable) GetNarrativeTag() string { return "" }
 func (m *exitMatchable) GetMatchTypes() []string { return []string{"orientation"} }
+func (m *exitMatchable) GetCumulationLevel() int { return 0 }
 func (m *exitMatchable) IsCumulated() bool       { return false }
 func (m *exitMatchable) GetCategory() string     { return "navigation" }

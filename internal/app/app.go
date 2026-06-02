@@ -141,6 +141,7 @@ func NewApplication() (*Application, error) {
 	app.Input.OnToggleDetails = app.HUD.ToggleDetails
 	app.Input.OnToggleInvDetails = app.HUD.ToggleInventoryDetails
 	app.Input.OnToggleAssetsDetails = app.HUD.ToggleAssetsDetails
+	app.Input.OnHoverButton = app.HUD.SetPotentialCosts
 
 	// Remplissage de débogage pour tester l'utilisation des objets
 	app.Input.OnFillInventory = func() {
