@@ -752,6 +752,11 @@ func (c *UseScannerItemCommand) CanExecute() bool {
 }
 
 func (c *UseScannerItemCommand) Execute() error {
+	item, err := c.World.Player.Inventory.GetItem(c.ItemIndex)
+	if err != nil {
+		return err
+	}
+
 	if !c.CanExecute() {
 		return errors.New("impossible d'utiliser le scanner (item invalide ou inutilisable)")
 	}
@@ -761,7 +766,7 @@ func (c *UseScannerItemCommand) Execute() error {
 		targetGrid = c.World.CurrentGridID
 	}
 
-	err := c.World.TriggerScannerEffect(targetGrid)
+	err = c.World.TriggerScannerEffect(targetGrid, item.GetCumulationLevel())
 	if err != nil {
 		return fmt.Errorf("échec de l'effet de scan : %w", err)
 	}
@@ -817,7 +822,7 @@ func (c *UseLootItemCommand) Execute() error {
 		return fmt.Errorf("les conditions d'utilisation pour %s ne sont pas remplies (aucune pile trouvée ?)", item.Name)
 	}
 
-	message, errAbility := ability.Execute(c.World)
+	message, errAbility := ability.Execute(c.World, item.GetCumulationLevel())
 	if errAbility != nil {
 		return errAbility
 	}

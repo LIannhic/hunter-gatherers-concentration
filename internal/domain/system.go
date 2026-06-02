@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"strings"
@@ -1804,6 +1805,13 @@ func (s *LootSystem) onTileMatched(e event.Event) {
 		IsDeletable:  true,
 	}
 
+	// --- CUMUL : Augmentation de la valeur du butin ---
+	level, _ := e.Payload["level"].(int)
+	loot.SetCumulationLevel(level)
+	if level > 0 {
+		loot.AddTag(fmt.Sprintf("level_%d", level))
+	}
+
 	// Liste restreinte de ce qui n'est PAS utilisable (si besoin)
 	// Pour l'instant, toutes les créatures et ressources ont des effets.
 	// On garde le type d'origine en tag pour le rendu
@@ -1836,13 +1844,13 @@ func (s *LootSystem) getEntityName(ent entity.Entity) string {
 
 // --- LOGIQUE DE SCANNER (ECHO HOUND) ---
 
-func (w *World) TriggerScannerEffect(gridID string) error {
+func (w *World) TriggerScannerEffect(gridID string, level int) error {
 	_, ok := w.GetGrid(gridID)
 	if !ok {
 		return errors.New("grille introuvable")
 	}
 
-	fmt.Printf("[WORLD] L'Echo Hound hurle sur la zone %s !\n", gridID)
+	fmt.Printf("[WORLD] L'Echo Hound hurle sur la zone %s (Niveau %d) !\n", gridID, level)
 
 	// 1. On crée une liste des positions des entités cachées
 	scannedPositions := make([]board.Position, 0)
@@ -1854,6 +1862,9 @@ func (w *World) TriggerScannerEffect(gridID string) error {
 		}
 	}
 
+	// Calcul de la durée basée sur le niveau : 2s * (2.2^niveau)
+	duration := 2.0 * math.Pow(2.2, float64(level))
+
 	// 2. On publie un événement immédiat pour l'UI
 	w.EventBus.PublishImmediate(event.Event{
 		Type:     event.Type("scanner_triggered"),
@@ -1861,7 +1872,7 @@ func (w *World) TriggerScannerEffect(gridID string) error {
 		Payload: map[string]interface{}{
 			"grid_id":   gridID,
 			"positions": scannedPositions,
-			"duration":  2.0,
+			"duration":  duration,
 		},
 	})
 
