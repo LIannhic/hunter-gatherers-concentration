@@ -76,6 +76,7 @@ func (s *LifecycleSystem) Update(world *World) {
 - **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
   - `TileState` : Hidden, Revealed, Matched, Blocked
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
+  - `CumulationLevel` : Niveau de cumul (0 à 2) utilisé pour la fusion et le scaling visuel.
   - `Manager` : Stockage et accès rapide aux entités
   - `AddTag(string)`, `HasTag(string)`, `RemoveTag(string)` : Méthodes permettant de gérer les propriétés dynamiques ou visuelles des entités (ex: "moss_lure", "flying").
   - `ThreatZone` : (Creature) Liste de directions attaquées localement.
@@ -355,9 +356,10 @@ Le domaine communique l'intention de profondeur au moteur de rendu via les évé
 ### Fusion et Cumul (MERGE)
 
 Une nouvelle étape de gameplay s'insère avant la capture :
-- **Principe** : Fusionner 2 entités normales identiques via le bouton **MERGE**.
-- **Effet** : Une entité est retirée, l'autre passe en statut `Cumulated` (plus grande, bordure dorée).
-- **Match** : Le bouton **MATCH** ne valide désormais que des paires de même rang (Normal+Normal ou Cumulé+Cumulé). Les associations sont désormais gérées de manière centralisée par l'**AssocEngine** dans la couche Domain.
+- **Principe** : Fusionner 2 entités identiques de même niveau via le bouton **MERGE**.
+- **Effet** : Une entité est retirée, l'autre augmente son `CumulationLevel` (Niveau max 2).
+- **Match** : Le bouton **MATCH** valide des paires de même rang. Un match de haut niveau donne un butin plus puissant. Les associations sont désormais gérées de manière centralisée par l'**AssocEngine** dans la couche Domain, qui impose une égalité stricte des niveaux de cumul.
+- **Mana** : La fusion a un coût progressif, et la révélation d'une tuile cumulée consomme du Mana.
 
 Certains butins peuvent être utilisés directement depuis l'inventaire pour octroyer des bonus :
 

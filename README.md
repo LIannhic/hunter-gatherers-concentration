@@ -94,18 +94,30 @@ Quatre boutons fixes occupent les coins du Playmat. Leur accessibilité est pure
 
 | Bouton | Position | Comportement |
 |--------|----------|--------------|
-| **MATCH** | Haut-gauche | Actif uniquement quand 2 tuiles cumulées sont retournées. Capture la paire. |
+| **MATCH** | Haut-gauche | Capture la paire. Donne du butin (Loot). |
 | **SKIP** | Haut-droite | Actif uniquement quand 2 tuiles sont retournées. Referme les tuiles et consomme le tour. |
-| **TURN** | Bas-gauche | Toujours actif. Force la fin du tour. |
-| **MERGE** | Bas-droite | Actif uniquement quand 2 tuiles identiques normales sont retournées. Fusionne la paire en une version plus forte. |
+| **TURN** | Bas-gauche | Toujours actif. Force la fin du tour. Consomme 1 Sanité par défaut. |
+| **MERGE** | Bas-droite | Fusionne la paire en une version plus forte (Niveau +1). Se recache. |
 
-### Fusion et Cumul (MERGE)
+### Fusion et Cumul (MERGE vs MATCH)
 
-Le système de progression immédiate sur le plateau repose sur la fusion :
-- **Action** : Cliquez sur **MERGE** (Coût : 3 Mana) pour fusionner deux tuiles identiques normales.
-- **Résultat** : Une tuile est absorbée, l'autre devient une version **Cumulée** (plus grande, teinte dorée).
-- **Conséquence** : Effectuer une fusion termine automatiquement le tour et referme toutes les tuiles.
-- **Loot** : Pour capturer une paire via **MATCH**, les deux tuiles doivent avoir le même rang (soit deux Normales, soit deux Cumulées).
+Le système de progression immédiate sur le plateau repose sur le choix du joueur :
+- **MERGE** : Fusionne deux tuiles identiques de même niveau.
+    - **Coût** : `3 * (Niveau + 1)` Mana.
+    - **Résultat** : Une tuile est absorbée, l'autre devient une version **Cumulée** supérieure (Niveau max 2).
+    - **Conséquence** : Termine le tour et referme toutes les tuiles.
+- **MATCH** : Capture une paire identique de même niveau.
+    - **Coût** : 1 Mana.
+    - **Résultat** : Les deux tuiles sont supprimées et transformées en **Butin** (Loot).
+    - **Scaling** : Un match de haut niveau produit un butin de plus grande valeur.
+- **Révélation** : Retourner une tuile cumulée (Niv.1+) consomme du Mana égal à son niveau.
+
+### Feedback Visuel et Prudence (Hover)
+
+L'interface assiste le joueur dans sa gestion des ressources via un système de **feedback dynamique au survol** :
+- **Jauges Clignotantes** : Survoler un bouton d'action (**Match**, **Merge**, **Skip**, **Turn**) fait clignoter un segment blanc sur les jauges (Mana, Santé, Sanité) correspondant au coût ou au risque maximum de l'action.
+- **Anti-Triche** : Aucun feedback de coût n'est affiché au survol des tuiles cachées pour éviter de divulguer des informations sur leur nature (créature vs ressource).
+- **Rendu Sélectif** : Les tuiles cumulées n'apparaissent plus grandes et dorées que lorsqu'elles sont **Révélées**. À l'état caché, elles sont identiques aux tuiles normales.
 
 ### Troubles cognitifs (Status Effects)
 

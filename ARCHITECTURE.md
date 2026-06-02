@@ -85,13 +85,13 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Permet la recherche rapide des entités par position
   - **Inventory Grid** : L'inventaire est désormais une grille logicielle (`InventoryGridID`), permettant un traitement spatial uniforme (hover, highlights).
   - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles. Les transformations sont cumulatives (`apply * current`).
-  - **Cumul (Merge)** : Les entités peuvent être fusionnées pour devenir plus grandes (scale 1.25x) et changer de statut (`Cumulated`). Ce statut est persistant et influence les règles de match.
+  - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2). Cela influence les règles de match et le rendu (échelle x1.15 par niveau si révélé).
 
 - **Systems** : Mettent à jour l'état du monde
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
   - **ResourceLifecycleSystem** : Gère la maturation des ressources
-  - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire.
+  - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire. Le butin hérite du niveau de cumul de la paire.
   - **TrackSystem** : Gère la décomposition temporelle des traces
 
 - **Interface `Hoverable`** : Unifie l'interaction de survol pour les tuiles, les sorties de navigation et les objets de l'inventaire. Centralise la logique d'autorisation (ex: blocage des tuiles scellées).
@@ -220,7 +220,7 @@ Séparation des responsabilités :
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
 - **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur.
 
-- **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip.
+- **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip. Coordonne le **Feedback de Coût** vers les jauges du HUD.
 
 ### 5. App (Wiring)
 
