@@ -145,10 +145,11 @@ func (h *HUD) updateMessages() {
 	speed := 2.0
 	for i := 0; i < len(h.messages); i++ {
 		m := h.messages[i]
-		m.X += speed
+		m.X -= speed
 
-		// Si le message est complètement sorti à droite
-		if m.X > h.messageBoxWidth {
+		// Si le message est complètement sorti à gauche
+		// On utilise un offset négatif fixe car on n'a pas la largeur exacte ici
+		if m.X < -400 {
 			m.Scrolls++
 			// On le fait disparaître après 2 passages
 			if m.Scrolls >= 2 {
@@ -156,9 +157,8 @@ func (h *HUD) updateMessages() {
 				i--
 				continue
 			}
-			// Sinon on le reset à gauche (approximativement, on utilise la largeur du texte plus tard)
-			// Pour faire simple, on le remet à une position négative arbitraire
-			m.X = -300
+			// Sinon on le reset à droite
+			m.X = h.messageBoxWidth + 50
 		}
 	}
 }
@@ -168,7 +168,7 @@ func (h *HUD) AddMessage(text string) {
 	target := len(h.messages) % 2
 	h.messages = append(h.messages, &ScrollingMessage{
 		Text:      text,
-		X:         -200, // Démarre hors champ à gauche
+		X:         h.messageBoxWidth, // Démarre au bord droit
 		Scrolls:   0,
 		TargetBox: target,
 	})
