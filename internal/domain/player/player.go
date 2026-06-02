@@ -192,8 +192,8 @@ func NewInventory(maxSize int) *Inventory {
 
 // Constructeurs d'objets spécifiques
 
-func NewPortablePortalItem() *LootItem {
-	return &LootItem{
+func NewPortablePortalItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         PortablePortalItemName,
 		SourceID:     PortablePortalItemSourceID,
@@ -201,10 +201,12 @@ func NewPortablePortalItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  false,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewEchoHoundItem() *LootItem {
-	return &LootItem{
+func NewEchoHoundItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         EchoHoundItemName,
 		SourceID:     EchoHoundItemSourceID,
@@ -212,10 +214,12 @@ func NewEchoHoundItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewDreamberryItem() *LootItem {
-	return &LootItem{
+func NewDreamberryItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         DreamberryItemName,
 		SourceID:     DreamberryItemSourceID,
@@ -223,10 +227,12 @@ func NewDreamberryItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewMoonstoneItem() *LootItem {
-	return &LootItem{
+func NewMoonstoneItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         MoonstoneItemName,
 		SourceID:     MoonstoneItemSourceID,
@@ -234,10 +240,12 @@ func NewMoonstoneItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewCrystalShardItem() *LootItem {
-	return &LootItem{
+func NewCrystalShardItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         CrystalShardItemName,
 		SourceID:     CrystalShardItemSourceID,
@@ -245,10 +253,12 @@ func NewCrystalShardItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewWhisperingHerbItem() *LootItem {
-	return &LootItem{
+func NewWhisperingHerbItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         WhisperingHerbItemName,
 		SourceID:     WhisperingHerbItemSourceID,
@@ -256,10 +266,12 @@ func NewWhisperingHerbItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewSpecterItem() *LootItem {
-	return &LootItem{
+func NewSpecterItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         SpecterItemName,
 		SourceID:     SpecterItemSourceID,
@@ -267,10 +279,12 @@ func NewSpecterItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewShadowstalkerItem() *LootItem {
-	return &LootItem{
+func NewShadowstalkerItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         ShadowstalkerItemName,
 		SourceID:     ShadowstalkerItemSourceID,
@@ -278,10 +292,12 @@ func NewShadowstalkerItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewMossMonkeyItem() *LootItem {
-	return &LootItem{
+func NewMossMonkeyItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         MossMonkeyItemName,
 		SourceID:     MossMonkeyItemSourceID,
@@ -289,10 +305,12 @@ func NewMossMonkeyItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewStonewardenItem() *LootItem {
-	return &LootItem{
+func NewStonewardenItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         StonewardenItemName,
 		SourceID:     StonewardenItemSourceID,
@@ -300,10 +318,12 @@ func NewStonewardenItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewLumiflyItem() *LootItem {
-	return &LootItem{
+func NewLumiflyItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         LumiflyItemName,
 		SourceID:     LumiflyItemSourceID,
@@ -311,10 +331,12 @@ func NewLumiflyItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewBurrowerItem() *LootItem {
-	return &LootItem{
+func NewBurrowerItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         BurrowerItemName,
 		SourceID:     BurrowerItemSourceID,
@@ -322,10 +344,12 @@ func NewBurrowerItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewFleeingSpriteItem() *LootItem {
-	return &LootItem{
+func NewFleeingSpriteItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         FleeingSpriteName,
 		SourceID:     FleeingSpriteSourceID,
@@ -333,10 +357,12 @@ func NewFleeingSpriteItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewFlutterwingItem() *LootItem {
-	return &LootItem{
+func NewFlutterwingItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         FlutterwingItemName,
 		SourceID:     FlutterwingItemSourceID,
@@ -344,10 +370,12 @@ func NewFlutterwingItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewMossTruffleItem() *LootItem {
-	return &LootItem{
+func NewMossTruffleItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         MossTruffleItemName,
 		SourceID:     MossTruffleItemSourceID,
@@ -355,10 +383,12 @@ func NewMossTruffleItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewEchoCrystalItem() *LootItem {
-	return &LootItem{
+func NewEchoCrystalItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         EchoCrystalItemName,
 		SourceID:     EchoCrystalItemSourceID,
@@ -366,10 +396,12 @@ func NewEchoCrystalItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewVoidBloomItem() *LootItem {
-	return &LootItem{
+func NewVoidBloomItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         VoidBloomItemName,
 		SourceID:     VoidBloomItemSourceID,
@@ -377,10 +409,12 @@ func NewVoidBloomItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewSandCoreItem() *LootItem {
-	return &LootItem{
+func NewSandCoreItem(level int) *LootItem {
+	item := &LootItem{
 		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
 		Name:         SandCoreItemName,
 		SourceID:     SandCoreItemSourceID,
@@ -388,6 +422,8 @@ func NewSandCoreItem() *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
 

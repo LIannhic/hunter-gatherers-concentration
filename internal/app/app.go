@@ -147,22 +147,22 @@ func NewApplication() (*Application, error) {
 	app.Input.OnFillInventory = func() {
 		fmt.Println("[DEBUG] Remplissage de l'inventaire avec divers objets.")
 		items := []*player.LootItem{
-			player.NewCrystalShardItem(),
-			player.NewDreamberryItem(),
-			player.NewMoonstoneItem(),
-			player.NewWhisperingHerbItem(),
-			player.NewBurrowerItem(),
-			player.NewEchoHoundItem(),
-			player.NewMossMonkeyItem(),
-			player.NewShadowstalkerItem(),
-			player.NewSpecterItem(),
-			player.NewStonewardenItem(),
-			player.NewFleeingSpriteItem(),
-			player.NewFlutterwingItem(),
-			player.NewMossTruffleItem(),
-			player.NewEchoCrystalItem(),
-			player.NewVoidBloomItem(),
-			player.NewSandCoreItem(),
+			player.NewCrystalShardItem(0),
+			player.NewDreamberryItem(0),
+			player.NewMoonstoneItem(0),
+			player.NewWhisperingHerbItem(0),
+			player.NewBurrowerItem(0),
+			player.NewEchoHoundItem(0),
+			player.NewMossMonkeyItem(0),
+			player.NewShadowstalkerItem(0),
+			player.NewSpecterItem(0),
+			player.NewStonewardenItem(0),
+			player.NewFleeingSpriteItem(0),
+			player.NewFlutterwingItem(0),
+			player.NewMossTruffleItem(0),
+			player.NewEchoCrystalItem(0),
+			player.NewVoidBloomItem(0),
+			player.NewSandCoreItem(0),
 		}
 		for _, item := range items {
 			_ = app.World.AddLootItem(item)
@@ -823,7 +823,7 @@ func (app *Application) StartGame() {
 
 	// Initialisation propre de l'inventaire via le World
 	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
-	_ = app.World.AddLootItem(player.NewPortablePortalItem())
+	_ = app.World.AddLootItem(player.NewPortablePortalItem(0))
 	app.World.Player.Inventory.ScrollOffset = 0
 
 	app.Engine.ResetPreviews()

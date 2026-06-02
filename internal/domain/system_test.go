@@ -202,7 +202,7 @@ func TestWorldGenerateLayoutPopulatesZones(t *testing.T) {
 func TestWorldDeployPortablePortalSuccess(t *testing.T) {
 	w := NewWorld()
 	w.CreateGrid("test", 6, 6, board.BiomeForest)
-	_ = w.AddLootItem(player.NewPortablePortalItem())
+	_ = w.AddLootItem(player.NewPortablePortalItem(0))
 
 	portal, err := w.DeployPortablePortal("test")
 	if err != nil {
@@ -233,7 +233,7 @@ func TestWorldDeployPortablePortalForcedPenalty(t *testing.T) {
 		}
 	}
 
-	_ = w.AddLootItem(player.NewPortablePortalItem())
+	_ = w.AddLootItem(player.NewPortablePortalItem(0))
 
 	portal, err := w.DeployPortablePortal("test")
 	if err != nil {
