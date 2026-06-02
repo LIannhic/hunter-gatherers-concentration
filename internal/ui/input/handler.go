@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"strings"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -59,6 +60,7 @@ type Handler struct {
 	OnVictory             func()                                     // Callback déclenché lors de l'activation du portail final
 	OnForceTurn           func()                                     // KeySpace: Forcer le prochain tour
 	OnToggleAutoMove      func()                                     // F10: Toggle mouvement auto
+	OnHoverButton         func(mana, health, sanity int)             // Feedback de coût au survol
 
 	// Gestionnaire réactif des boutons d'action
 	actionButtons *actionbuttons.Manager
@@ -74,12 +76,16 @@ type Handler struct {
 
 	// Victory timer (V0.2 : Déclenché par le déploiement du portail portable)
 	victoryTimer *domain.TurnTimer
+
+	// Direction par laquelle le joueur est entré dans la zone actuelle
+	entranceDir entity.Direction
 }
 
 func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
 	h := &Handler{
 		world:       world,
 		assocEngine: assocEng,
+		entranceDir: -1, // Aucune entrée par défaut
 	}
 
 	// Bloque l'input pendant les animations (start/end)
@@ -95,6 +101,58 @@ func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
 					h.world.TurnTimer.Reset()
 				}
 				h.skipPending = false
+			}
+		})
+
+		// Restauration de la logique de scellage
+		world.EventBus.SubscribeFunc(event.GridEntered, func(e event.Event) {
+			gridID := e.Payload["grid_id"].(string)
+			arrivalDir, ok := e.Payload["arrival_dir"].(entity.Direction)
+			if !ok || arrivalDir < 0 {
+				h.entranceDir = -1
+				return
+			}
+
+			// L'entrée est la direction OPPOSÉE
+			h.entranceDir = world.DreamPlane.OppositeDirection(arrivalDir)
+
+			// Si la zone n'est pas "ouverte", on lance l'animation de scellage (Révélé -> Caché)
+			if !world.IsNavigationOpen(gridID) {
+				fmt.Printf("[NAVIGATION] Scellage de l'entrée %v...\n", h.entranceDir)
+				h.triggerSealingAnimation(gridID, h.entranceDir, true)
+			}
+		})
+
+		world.EventBus.SubscribeFunc(event.NavigationOpened, func(e event.Event) {
+			gridID := e.Payload["grid_id"].(string)
+			grid, _ := h.world.GetGrid(gridID)
+			if grid == nil {
+				return
+			}
+
+			// On déscelle les sorties qui sont dans un état "ouvert" (Matched ou Revealed)
+			for d := entity.DirNorth; d <= entity.DirWest; d++ {
+				states := grid.ExitsState[d]
+				// Si une des tuiles de la sortie est déjà "active" (pas cachée et bloquée), on anime
+				if states[0]&entity.Matched != 0 || states[0]&entity.Revealed != 0 {
+					h.triggerSealingAnimation(gridID, d, false)
+				}
+			}
+		})
+
+		world.EventBus.SubscribeFunc(event.NavigationClosed, func(e event.Event) {
+			gridID := e.Payload["grid_id"].(string)
+			grid, _ := h.world.GetGrid(gridID)
+			if grid == nil {
+				return
+			}
+
+			// On scelle les sorties qui étaient "ouvertes"
+			for d := entity.DirNorth; d <= entity.DirWest; d++ {
+				states := grid.ExitsState[d]
+				if states[0]&entity.Matched != 0 || states[0]&entity.Revealed != 0 {
+					h.triggerSealingAnimation(gridID, d, true)
+				}
 			}
 		})
 	}
@@ -128,6 +186,9 @@ func (h *Handler) Update() error {
 		}
 	}
 
+	// Feedback de coût au survol des boutons
+	h.updateButtonHover()
+
 	// Gestion du survol (Hover) pour les animations avancées
 	h.updateHover()
 
@@ -138,67 +199,85 @@ func (h *Handler) Update() error {
 	return nil
 }
 
+func (h *Handler) updateButtonHover() {
+	if h.actionButtons == nil || h.OnHoverButton == nil {
+		return
+	}
+
+	states := h.actionButtons.ComputeStates()
+	x, y := ebiten.CursorPosition()
+	btnID, ok := h.actionButtons.HitTest(x, y, states)
+
+	if !ok {
+		h.OnHoverButton(0, 0, 0)
+		return
+	}
+
+	mana, hp, sanity := 0, 0, 0
+
+	// Calcul du coût potentiel basé sur l'état actuel (2 tuiles révélées)
+	if len(h.revealedTiles) == 2 {
+		grid, _ := h.world.GetGrid(h.GetCurrentGridID())
+		if grid != nil {
+			tile1, _ := grid.Get(h.revealedTiles[0])
+			tile2, _ := grid.Get(h.revealedTiles[1])
+			if len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
+				id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+				id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+				e1, _ := h.world.Entities.Get(entity.ID(id1))
+				e2, _ := h.world.Entities.Get(entity.ID(id2))
+
+				if e1 != nil && e2 != nil {
+					level := e1.GetCumulationLevel()
+
+					switch btnID {
+					case actionbuttons.BtnMatch:
+						mana = 1
+					case actionbuttons.BtnMerge:
+						mana = 3 * (level + 1)
+					case actionbuttons.BtnSkip, actionbuttons.BtnEndTurn:
+						// Estimation du risque maximum (les deux tuiles sont des créatures ou ressources)
+						hp = 20     // 2 créatures x 10
+						mana = 10   // 2 ressources x 5
+					}
+				}
+			}
+		}
+	} else if btnID == actionbuttons.BtnEndTurn {
+		// Pas de tuiles révélées, mais End Turn consomme toujours 1 SN par défaut
+		sanity = 1
+	}
+
+	h.OnHoverButton(mana, hp, sanity)
+}
+
 func (h *Handler) updateHover() {
-	if h.renderer == nil {
+	if h.renderer == nil || h.world == nil {
 		return
 	}
 
 	activeThisFrame := make(map[string]bool)
 	mx, my := ebiten.CursorPosition()
-	localX, localY, gridID, ok := h.renderer.ScreenToLocalTile(mx, my, h.world)
+	pos, gridID, ok := h.renderer.ScreenToGrid(mx, my, h.world)
 
 	if ok {
-		grid, _ := h.world.GetGrid(gridID)
-		pos, _, _ := h.renderer.ScreenToGrid(mx, my, h.world)
-		if grid != nil {
-			plot, err := grid.Get(pos)
-			if err == nil && len(plot.EntitiesID) > 0 {
-				topID := plot.EntitiesID[len(plot.EntitiesID)-1]
-				if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok && ent.GetState()&entity.Blocked == 0 {
-					activeThisFrame[topID] = true
+		hoverable := h.world.GetHoverableAt(gridID, pos)
+		if hoverable != nil && hoverable.IsHoverAllowed() {
+			id := hoverable.GetHoverID()
+			activeThisFrame[id] = true
 
-					tileSize := h.renderer.GetTileSize()
-					dir := entity.CalculateFlipDirection(tileSize, localX, localY)
-					h.renderer.NotifyHover(topID, dir)
-				}
+			localX, localY, _, _ := h.renderer.ScreenToLocalTile(mx, my, h.world)
+			tileSize := h.renderer.GetTileSize()
+			// Pour les sorties ou l'inventaire, on utilise une taille fixe de 88 si nécessaire
+			if gridID == board.InventoryGridID || strings.HasPrefix(gridID, "exit_") {
+				tileSize = int(math.Round(ui.TileSize))
 			}
-		}
-	} else {
-		// Vérification survol des sorties (Navigation)
-		if dir, index, ok := h.getClickedExit(); ok {
-			gridID := h.world.CurrentGridID
-			if grid, ok := h.world.GetGrid(gridID); ok {
-				state := grid.ExitsState[dir][index]
-				if state&entity.Blocked == 0 {
-					// Identifiant virtuel pour le hover
-					id := fmt.Sprintf("exit_%s_%d", directionToName(dir), index)
-					activeThisFrame[id] = true
-
-					// Pour les sorties, on utilise une direction de flip simplifiée vers le centre de la sortie
-					px := float64(mx) - ui.PlaymatX
-					py := float64(my) - ui.PlaymatY
-					fDir := h.calculateExitFlipDirection(px, py, dir)
-					h.renderer.NotifyHover(id, fDir)
-				}
-			}
+			dir := entity.CalculateFlipDirection(tileSize, localX, localY)
+			h.renderer.NotifyHover(id, dir)
 		}
 	}
 
 	h.renderer.DecayHoverStates(activeThisFrame)
-}
-
-func directionToName(dir entity.Direction) string {
-	switch dir {
-	case entity.DirNorth:
-		return "north"
-	case entity.DirEast:
-		return "east"
-	case entity.DirSouth:
-		return "south"
-	case entity.DirWest:
-		return "west"
-	}
-	return "unknown"
 }
 
 func (h *Handler) calculateExitFlipDirection(px, py float64, dir entity.Direction) entity.FlipDirection {
@@ -341,7 +420,7 @@ func (h *Handler) handleMouse() error {
 				SourceID: "player",
 				Payload: map[string]interface{}{
 					"position":       entity.Position{}, // Position virtuelle
-					"entity_id":      fmt.Sprintf("exit_%s_%d", directionToName(dir), index),
+					"entity_id":      fmt.Sprintf("exit_%s_%d", board.DirectionToName(dir), index),
 					"grid_id":        h.world.CurrentGridID,
 					"flip_direction": flipDir,
 				},
@@ -565,10 +644,11 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 		if h.OnTurnEnd != nil {
 			h.OnTurnEnd()
 		}
-	case actionbuttons.BtnMenu:
-		fmt.Println("[ACTION] Bouton Menu activé")
-		if h.OnExitToMenu != nil {
-			h.OnExitToMenu()
+	case actionbuttons.BtnMerge:
+		fmt.Println("[ACTION] Bouton Merge activé")
+		h.processMergeAttempt()
+		if h.world.TurnTimer != nil {
+			h.world.TurnTimer.Reset()
 		}
 	}
 }
@@ -629,6 +709,14 @@ func (h *Handler) processSkip() {
 							creatureCount++
 						}
 
+						resourceCount := 0
+						if isRes1 {
+							resourceCount++
+						}
+						if isRes2 {
+							resourceCount++
+						}
+
 						if creatureCount > 0 {
 							fmt.Printf("[DEBUG] SKIP d'une paire valide contenant des créatures (Pos: %v, %v)\n", pos1, pos2)
 							damage := creatureCount * 10
@@ -642,6 +730,22 @@ func (h *Handler) processSkip() {
 									"damage": damage,
 									"type":   "creature_fail",
 									"reason": "skipped_valid_match",
+								},
+							})
+						}
+
+						if resourceCount > 0 {
+							manaLoss := resourceCount * 5
+							fmt.Printf("[ALCHIMIE] Skip d'un match VALIDE avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
+							h.world.Player.ConsumeMana(manaLoss)
+
+							h.world.EventBus.Publish(event.Event{
+								Type:     event.PlayerDamaged,
+								SourceID: "system",
+								Payload: map[string]interface{}{
+									"mana_loss": manaLoss,
+									"type":      "resource_fail",
+									"reason":    "skipped_valid_match",
 								},
 							})
 						}
@@ -727,6 +831,57 @@ func (h *Handler) hideAllTilesInGrid() {
 	h.revealedTiles = nil
 }
 
+// processMergeAttempt tente de fusionner les 2 tuiles révélées
+func (h *Handler) processMergeAttempt() {
+	if len(h.revealedTiles) != 2 {
+		h.isProcessing = false
+		return
+	}
+
+	pos1 := h.revealedTiles[0]
+	pos2 := h.revealedTiles[1]
+
+	gridID := h.selectedGridID
+	if gridID == "" {
+		gridID = h.world.CurrentGridID
+	}
+
+	cmd := &usecase.MergeTilesCommand{
+		World:    h.world,
+		AssocEng: h.assocEngine,
+		GridID:   gridID,
+		Pos1:     pos1,
+		Pos2:     pos2,
+		OnSuccess: func() {
+			fmt.Printf("[MERGE] ✅ Succès !\n")
+			// Après fusion, la commande UseCase a déjà refermé les tuiles logiquement.
+			// On vide la mémoire tampon de l'input handler.
+			h.revealedTiles = nil
+			h.isProcessing = false
+			h.ClearSelection()
+
+			if h.OnTurnEnd != nil {
+				h.OnTurnEnd()
+			}
+		},
+		OnFailure: func() {
+			fmt.Printf("[MERGE] ❌ Échec !\n")
+			h.revealedTiles = nil
+			h.isProcessing = false
+			h.ClearSelection()
+			if h.OnTurnEnd != nil {
+				h.OnTurnEnd()
+			}
+		},
+	}
+
+	if err := cmd.Execute(); err != nil {
+		fmt.Printf("[MERGE] %v\n", err)
+		h.revealedTiles = nil
+		h.isProcessing = false
+	}
+}
+
 // processMatchAttempt tente d'associer les 2 tuiles révélées
 func (h *Handler) processMatchAttempt() {
 	if len(h.revealedTiles) != 2 {
@@ -785,47 +940,6 @@ func (h *Handler) processMatchAttempt() {
 		h.revealedTiles = nil
 		h.isProcessing = false
 		h.ClearSelection()
-		return
-	}
-
-	if e1.GetType() == entity.TypeTrap && e2.GetType() == entity.TypeTrap {
-		fmt.Println("[MATCH] ✅ Deux pièges appairés ! Ils sont supprimés.")
-		h.world.RemoveEntity(e1.GetID())
-		h.world.RemoveEntity(e2.GetID())
-		h.revealedTiles = nil
-		h.isProcessing = false
-		h.ClearSelection()
-		if h.OnTurnEnd != nil {
-			h.OnTurnEnd()
-		}
-		return
-	}
-
-	// CAS ÉCHEC : Un piège et autre chose (Ressource ou Créature)
-	if (e1.GetType() == entity.TypeTrap || e2.GetType() == entity.TypeTrap) &&
-		(e1.GetType() != entity.TypeTrap || e2.GetType() != entity.TypeTrap) {
-		fmt.Printf("[MATCH] ❌ Échec : %s et %s ne peuvent pas être appairés.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
-		h.revealedTiles = nil
-		h.isProcessing = false
-		h.ClearSelection()
-
-		// On recache les entités avec animation basée sur la pente (Slope)
-		p1, _ := grid.Get(pos1)
-		p2, _ := grid.Get(pos2)
-		fDir1 := p1.Tilt.ToFlipDirection()
-		fDir2 := p2.Tilt.ToFlipDirection()
-
-		_, _ = h.world.FlipTile(gridID, pos1, fDir1)
-		_, _ = h.world.FlipTile(gridID, pos2, fDir2)
-
-		h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-			entity.Position(pos1), string(e1.GetID()), gridID, fDir1))
-		h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-			entity.Position(pos2), string(e2.GetID()), gridID, fDir2))
-
-		if h.OnTurnEnd != nil {
-			h.OnTurnEnd()
-		}
 		return
 	}
 
@@ -944,16 +1058,15 @@ func (h *Handler) handleKeyboard() {
 		h.setDifficulty(meta.LevelInsane)
 	}
 
-	// S: Spawn entités de base, Shift+S: Spawn toutes les créatures
-	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
-		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			if h.OnSpawnAllCreatures != nil {
-				h.OnSpawnAllCreatures(h.GetCurrentGridID())
-			}
-		} else {
-			if h.OnSpawnEntities != nil {
-				h.OnSpawnEntities(h.GetCurrentGridID())
-			}
+	// S: Spawn entités via debug list, Shift+S: Spawn TOUTES les créatures
+	if inpututil.IsKeyJustPressed(ebiten.KeyS) && ebiten.IsKeyPressed(ebiten.KeyShift) {
+		if h.OnSpawnAllCreatures != nil {
+			h.OnSpawnAllCreatures(h.GetCurrentGridID())
+		}
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyS) && h.world.Debug.Visible {
+		// Spawn via la liste de debug si la fenêtre est ouverte
+		if h.OnSpawnEntities != nil {
+			h.OnSpawnEntities(h.GetCurrentGridID())
 		}
 	}
 
@@ -1060,9 +1173,12 @@ func (h *Handler) handleNavigationKeys() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
 		dir = board.North
 		pressed = true
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) && !ebiten.IsKeyPressed(ebiten.KeyShift) {
-		dir = board.South
-		pressed = true
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		// Sud : Uniquement si Shift n'est pas pressé ET que la fenêtre de debug n'est pas ouverte
+		if !ebiten.IsKeyPressed(ebiten.KeyShift) && !h.world.Debug.Visible {
+			dir = board.South
+			pressed = true
+		}
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) || inpututil.IsKeyJustPressed(ebiten.KeyA) {
 		dir = board.West
 		pressed = true
@@ -1262,7 +1378,11 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 			highlightColor = color.RGBA{255, 255, 255, 50}
 		}
 
-		h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
+		// On ne dessine pas le highlight ici si c'est l'inventaire,
+		// car le BoardRenderer le gère maintenant de manière inclinée (tilted).
+		if gridID != board.InventoryGridID {
+			h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
+		}
 	}
 
 	if h.portablePortalMode {
@@ -1418,6 +1538,79 @@ func (h *Handler) ResetGameState() {
 	h.revealedTiles = nil
 	h.isProcessing = false
 	h.victoryTimer = nil
+	h.entranceDir = -1
+}
+
+// triggerSealingAnimation gère l'animation de bascule des tuiles d'entrée
+func (h *Handler) triggerSealingAnimation(gridID string, dir entity.Direction, isSealing bool) {
+	grid, ok := h.world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	// Direction de flip : vers l'extérieur du plateau
+	var flipDir entity.FlipDirection
+	switch dir {
+	case board.North:
+		flipDir = entity.FlipTop
+	case board.South:
+		flipDir = entity.FlipBottom
+	case board.East:
+		flipDir = entity.FlipRight
+	case board.West:
+		flipDir = entity.FlipLeft
+	}
+
+	// Animation inverse pour le déscellage
+	if !isSealing {
+		flipDir = h.invertFlipDirection(flipDir)
+	}
+
+	for i := 0; i < 2; i++ {
+		entityID := fmt.Sprintf("exit_%s_%d", board.DirectionToName(dir), i)
+
+		// 1. Détermine les états
+		var endState entity.TileState
+		if isSealing {
+			// Révélé -> Caché + Bloqué
+			endState = entity.Hidden | entity.Matched | entity.Blocked
+		} else {
+			// Caché + Bloqué -> Révélé
+			endState = entity.Revealed | entity.Matched
+		}
+
+		// 2. Mise à jour de la grille (via une copie du tableau car map index n'est pas adressable directement)
+		states := grid.ExitsState[dir]
+		states[i] = endState
+		grid.ExitsState[dir] = states
+
+		// 3. Déclenche l'animation visuelle
+		h.world.EventBus.PublishImmediate(event.Event{
+			Type:     event.TileRevealed,
+			SourceID: "system",
+			Payload: map[string]interface{}{
+				"position":       entity.Position{}, // Position virtuelle
+				"entity_id":      entityID,
+				"grid_id":        gridID,
+				"flip_direction": flipDir,
+			},
+		})
+	}
+}
+
+// invertFlipDirection retourne la direction opposée pour le déscellage
+func (h *Handler) invertFlipDirection(d entity.FlipDirection) entity.FlipDirection {
+	switch d {
+	case entity.FlipTop:
+		return entity.FlipBottom
+	case entity.FlipBottom:
+		return entity.FlipTop
+	case entity.FlipLeft:
+		return entity.FlipRight
+	case entity.FlipRight:
+		return entity.FlipLeft
+	}
+	return d
 }
 
 // exitMatchable est un wrapper pour soumettre les sorties au moteur d'association
@@ -1430,3 +1623,6 @@ func (m *exitMatchable) GetLogicKey() string     { return "" }
 func (m *exitMatchable) GetElement() string      { return "" }
 func (m *exitMatchable) GetNarrativeTag() string { return "" }
 func (m *exitMatchable) GetMatchTypes() []string { return []string{"orientation"} }
+func (m *exitMatchable) GetCumulationLevel() int { return 0 }
+func (m *exitMatchable) IsCumulated() bool       { return false }
+func (m *exitMatchable) GetCategory() string     { return "navigation" }

@@ -9,10 +9,14 @@ import (
 )
 
 const (
-	DirNorth = entity.DirNorth
-	DirEast  = entity.DirEast
-	DirSouth = entity.DirSouth
-	DirWest  = entity.DirWest
+	Forward       = entity.DirNorth
+	Backward      = entity.DirSouth
+	Right         = entity.DirEast
+	Left          = entity.DirWest
+	ForwardRight  = entity.DirNorthEast
+	ForwardLeft   = entity.DirNorthWest
+	BackwardRight = entity.DirSouthEast
+	BackwardLeft  = entity.DirSouthWest
 )
 
 // Creature est une entité vivante avec comportement
@@ -30,7 +34,7 @@ func New(species string, pos entity.Position) *Creature {
 	c := &Creature{
 		BaseEntity: entity.NewBaseEntity(entity.TypeCreature),
 		Species:    species,
-		ThreatZone: []entity.Direction{entity.DirNorth}, // Par défaut face à elle
+		ThreatZone: []entity.Direction{Forward}, // Par défaut face à elle
 	}
 	c.SetPosition(pos)
 	c.AddTag("creature")
@@ -77,6 +81,13 @@ func (c *Creature) GetComponent(name string) interface{} {
 	}
 	return nil
 }
+
+// Association compliance
+func (c *Creature) GetMatchID() string       { return c.Species }
+func (c *Creature) GetLogicKey() string      { return "" }
+func (c *Creature) GetElement() string       { return "" }
+func (c *Creature) GetNarrativeTag() string  { return "" }
+func (c *Creature) GetMatchTypes() []string { return []string{"identical"} }
 
 // Action représente une intention de la créature
 type Action struct {
@@ -284,12 +295,41 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic: AcousticSilent,  // Vol silencieux
 			},
 			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
-			Orientation: Orientation{Direction: DirNorth},
+			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
         c.SetThreatZone(ThreatCone)
 		c.AddTag("flying")
 		c.AddTag("passive")
+
+	case "flutterwing":
+		c.SetBehavior(component.Behavior{
+			State:      "dancing",
+			Aggression: 0,
+		})
+		c.SetMobility(component.Mobility{
+			CanMove: true,
+			Speed:   1,
+		})
+		c.SetMovementProfile(&MovementProfile{
+			Trigger: MovementTrigger{Type: TriggerProximity, Radius: 2},
+			Navigation: NavigationLogic{
+				Type:   NavRepulsion,
+				Target: TargetPlayer,
+			},
+			Mode: MovementMode{Type: ModeOver},
+			Perception: PerceptionProfile{
+				Stealth:  StealthManifest,
+				Acoustic: AcousticSilent,
+			},
+			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Orientation: Orientation{Direction: Forward},
+			Collision:   CollisionHandler{Type: CollideSlide},
+		})
+		c.SetThreatZone(ThreatFrontal) // Très peu menaçant
+		c.AddTag("flying")
+		c.AddTag("passive")
+		c.AddTag("elusive")
 
 	case "shadowstalker":
 		c.SetBehavior(component.Behavior{
@@ -311,7 +351,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				TelegraphsIntent: true,           // ajoute des traces de griffures sur les tuiles autour de lui
 			},
 			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
-			Orientation: Orientation{Direction: DirNorth},
+			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideBounce},
 		})
         c.SetThreatZone(ThreatCone)
@@ -329,7 +369,6 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Speed:   1,
 		})
 
-		// Pour dessiner et contourner un espace de 3x3 cases,
 		// il faut faire 2 pas (translations) par côté.
 		squarePattern3x3 := []entity.Position{
 			{X: 1, Y: 0},  // 1 pas à Droite
@@ -354,7 +393,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				TrackDuration: 2,
 			},
 			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
-			Orientation: Orientation{Direction: DirNorth},
+			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"dirt", "soil"}},
 		})
         c.SetThreatZone(ThreatCone)
@@ -419,7 +458,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				TrackDuration: 2,
 			},
 			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
-			Orientation: Orientation{Direction: DirNorth},
+			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
         c.SetThreatZone(ThreatCone)
@@ -458,7 +497,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				LeavesTracks: false, // Le singe mousse ne laisse pas de traces, mais des pièges
 			},
 			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
-			Orientation: Orientation{Direction: DirSouth},
+			Orientation: Orientation{Direction: Backward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
         c.SetThreatZone(ThreatCone)
@@ -508,6 +547,20 @@ func (c *Creature) GetActiveThreatDirections() []entity.Direction {
 	}
 
 	return activeThreats
+}
+
+// GetLungeDirectionVector retourne le vecteur unitaire du décalage visuel d'attaque.
+// Dans le cas d'un cône, on prend la direction centrale (la première du slice par convention interne).
+func (c *Creature) GetLungeDirectionVector() (dx, dy float64) {
+	if len(c.ThreatZone) == 0 {
+		return 0, 0
+	}
+
+	// Pour ThreatCone, ThreatZone[0] est DirNorth (le centre).
+	// On transforme cette direction locale par la transformation actuelle de l'entité.
+	targetDir := entity.TransformDirection(c.ThreatZone[0], c.GetTransformation())
+	v := targetDir.ToVector()
+	return float64(v.X), float64(v.Y)
 }
 
 func (c *Creature) SetThreatZone(zone []entity.Direction) {
@@ -567,23 +620,23 @@ func (c *Creature) IsPositionThreatened(target entity.Position) bool {
 	return false
 }
 
-// Gabarits de zones de menace (Orientés Nord par défaut, relatifs à la créature)
+// Gabarits de zones de menace (Relatifs à la créature)
 var (
-    // Menace uniquement la case devant elle
-    ThreatFrontal = []entity.Direction{entity.DirNorth}
+	// Menace uniquement la case devant elle
+	ThreatFrontal = []entity.Direction{Forward}
 
-    // Cône à 3x3 devant (Nord, Nord-Est, Nord-Ouest)
-    ThreatCone = []entity.Direction{entity.DirNorth, entity.DirNorthEast, entity.DirNorthWest}
+	// Cône à 3x3 devant (Avant, Avant-Droite, Avant-Gauche)
+	ThreatCone = []entity.Direction{Forward, ForwardRight, ForwardLeft}
 
-    // Menace en croix (Cardinaux)
-    ThreatCross = []entity.Direction{entity.DirNorth, entity.DirEast, entity.DirSouth, entity.DirWest}
+	// Menace en croix (Cardinaux relatifs)
+	ThreatCross = []entity.Direction{Forward, Right, Backward, Left}
 
-    // Menace les diagonales
-    ThreatDiagonals = []entity.Direction{entity.DirNorthEast, entity.DirSouthEast, entity.DirSouthWest, entity.DirNorthWest}
+	// Menace les diagonales relatives
+	ThreatDiagonals = []entity.Direction{ForwardRight, BackwardRight, BackwardLeft, ForwardLeft}
 
-    // Autour d'elle à 360° (Les 8 directions)
-    ThreatFull360 = []entity.Direction{
-       entity.DirNorth, entity.DirNorthEast, entity.DirEast, entity.DirSouthEast,
-       entity.DirSouth, entity.DirSouthWest, entity.DirWest, entity.DirNorthWest,
-    }
+	// Autour d'elle à 360° (Les 8 directions)
+	ThreatFull360 = []entity.Direction{
+		Forward, ForwardRight, Right, BackwardRight,
+		Backward, BackwardLeft, Left, ForwardLeft,
+	}
 )

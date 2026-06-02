@@ -6,7 +6,7 @@
 
 ## Concept
 
-Le projet propose une expérience de puzzle-aventure en tour par tour, où la mécanique du "Memory" est réinventée pour devenir un outil d'exploration et de survie. Dans ce jeu, l'association de paires ne se limite pas à la simple identité visuelle ; elle devient un langage stratégique permettant d'interagir avec un environnement complexe. Le joueur doit faire preuve de mémoire, mais aussi d'intuition logique pour capturer des entités, récolter des composants et manufacturer des artefacts. En transformant un exercice cognitif en une boucle de gameplay profonde, le jeu invite à une réflexion calme mais tendue, où chaque erreur peut altérer la stabilité de l'expérience.
+Le projet propose une expérience de puzzle-aventure en tour par tour, où la mécanique du "Memory" est réinventée pour devenir un outil d'exploration et de survie. Dans ce jeu, l'association de paires identiques permet d'interagir avec un environnement complexe. Le joueur doit faire preuve de mémoire pour capturer des entités, récolter des composants et manufacturer des artefacts. En transformant un exercice cognitif en une boucle de gameplay profonde, le jeu invite à une réflexion calme mais tendue, où chaque erreur peut altérer la stabilité de l'expérience.
 
 ## Contexte
 
@@ -15,44 +15,58 @@ L’enjeu narratif réside dans la tension entre la grisaille du monde réel et 
 
 ## Fonctionnalités principales et Contenus
 
-Le projet se définit par un système de jeu hybride alliant le puzzle mental, la survie et la gestion. Le contenu principal repose sur une mécanique d'association étendue : le joueur ne se contente pas de mémoriser des visuels, mais doit comprendre les liens logiques, élémentaires et narratifs qui unissent les tuiles pour synthétiser des ressources complexes ou capturer des entités. Ce système est soutenu par un écosystème dynamique où les ressources ne sont pas de simples objets inertes, mais des entités vivantes capables de maturer, de se propager ou de réagir aux interactions environnementales. Le plateau de jeu devient ainsi un monde en constante mutation, influencé par des structures interactives telles que des terriers ou des zones de dissimulation qui modifient la visibilité et la sécurité du plan.
+Le projet se définit par un système de jeu hybride alliant le puzzle mental, la survie et la gestion. Le contenu principal repose sur une mécanique d'association de paires identiques : le joueur mémorise des visuels pour récolter des ressources ou capturer des entités. Ce système est soutenu par un écosystème dynamique où les ressources ne sont pas de simples objets inertes, mais des entités vivantes capables de maturer, de se propager ou de réagir aux interactions environnementales. Le plateau de jeu devient ainsi un monde en constante mutation, influencé par des structures interactives telles que des terriers ou des zones de dissimulation qui modifient la visibilité et la sécurité du plan.
 L'expérience propose une profondeur stratégique s'appuyant sur une double boucle de progression. En mission, le joueur doit composer avec des créatures aux comportements riches, capables de transformer le terrain ou de laisser des traces persistantes de leur passage, offrant un défi de lecture environnementale permanent. Hors mission, le contenu se déplace vers une gestion de méta-progression exigeante : le foyer familial devient un enjeu central où chaque ressource collectée doit être judicieusement allouée pour assurer la survie du groupe et l'évolution des capacités du protagoniste. Cette richesse de contenu vise à récompenser l'expertise du joueur, transformant chaque incursion en une opportunité de déchiffrer les secrets d'un univers où l'indice visuel et le cycle de vie des éléments sont aussi cruciaux que la mémoire pure.
 
 ## Mécanisme
 
 Le gameplay repose sur une gestion rigoureuse des ressources et du temps, dictée par un système en tour par tour. Chaque interaction, qu’il s’agisse de retourner une tuile ou d’utiliser un objet, consomme une unité de ressource (temps ou mana), forçant le joueur à planifier ses mouvements au sein d’une limite de tours impartis. La survie dépend de la gestion d'une barre de santé, physique ou mentale, qui s’érode au fil des erreurs ou des confrontations.
-L’aspect central de l’association étendue enrichit la mécanique de mémoire classique : le joueur doit identifier des paires dont la corrélation peut être identique, logique (clé et serrure), élémentaire ou narrative. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
+L’aspect central de l’association de paires identiques enrichit la mécanique de mémoire classique. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
+
+### Équilibre de la Population
+
+Chaque zone (grille) respecte désormais une répartition équilibrée et déterministe de sa population :
+- **40% de Ressources** : Objectifs principaux de récolte.
+- **40% de Créatures** : Menaces et opportunités (incluant l'espèce exclusive du biome).
+- **20% de Pièges** : Obstacles à la progression.
+
+Cette répartition est calculée individuellement pour chaque grille lors de sa génération, garantissant un défi constant quelle que soit la zone explorée.
 
 ### Minimap et Exploration (Fog of War)
 
 Le plan onirique est un réseau de zones interconnectées. Pour s'orienter sans briser le mystère, la minimap utilise un système de **brouillard de guerre dynamique** :
 
 - **Rendu Centré** : La zone actuelle est toujours fixée au centre de la minimap (grille 9x9). Le reste du monde glisse autour lors des transitions.
+- **Persistance de l'Entrée** : En entrant dans une nouvelle zone, la sortie par laquelle le joueur arrive est **automatiquement révélée et appairée**, symbolisant le chemin connu.
 - **États de Découverte** :
   - **Inconnu** : Zone cachée.
-  - **Adjacent** : Silhouette grise (route possible identifiée).
+  - **Adjacent** : Silhouette grise (route possible identifiée). Les sorties découvertes restent affichées en permanence.
   - **Visité** : Affiche l'icône du biome (Forest, Cave, Swamp, etc.).
   - **Actuel** : Indicateur doré pulsant.
 
 ### Matrice de Dégâts (MATCH vs SKIP)
 
-Le jeu punit l'inattention et la précipitation via une matrice de décision stricte lors de l'interaction avec des paires de créatures :
+Le jeu punit l'inattention et la précipitation via une matrice de décision stricte lors de l'interaction avec des paires de créatures ou de ressources :
 
 | État de la paire | Action: **MATCH** | Action: **SKIP** |
 | :--- | :--- | :--- |
-| **VALIDE** | 0 Dégât (Succès) | Dégâts de groupe (Erreur) |
-| **INVALIDE** | Dégâts de groupe (Échec) | 0 Dégât (Prudence) |
+| **VALIDE** | 0 Dégât (Succès) | Pénalité (Erreur) |
+| **INVALIDE** | Pénalité (Échec) | 0 Dégât (Prudence) |
 
-- **Dégâts de groupe** : `nombre de créatures révélées * 10`.
-- **Match Valide** : Les créatures sont capturées (Loot).
+- **Dégâts (Créatures)** : `nombre de créatures révélées * 10` points de vie.
+- **Mana (Ressources)** : `nombre de ressources révélées * 5` points de mana.
+- **Match Valide** : Les entités sont capturées/récoltées (Loot).
 - **Match Invalide** : Les tuiles se referment violemment.
 - **Skip** : Permet de refermer les tuiles sagement si aucune paire n'est identifiée.
 
-### Confrontation et Zones de Menace
+### Confrontation et Animations d'Attaque
 
 Chaque créature possède une **Zone de Menace** (directions qu'elle attaque).
-- **Placement Périphérique** : Le joueur agit depuis le bord du plateau. Sa position (`entity.Position`) et son ancrage (`BorderPosition`) sont déterminés par l'endroit où il clique pour révéler une tuile.
-- **Calcul de Confrontation** : Lors du dévoilement, si le joueur se trouve dans la zone de menace de la créature (après application de la transformation D4/Flip), il subit **10 points de dégâts physiques**.
+- **Placement Périphérique** : Le joueur agit depuis le bord des cases. Sa position (`entity.Position`) et son ancrage (`BorderPosition`) sont déterminés par l'endroit où il clique pour révéler une tuile.
+- **Animation de Lunge** : Lors du dévoilement (Hidden -> Revealed), la créature effectue une translation brusque de quelques pixels vers sa zone de menace, suivie d'un retour lent à sa position initiale.
+- **Indicateurs de Menace** : Durant cette animation, des demi-cercles blancs (Intention de Menace) apparaissent entre la créature et les cases qu'elle menace. Ces indicateurs s'affichent même si la cible est en dehors de la grille (sur le tapis de jeu).
+- **Calcul de Confrontation** : Si le joueur se trouve dans la zone de menace lors du dévoilement, il subit **10 points de dégâts physiques**.
+- **Visualisation des Dégâts** : Une attaque réussie remplace l'indicateur blanc par un demi-cercle rouge intense, synchronisé avec le mouvement brusque de la créature.
 - **Esquive** : En choisissant de "tirer" la tuile depuis un angle mort de la créature, le joueur peut éviter l'attaque lors de la révélation.
 
 ### Compte à rebours temps réel (Turn Timer)
@@ -66,16 +80,44 @@ Pour rompre le rythme classique du Memory et simuler l'urgence de la survie en p
   - Le bouton **Skip** se remplit progressivement d'une couleur violette, puis passe au rouge brique en phase d'alerte.
   - La jauge de **Santé Mentale** tremble de plus en plus fort lorsque le timer descend sous les 3 secondes (phase de panique).
 
+### Système de Portail Portable
+
+Le portail portable permet au joueur de s'extraire rapidement du plan actif.
+- **Déploiement** : Nécessite une zone 3x3.
+- **Effet Séisme** : Lors de l'activation, toutes les entités présentes sur les 8 parcelles entourant le portail sont immédiatement supprimées pour libérer l'espace.
+- **Feedback Visuel** : Un shader de type **Vortex** crée un tourbillon de distorsion centré sur le portail pendant toute la durée de l'extraction.
+- **Extraction** : Une fois déployé, un compte à rebours de 5 secondes se lance avant la victoire.
+
 ### Boutons d'action réactifs du Playmat
 
 Quatre boutons fixes occupent les coins du Playmat. Leur accessibilité est purement réactive :
 
 | Bouton | Position | Comportement |
 |--------|----------|--------------|
-| **MATCH** | Haut-gauche | Actif uniquement quand 2 tuiles sont retournées. Valide la paire si les entités sont identiques (coûte du Mana). |
-| **SKIP** | Haut-droite | Actif uniquement quand 2 tuiles sont retournées. Referme les tuiles et consomme le tour (coûte de la Santé Mentale). Affiche le remplissage temporel. |
-| **TURN** | Bas-gauche | Toujours actif. Force la fin du tour. |
-| **MENU** | Bas-droite | Toujours actif. Retour au menu principal. |
+| **MATCH** | Haut-gauche | Capture la paire. Donne du butin (Loot). |
+| **SKIP** | Haut-droite | Actif uniquement quand 2 tuiles sont retournées. Referme les tuiles et consomme le tour. |
+| **TURN** | Bas-gauche | Toujours actif. Force la fin du tour. Consomme 1 Sanité par défaut. |
+| **MERGE** | Bas-droite | Fusionne la paire en une version plus forte (Niveau +1). Se recache. |
+
+### Fusion et Cumul (MERGE vs MATCH)
+
+Le système de progression immédiate sur le plateau repose sur le choix du joueur :
+- **MERGE** : Fusionne deux tuiles identiques de même niveau.
+    - **Coût** : `3 * (Niveau + 1)` Mana.
+    - **Résultat** : Une tuile est absorbée, l'autre devient une version **Cumulée** supérieure (Niveau max 2).
+    - **Conséquence** : Termine le tour et referme toutes les tuiles.
+- **MATCH** : Capture une paire identique de même niveau.
+    - **Coût** : 1 Mana.
+    - **Résultat** : Les deux tuiles sont supprimées et transformées en **Butin** (Loot).
+    - **Scaling** : Un match de haut niveau produit un butin de plus grande valeur.
+- **Révélation** : Retourner une tuile cumulée (Niv.1+) consomme du Mana égal à son niveau.
+
+### Feedback Visuel et Prudence (Hover)
+
+L'interface assiste le joueur dans sa gestion des ressources via un système de **feedback dynamique au survol** :
+- **Jauges Clignotantes** : Survoler un bouton d'action (**Match**, **Merge**, **Skip**, **Turn**) fait clignoter un segment blanc sur les jauges (Mana, Santé, Sanité) correspondant au coût ou au risque maximum de l'action.
+- **Anti-Triche** : Aucun feedback de coût n'est affiché au survol des tuiles cachées pour éviter de divulguer des informations sur leur nature (créature vs ressource).
+- **Rendu Sélectif** : Les tuiles cumulées n'apparaissent plus grandes et dorées que lorsqu'elles sont **Révélées**. À l'état caché, elles sont identiques aux tuiles normales.
 
 ### Troubles cognitifs (Status Effects)
 
@@ -88,13 +130,27 @@ Le joueur peut subir des altérations mentales qui déforment l'interface :
 
 Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
 
+### État Évanescent (Bonus Shadowstalker)
+
+L'utilisation d'un butin de Shadowstalker permet de passer entre les plans :
+- **Protection** : Immunité totale aux dégâts pendant 1 tour.
+- **Feedback** : Le cadre de survol et de sélection sur la grille devient **gris pierre**.
+- **Message** : "Vous vous sentez évanescent."
+
+### Vision des Intentions (Bonus Fleeing Sprite)
+
+L'utilisation d'un butin de Fleeing Sprite illumine les dangers :
+- **Effet** : Rend visible les zones de menace de toutes les créatures de la grille pour 1 tour.
+- **Feedback** : Affiche des arcs blancs entre les créatures et les cases qu'elles ciblent.
+- **Message** : "L'éclat du Fleeing Sprite révèle les intentions de vos prédateurs."
+
 ## Verbes
 
 Pour le joueur :Pendant les parties (Actions directes)
 
 * Dévoiler : Révéler le contenu d’une tuile face cachée (consomme du temps ou du mana).
 * Prendre : Collecter des éléments ou capturer des créatures simples via l’identification d’une paire identique.
-* Associer : Créer un lien logique entre deux tuiles complémentaires (ex: Clé + Serrure) pour synthétiser des ressources ou capturer des entités complexes.
+* Associer : Créer un lien entre deux tuiles identiques pour synthétiser des composants ou capturer des entités.
 * Utiliser : Activer un outil, une ressource consommable ou une capacité de créature (ex: cri de l'Echo Hound) pour modifier le plateau ou protéger ses statistiques. Nécessite une confirmation par un second clic sur l'objet sélectionné.
 * Déployer portail : Activer un portail portable pour créer une zone de dégagement 3x3 et initier l’extraction du plan.
 * S’extraire : Initier la fin de l’incursion pour sécuriser le butin avant l’épuisement des ressources de survie.
@@ -157,20 +213,36 @@ Les créatures laissent derrière elles des traces qui respectent des règles de
 - **Herbe Brisée (Broken Grass)** : Rendu sur le calque **Under**, marquant la case d'origine du déplacement.
 - **Griffures (Claws)** : Rendu sur le calque **Over**, marquant la case de destination (impact).
 - **Empreintes (Footprints)** : Rendu sur le calque **Normal**, apparaissant sous les tuiles physiques pour simuler le passage au sol.
+- **Rayons d'Attaque (Intent Beam)** : Rendu sur le calque **Over**, positionné entre la créature et sa cible. Rouge pour une attaque réussie, Blanc pour une simple zone de menace.
 
 Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il s'agisse d'un plateau 3x3 ou 6x6.
 
 ### Bestiaire
 
-| Créature | Déclencheur | Navigation | Mode | Collision | Description |
-|----------|-------------|------------|------|-----------|-------------|
-| **Lumifly** | Auto | Errance (nord) | Over | Glisse | Insecte lumineux qui vole au-dessus du plateau |
-| **Shadowstalker** | Proximité (4) | Attraction joueur | Shadow | Rebond | Prédateur qui chasse discrètement le joueur |
-| **Burrower** | Vue | Errance | Under | Phase (terre) | Créature fouisseuse qui se cache sous terre |
-| **Specter** | Echo | Errance | Shadow | Phase (murs) | Fantôme qui traverse les murs |
-| **Stonewarden** | Passif | Patrouille | Bento | Stop | Gardien immobile qui patrouille si révélé |
-| **Echo Hound** | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations. |
-| **Moss Monkey** | Proximité (4) | Target Empty | Bento | Glisse | Saboteur qui rebouche les cases vides avec des leurres. Fuit si le plateau est saturé de pièges. |
+| Créature | Biome | Déclencheur | Navigation | Mode | Collision | Description |
+|----------|-------|-------------|------------|------|-----------|-------------|
+| **Lumifly** | Global | Auto | Errance (nord) | Over | Glisse | Insecte lumineux qui vole au-dessus du plateau |
+| **Shadowstalker** | Global | Proximité (4) | Attraction joueur | Shadow | Rebond | Prédateur qui chasse discrètement le joueur |
+| **Burrower** | Désert | Vue | Errance | Under | Phase (terre) | Créature fouisseuse qui se cache sous terre (Exclusif) |
+| **Specter** | Grotte | Echo | Errance | Shadow | Phase (murs) | Fantôme qui traverse les murs (Exclusif) |
+| **Stonewarden** | Global | Passif | Patrouille | Bento | Stop | Gardien immobile qui patrouille si révélé |
+| **Echo Hound** | Marais | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations (Exclusif). |
+| **Moss Monkey** | Forêt | Proximité (4) | Target Empty | Bento | Glisse | Saboteur qui rebouche les cases vides avec des leurres (Exclusif). Fuit si saturé. |
+| **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | Créature timide dont l'essence apaise l'esprit. |
+| **Fleeing Sprite** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | Étincelle d'énergie vive révélant les dangers. |
+
+### Botanique et Minéralogie
+
+| Ressource | Biome | Effet du Butin | Description |
+|-----------|-------|----------------|-------------|
+| **Dreamberry** | Global | +5 Mana | Baie onirique violette, base de l'alchimie. |
+| **Moonstone** | Global | +5 Sanité | Pierre de lune bleutée, stabilise l'esprit. |
+| **Whispering Herb** | Global | Lore | Herbe murmurante, révèle des secrets. |
+| **Crystal Shard** | Global | +5 Santé | Éclat de cristal, régénère les tissus. |
+| **Moss Truffle** | Forêt | +15 Santé | Truffe rare poussant sous la mousse (Exclusif). |
+| **Void Bloom** | Grotte | +15 Sanité | Fleur indigo défiant les lois de la physique (Exclusif). |
+| **Echo Crystal** | Marais | +15 Mana | Cristal résonnant avec les courants éthérés (Exclusif). |
+| **Sand Core** | Désert | +5 All Stats | Noyau d'énergie pure extrait du sable (Exclusif). |
 
 Pour les ressources :
 
@@ -253,8 +325,9 @@ go build -o game ./cmd/game
 | Rotation plateau | + / - |
 | Reset rotation | R |
 | Remplir Inv (Debug) | B |
-| Spawn entités (debug) | S |
+| Spawn entités (debug) | S (Debug ouvert) |
 | Spawn toutes créatures (debug) | Shift+S |
 | Nettoyer plateau (debug) | C |
+| Fenêtre de Debug | F12 |
 | Retour menu | \ |
 Annulation de la PR #39

@@ -18,10 +18,11 @@ func NewID() ID {
 type TileState int
 
 const (
-	Hidden   TileState = 1 << iota // 1
-	Revealed                       // 2
-	Matched                        // 4
-	Blocked                        // 8
+	Hidden    TileState = 1 << iota // 1
+	Revealed                        // 2
+	Matched                         // 4
+	Blocked                         // 8
+	Cumulated                       // 16
 )
 
 func (s TileState) String() string {
@@ -37,6 +38,9 @@ func (s TileState) String() string {
 	}
 	if s&Blocked != 0 {
 		res += "blocked "
+	}
+	if s&Cumulated != 0 {
+		res += "cumulated "
 	}
 	if res == "" {
 		return "unknown"
@@ -395,11 +399,27 @@ type Entity interface {
 	SetState(TileState)
 	GetTransformation() Transformation
 	SetTransformation(Transformation)
-	GetOrientation() Direction // Gardé pour compatibilité, déduit de la Transformation
+	GetOrientation() Direction // Orientation cardinale
 	SetOrientation(Direction)
+	GetCumulationLevel() int
+	SetCumulationLevel(int)
 	AddTag(string)
 	HasTag(string) bool
 	RemoveTag(string)
+
+	IsCumulated() bool
+
+	// Association compliance
+	GetMatchID() string
+	GetLogicKey() string
+	GetElement() string
+	GetNarrativeTag() string
+	GetMatchTypes() []string
+	GetCategory() string
+
+	// Hoverable compliance (Pseudo-ECS logic)
+	GetHoverID() string
+	IsHoverAllowed() bool
 }
 
 // Transformation représente une des 8 symétries du carré (groupe diédrique D4)
@@ -432,7 +452,9 @@ func Compose(base, apply Transformation) Transformation {
 	if base > 7 || apply > 7 {
 		return base
 	}
-	return d4Table[base][apply]
+	// CORRECTION : La table D4 est structurée tel que d4Table[Deuxième_Op][Première_Op]
+	// Pour que le joueur agisse SUR la tuile, son clic est la deuxième opération.
+	return d4Table[apply][base]
 }
 
 // ToTransformation convertit une direction de flip en transformation D4
@@ -460,6 +482,7 @@ type BaseEntity struct {
 	Active    bool
 	State     TileState // L'état appartient maintenant à l'entité
 	Transform Transformation
+	CumulationLevel int
 	Tags      []string
 	Metadata  map[string]interface{}
 }
@@ -512,20 +535,14 @@ func (e *BaseEntity) SetState(s TileState)   { e.State = s }
 func (e *BaseEntity) GetTransformation() Transformation  { return e.Transform }
 func (e *BaseEntity) SetTransformation(t Transformation) { e.Transform = t }
 
+func (e *BaseEntity) GetCumulationLevel() int { return e.CumulationLevel }
+func (e *BaseEntity) SetCumulationLevel(l int) { e.CumulationLevel = l }
+
 func (e *BaseEntity) GetOrientation() Direction {
-	// Déduit une direction simplifiée pour la compatibilité (ex: pour le pathfinding)
-	switch e.Transform {
-	case TransIdentity:
-		return DirNorth
-	case TransRot90:
-		return DirEast
-	case TransRot180:
-		return DirSouth
-	case TransRot270:
-		return DirWest
-	default:
-		return DirNorth // Fallback
-	}
+	// Déduit une direction cardinale vers laquelle pointe le "Haut" de l'objet
+	// après application de la transformation D4.
+	// On transforme DirNorth (0, -1) pour voir où il finit.
+	return TransformDirection(DirNorth, e.Transform)
 }
 
 func (e *BaseEntity) SetOrientation(o Direction) {
@@ -566,6 +583,34 @@ func (e *BaseEntity) RemoveTag(tag string) {
 			return
 		}
 	}
+}
+
+func (e *BaseEntity) IsCumulated() bool {
+	return e.CumulationLevel > 0
+}
+
+func (e *BaseEntity) GetHoverID() string {
+	return string(e.ID)
+}
+
+func (e *BaseEntity) IsHoverAllowed() bool {
+	return e.State&Blocked == 0
+}
+
+// Matchable compliance (Default implementations)
+func (e *BaseEntity) GetMatchID() string {
+	if e.EType == TypeTrap {
+		return "trap"
+	}
+	return ""
+}
+func (e *BaseEntity) GetLogicKey() string      { return "" }
+func (e *BaseEntity) GetElement() string       { return "" }
+func (e *BaseEntity) GetNarrativeTag() string  { return "" }
+func (e *BaseEntity) GetMatchTypes() []string { return []string{"identical"} }
+
+func (e *BaseEntity) GetCategory() string {
+	return e.EType.String()
 }
 
 // Manager gère toutes les entités

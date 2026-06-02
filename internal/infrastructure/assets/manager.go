@@ -46,8 +46,9 @@ func NewManager() *Manager {
 		},
 		themes: map[string]TileTheme{
 			"default": ThemeDefault,
-			"forest":  ThemeForest,
 			"cave":    ThemeCave,
+			"desert":   ThemeDesert,
+			"forest":  ThemeForest,
 			"swamp":   ThemeSwamp,
 		},
 	}
@@ -151,6 +152,7 @@ func (m *Manager) generateAllAssets() {
 	m.images["tile_dolmen"] = m.images["tile_dolmen_default"]
 	m.images["tile_obelisk"] = m.images["tile_obelisk_default"]
 	m.images["tile_portal"] = m.images["tile_portal_default"]
+	m.images["resource_portable_portal"] = m.images["tile_portal_default"]
 	m.images["tile_exit"] = m.images["tile_exit_default"]
 
 	// Image pour case vide (sol nu avec quadrillage)
@@ -183,6 +185,14 @@ func (m *Manager) generateAllAssets() {
 	m.images["resource_shadow_essence"] = generateShadowEssence(size, ShadowEssencePalette)
 	// Crystal Shard
 	m.images["resource_crystal_shard"] = generateCrystalShard(size, CrystalShardPalette)
+	// Moss Truffle
+	m.images["resource_moss_truffle"] = generateMossTruffle(size, MossTrufflePalette)
+	// Void Bloom
+	m.images["resource_void_bloom"] = generateVoidBloom(size, VoidBloomPalette)
+	// Echo Crystal
+	m.images["resource_echo_crystal"] = generateEchoCrystal(size, EchoCrystalPalette)
+	// Sand Core
+	m.images["resource_sand_core"] = generateSandCore(size, SandCorePalette)
 
 	// === CRÉATURES ===
 	// Lumifly
@@ -199,8 +209,10 @@ func (m *Manager) generateAllAssets() {
 	m.images["creature_echo_hound"] = generateEchoHound(size, EchoHoundPalette)
 	// Moss Monkey
 	m.images["creature_moss_monkey"] = generateMossMonkey(size, MossMonkeyPalette)
-	// Fleeing Sprite (utilise le skin de Flutterwing par défaut)
-	m.images["creature_fleeing_sprite"] = m.images["creature_flutterwing"]
+	// Stonewarden
+	m.images["creature_stonewarden"] = generateStonewarden(size, StonewardenPalette)
+	// Fleeing Sprite
+	m.images["creature_fleeing_sprite"] = generateFleeingSprite(size, FleeingSpritePalette)
 
 	// === EFFETS DE FLIP ===
 	m.images["flip_overlay_top"] = generateFlipEffectOverlay(size, "top")

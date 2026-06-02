@@ -20,6 +20,8 @@ type Command interface {
 	CanExecute() bool
 }
 
+// --- REVEAL TILE COMMAND ---
+
 type RevealTileCommand struct {
 	World         *domain.World
 	GridID        string
@@ -28,18 +30,18 @@ type RevealTileCommand struct {
 }
 
 func (c *RevealTileCommand) CanExecute() bool {
-	// 1. Check grid exists
+	// 1. Vérifie si la grille existe
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
 		return false
 	}
 
-	// 2. Check player is on this grid
+	// 2. Vérifie si le joueur est sur cette grille
 	if c.World.CurrentGridID != c.GridID {
 		return false
 	}
 
-	// 2. Check tile exists and has an entity that is hidden
+	// 3. Vérifie si la parcelle existe et contient une entité cachée
 	tile, err := grid.Get(c.Position)
 	if err != nil {
 		return false
@@ -55,18 +57,25 @@ func (c *RevealTileCommand) CanExecute() bool {
 		return false
 	}
 
+	// Vérifie le coût en mana pour révéler une tuile cumulée (Coût = Niveau)
+	if ent.GetCumulationLevel() > 0 {
+		if c.World.Player.Stats.Mana < ent.GetCumulationLevel() {
+			return false
+		}
+	}
+
 	state := ent.GetState()
 	// Si c'est un piège révélé, on peut toujours le recacher (flip inverse)
 	if ent.GetType() == entity.TypeTrap && state&entity.Revealed != 0 {
 		return state&entity.Matched == 0
 	}
 
-	// Sinon (caché), ne peut pas révéler une tuile déjà révélée ou appairée
+	// Sinon, impossible de révéler une tuile déjà révélée ou appairée
 	if state&entity.Revealed != 0 || state&entity.Matched != 0 {
 		return false
 	}
 
-	// 3. Check only 2 tiles can be flipped per turn (across all grids)
+	// 4. Vérifie la limite de tuiles retournées par tour
 	if !c.World.CanFlipTile() {
 		return false
 	}
@@ -76,13 +85,23 @@ func (c *RevealTileCommand) CanExecute() bool {
 
 func (c *RevealTileCommand) Execute() error {
 	if c.World.CurrentGridID != c.GridID {
-		fmt.Println("Le joueur n'est pas sur cette grille")
-		fmt.Printf("Joueur sur %s mais a tenté %s\n", c.World.CurrentGridID, c.GridID)
+		fmt.Printf("[ERREUR] Joueur sur la grille %s mais a tenté %s\n", c.World.CurrentGridID, c.GridID)
 		return errors.New("le joueur n'est pas sur cette grille")
 	}
 
 	if !c.CanExecute() {
 		return errors.New("impossible de révéler cette tuile")
+	}
+
+	// Consommation de mana pour les tuiles cumulées
+	grid, _ := c.World.GetGrid(c.GridID)
+	tile, _ := grid.Get(c.Position)
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	ent, _ := c.World.Entities.Get(entity.ID(topID))
+
+	if ent.GetCumulationLevel() > 0 {
+		c.World.Player.ConsumeMana(ent.GetCumulationLevel())
+		fmt.Printf("[ALCHIMIE] Révélation d'une tuile Niv.%d : -%d Mana\n", ent.GetCumulationLevel(), ent.GetCumulationLevel())
 	}
 
 	// Calcule la position réelle du joueur en périphérie de la tuile et son ancrage
@@ -107,39 +126,43 @@ func (c *RevealTileCommand) Execute() error {
 		return err
 	}
 
-	// --- NOUVEAU : Logique de Confrontation (Zone de Menace) ---
+	// Logique de Confrontation (Zone de Menace)
 	if cre, ok := ent.(*creature.Creature); ok {
 		isThreatened := cre.IsPositionThreatened(playerPos)
 
-		fmt.Printf("[DEBUG] Reveal Créature: %s en %v (Transformation: %s)\n", cre.Species, cre.GetPosition(), cre.GetTransformation().String())
-		fmt.Printf("[DEBUG] Joueur en %v (Ancre: %v) | Menacé ? %v\n", playerPos, border, isThreatened)
+		fmt.Printf("[DEBUG] Reveal Créature: %s en %v | Menacé ? %v\n", cre.Species, cre.GetPosition(), isThreatened)
 
-		activeThreats := cre.GetActiveThreatDirections()
-		fmt.Printf("[DEBUG] Zones de menace actives: %v\n", activeThreats)
+		// Si le joueur est sous l'effet de Grace (Flutterwing), il évite l'attaque
+		if isThreatened && c.World.Player.GraceTurns > 0 {
+			fmt.Printf("[ABILITY] Grâce active : l'attaque de %s est évitée !\n", cre.Species)
+			isThreatened = false
+		}
 
 		if isThreatened {
 			fmt.Printf("[COMBAT] Confrontation ! La créature %s attaque le joueur en %v\n", cre.Species, playerPos)
 			c.World.Player.TakeDamage(10, "physical")
 
-			// Feedback visuel de l'attaque (demi-cercle rouge)
-			track := entity.NewTrack("intent_beam", 2, entity.Position{X: c.Position.X, Y: c.Position.Y}, playerPos)
-			track.SetGridID(c.GridID)
-			c.World.Entities.Register(track)
+			// Déclenche les effets visuels (Shaders) selon l'espèce
+			if cre.Species == "shadowstalker" {
+				c.World.Player.VisualEffects["blur"] = 3 // Dure 3 tours
+			} else if cre.Species == "lumifly" {
+				c.World.Player.VisualEffects["bubble"] = 3
+			}
 
-			// Publie un événement de dégâts pour l'UI
+			// Publie un événement de dégâts pour l'UI (le renderer gérera le feedback visuel)
 			c.World.EventBus.Publish(event.Event{
 				Type:     event.PlayerDamaged,
 				SourceID: string(cre.GetID()),
 				Payload: map[string]interface{}{
-					"damage": 10,
-					"type":   "physical",
-					"reason": "confrontation",
+					"damage":   10,
+					"type":     "physical",
+					"reason":   "confrontation",
+					"position": playerPos, // Ajoute la position pour le renderer
 				},
 			})
 		}
 	}
 
-	// Track this flipped tile for the current turn
 	c.World.AddFlippedTile(c.Position)
 
 	// Publie l'événement avec la direction de flip
@@ -153,6 +176,8 @@ func (c *RevealTileCommand) Execute() error {
 	return nil
 }
 
+// --- MATCH TILES COMMAND ---
+
 type MatchResult struct {
 	Success   bool
 	IsMatch   bool
@@ -165,15 +190,11 @@ type MatchTilesCommand struct {
 	AssocEng   *domain.AssocEngine
 	GridID     string
 	Pos1, Pos2 board.Position
-	OnSuccess  func() // Callback appelé en cas de succès
-	OnFailure  func() // Callback appelé en cas d'échec (pour cacher les cartes et passer le tour)
+	OnSuccess  func()
+	OnFailure  func()
 }
 
 func (c *MatchTilesCommand) CanExecute() bool {
-	if c.World.Player.Stats.Mana <= 0 {
-		return false
-	}
-
 	grid, ok := c.World.GetGrid(c.GridID)
 	if !ok {
 		return false
@@ -181,7 +202,6 @@ func (c *MatchTilesCommand) CanExecute() bool {
 
 	tile1, err1 := grid.Get(c.Pos1)
 	tile2, err2 := grid.Get(c.Pos2)
-
 	if err1 != nil || err2 != nil {
 		return false
 	}
@@ -194,7 +214,6 @@ func (c *MatchTilesCommand) CanExecute() bool {
 	topID2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
 	e1, ok1 := c.World.Entities.Get(entity.ID(topID1))
 	e2, ok2 := c.World.Entities.Get(entity.ID(topID2))
-
 	if !ok1 || !ok2 {
 		return false
 	}
@@ -204,19 +223,21 @@ func (c *MatchTilesCommand) CanExecute() bool {
 		return false
 	}
 
+	// Vérifie le coût en mana
+	// Match = 1 mana.
+	if c.World.Player.Stats.Mana < 1 {
+		return false
+	}
+
 	return true
 }
 
 func (c *MatchTilesCommand) Execute() error {
 	if !c.CanExecute() {
-		return errors.New("impossible d'appairer ces tuiles")
+		return errors.New("impossible d'appairer ces tuiles (mana insuffisant ou invalide)")
 	}
 
-	// Consomme 1 point de mana par tentative
-	c.World.Player.ConsumeMana(1)
-
 	grid, _ := c.World.GetGrid(c.GridID)
-
 	tile1, _ := grid.Get(c.Pos1)
 	tile2, _ := grid.Get(c.Pos2)
 
@@ -226,63 +247,28 @@ func (c *MatchTilesCommand) Execute() error {
 	entity1, _ := c.World.Entities.Get(entity.ID(topID1))
 	entity2, _ := c.World.Entities.Get(entity.ID(topID2))
 
-	// Détermine les types des entités
-	res1, isRes1 := entity1.(*domain.Resource)
-	res2, isRes2 := entity2.(*domain.Resource)
-	cre1, isCre1 := entity1.(*domain.Creature)
-	cre2, isCre2 := entity2.(*domain.Creature)
+	level := entity1.GetCumulationLevel()
 
-	// Vérifie si c'est une association valide
-	isMatch := false
-	matchType := ""
+	c.World.Player.ConsumeMana(1)
 
-	// Cas 1 : Deux ressources - utilise le système d'association
-	if isRes1 && isRes2 {
-		result, err := c.AssocEng.TryAssociate(res1, res2)
-		if err == nil && result.Success {
-			isMatch = true
-			matchType = result.Type.String()
-		}
-	}
+	// Refactorisation DDD : La logique d'association est déléguée au Domaine (AssocEngine)
+	result, err := c.AssocEng.TryAssociate(entity1, entity2)
 
-	// Cas 2 : Deux créatures - compare les espèces
-	if !isMatch && isCre1 && isCre2 {
-		if cre1.Species == cre2.Species {
-			isMatch = true
-			matchType = "creature_capture"
-		}
-	}
-
-	// Cas 3 : Deux pièges - ils s'annulent
-	if !isMatch && entity1.GetType() == entity.TypeTrap && entity2.GetType() == entity.TypeTrap {
-		isMatch = true
-		matchType = "trap_neutralization"
-	}
-
-	if isMatch {
-		// Succès : les entités sont marquées comme appairées
+	if err == nil && result.Success {
+		// --- LOGIQUE DE MATCH FINAL (LOOT) ---
 		c.World.MatchTile(c.GridID, c.Pos1)
 		c.World.MatchTile(c.GridID, c.Pos2)
 
-		// --- NOUVEAU : Logique de Match Valide (0 dégât) ---
-		// (Déjà implicite car on ne fait rien ici, mais on pourrait loguer)
-
-		// Si ce sont des ressources ou créatures, on incrémente le compteur de paires trouvées pour ouvrir les sorties
 		if entity1.GetType() == entity.TypeCreature || entity1.GetType() == entity.TypeResource {
-			if grid, ok := c.World.GetGrid(c.GridID); ok {
-				grid.MatchedTargetsCount += 2
-			}
+			grid.MatchedTargetsCount += 2
+			c.World.IsNavigationOpen(c.GridID)
 		}
 
-		// On récupère le nom pour le loot AVANT la suppression
 		name := "unknown"
-		if r, ok := entity1.(*domain.Resource); ok {
-			name = r.ResourceType
-		} else if c, ok := entity1.(*domain.Creature); ok {
-			name = c.Species
+		if r := entity1.GetMatchID(); r != "" {
+			name = r
 		}
 
-		// Publie l'événement de match (utilisé par le LootSystem)
 		c.World.EventBus.Publish(event.Event{
 			Type:     event.TileMatched,
 			SourceID: string(entity1.GetID()),
@@ -293,67 +279,256 @@ func (c *MatchTilesCommand) Execute() error {
 				"grid_id":     c.GridID,
 				"name":        name,
 				"entity_type": entity1.GetType(),
-				"assoc_type":  matchType,
+				"assoc_type":  result.Type.String(),
+				"level":       level,
 			},
 		})
 
-		// Note: on les retire du monde
 		c.World.RemoveEntity(entity1.GetID())
 		c.World.RemoveEntity(entity2.GetID())
 
 		if c.OnSuccess != nil {
 			c.OnSuccess()
 		}
-
 		return nil
-	} else {
-		// Échec : Association invalide
-		// --- NOUVEAU : Logique de Match Invalide (Dégâts par créature) ---
-		creatureCount := 0
-		if isCre1 {
-			creatureCount++
-		}
-		if isCre2 {
-			creatureCount++
-		}
-
-		if creatureCount > 0 {
-			damage := creatureCount * 10
-			fmt.Printf("[COMBAT] Match invalide avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
-			c.World.Player.TakeDamage(damage, "creature_fail")
-
-			c.World.EventBus.Publish(event.Event{
-				Type:     event.PlayerDamaged,
-				SourceID: "system",
-				Payload: map[string]interface{}{
-					"damage": damage,
-					"type":   "creature_fail",
-					"reason": "invalid_match",
-				},
-			})
-		}
-
-		// Recacher les entités avec animation basée sur la pente (Slope)
-		grid, _ := c.World.GetGrid(c.GridID)
-		plot1, _ := grid.Get(c.Pos1)
-		plot2, _ := grid.Get(c.Pos2)
-
-		_, _ = c.World.FlipTile(c.GridID, c.Pos1, plot1.Tilt.ToFlipDirection())
-		_, _ = c.World.FlipTile(c.GridID, c.Pos2, plot2.Tilt.ToFlipDirection())
-
-		// Publie les événements pour le renderer (Immediate pour éviter les délais)
-		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-			entity.Position(c.Pos1), string(entity1.GetID()), c.GridID, plot1.Tilt.ToFlipDirection()))
-		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-			entity.Position(c.Pos2), string(entity2.GetID()), c.GridID, plot2.Tilt.ToFlipDirection()))
-
-		if c.OnFailure != nil {
-			c.OnFailure()
-		}
-
-		return errors.New("association échouée")
 	}
+
+	// Échec : Association invalide
+	creatureCount := 0
+	if entity1.GetType() == entity.TypeCreature {
+		creatureCount++
+	}
+	if entity2.GetType() == entity.TypeCreature {
+		creatureCount++
+	}
+
+	resourceCount := 0
+	if entity1.GetType() == entity.TypeResource {
+		resourceCount++
+	}
+	if entity2.GetType() == entity.TypeResource {
+		resourceCount++
+	}
+
+	if creatureCount > 0 {
+		damage := creatureCount * 10
+		fmt.Printf("[COMBAT] Match invalide avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
+		c.World.Player.TakeDamage(damage, "creature_fail")
+
+		c.World.EventBus.Publish(event.Event{
+			Type:     event.PlayerDamaged,
+			SourceID: "system",
+			Payload: map[string]interface{}{
+				"damage": damage,
+				"type":   "creature_fail",
+				"reason": "invalid_match",
+			},
+		})
+	}
+
+	if resourceCount > 0 {
+		manaLoss := resourceCount * 5
+		fmt.Printf("[ALCHIMIE] Match invalide avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
+		c.World.Player.ConsumeMana(manaLoss)
+
+		c.World.EventBus.Publish(event.Event{
+			Type:     event.PlayerDamaged,
+			SourceID: "system",
+			Payload: map[string]interface{}{
+				"mana_loss": manaLoss,
+				"type":      "resource_fail",
+				"reason":    "invalid_match",
+			},
+		})
+	}
+
+	// Recacher les entités avec l'animation de pente (Slope)
+	plot1, _ := grid.Get(c.Pos1)
+	plot2, _ := grid.Get(c.Pos2)
+
+	_, _ = c.World.FlipTile(c.GridID, c.Pos1, plot1.Tilt.ToFlipDirection())
+	_, _ = c.World.FlipTile(c.GridID, c.Pos2, plot2.Tilt.ToFlipDirection())
+
+	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+		entity.Position(c.Pos1), string(entity1.GetID()), c.GridID, plot1.Tilt.ToFlipDirection()))
+	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+		entity.Position(c.Pos2), string(entity2.GetID()), c.GridID, plot2.Tilt.ToFlipDirection()))
+
+	if c.OnFailure != nil {
+		c.OnFailure()
+	}
+
+	return errors.New("association échouée")
 }
+
+// --- MERGE TILES COMMAND ---
+
+type MergeTilesCommand struct {
+	World      *domain.World
+	AssocEng   *domain.AssocEngine
+	GridID     string
+	Pos1, Pos2 board.Position
+	OnSuccess  func()
+	OnFailure  func()
+}
+
+func (c *MergeTilesCommand) CanExecute() bool {
+	grid, ok := c.World.GetGrid(c.GridID)
+	if !ok {
+		return false
+	}
+
+	tile1, err1 := grid.Get(c.Pos1)
+	tile2, err2 := grid.Get(c.Pos2)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+
+	if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
+		return false
+	}
+
+	id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+	id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+	e1, ok1 := c.World.Entities.Get(entity.ID(id1))
+	e2, ok2 := c.World.Entities.Get(entity.ID(id2))
+	if !ok1 || !ok2 {
+		return false
+	}
+
+	// Uniquement si les entités sont bien révélées
+	if e1.GetState()&entity.Revealed == 0 || e2.GetState()&entity.Revealed == 0 {
+		return false
+	}
+
+	level := e1.GetCumulationLevel()
+	maxLevel := 2
+	if level >= maxLevel {
+		return false
+	}
+
+	// Coût augmenté : 3 * (Niveau + 1)
+	cost := 3 * (level + 1)
+	if c.World.Player.Stats.Mana < cost {
+		return false
+	}
+
+	return true
+}
+
+func (c *MergeTilesCommand) Execute() error {
+	if !c.CanExecute() {
+		return errors.New("impossible de fusionner ces tuiles (mana insuffisant ou invalide)")
+	}
+
+	grid, _ := c.World.GetGrid(c.GridID)
+	tile1, _ := grid.Get(c.Pos1)
+	tile2, _ := grid.Get(c.Pos2)
+
+	id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+	id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+	e1, _ := c.World.Entities.Get(entity.ID(id1))
+	e2, _ := c.World.Entities.Get(entity.ID(id2))
+
+	level := e1.GetCumulationLevel()
+	cost := 3 * (level + 1)
+	c.World.Player.ConsumeMana(cost)
+
+	// Refactorisation DDD : On utilise le moteur d'association
+	result, err := c.AssocEng.TryAssociate(e1, e2)
+	isMatch := (err == nil && result.Success)
+
+	if isMatch {
+		fmt.Printf("[ALCHIMIE] Fusion réussie en %v (Niveau %d -> %d)\n", c.Pos1, level, level+1)
+
+		// Mise à jour de l'entité survivante
+		e1.SetCumulationLevel(level + 1)
+		e1.SetState(entity.Hidden) // Se recache après fusion
+		e1.AddTag("cumulated")
+
+		// On retire l'autre entité
+		c.World.RemoveEntity(e2.GetID())
+
+		// Navigation : Une fusion compte pour 1 point
+		grid.MatchedTargetsCount += 1
+		c.World.IsNavigationOpen(c.GridID)
+
+		// Notification de fusion
+		c.World.EventBus.Publish(event.NewTileMergedEvent(
+			entity.Position(c.Pos1),
+			string(e1.GetID()),
+			e1.GetMatchID(),
+			e1.GetType(),
+			level+1,
+		))
+
+		// Animation visuelle de retournement (fermeture)
+		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(c.Pos1),
+			string(e1.GetID()),
+			c.GridID,
+			tile1.Tilt.ToFlipDirection(),
+		))
+
+		// NOUVEAU : Après une fusion, on referme TOUTES les tuiles révélées
+		// (Maintenu car utile pour le gameplay memory)
+		if grid, ok := c.World.GetGrid(c.GridID); ok {
+			for pos, plot := range grid.Plots {
+				if len(plot.EntitiesID) == 0 {
+					continue
+				}
+				topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+				if ent, exists := c.World.Entities.Get(entity.ID(topID)); exists {
+					if ent.GetState()&entity.Revealed != 0 {
+						// On ferme avec l'animation de pente
+						_, _ = c.World.FlipTile(c.GridID, pos, plot.Tilt.ToFlipDirection())
+						c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+							entity.Position(pos), string(ent.GetID()), c.GridID, plot.Tilt.ToFlipDirection()))
+					}
+				}
+			}
+		}
+
+		if c.OnSuccess != nil {
+			c.OnSuccess()
+		}
+		return nil
+	}
+
+	// Échec : Association invalide (même punition que le match)
+	damage := 0
+	if e1.GetType() == entity.TypeCreature {
+		damage += 10
+	}
+	if e2.GetType() == entity.TypeCreature {
+		damage += 10
+	}
+
+	if damage > 0 {
+		c.World.Player.TakeDamage(damage, "creature_fail")
+	} else {
+		c.World.Player.ConsumeMana(5)
+	}
+
+	// Recache les deux
+	p1, _ := grid.Get(c.Pos1)
+	p2, _ := grid.Get(c.Pos2)
+	_, _ = c.World.FlipTile(c.GridID, c.Pos1, p1.Tilt.ToFlipDirection())
+	_, _ = c.World.FlipTile(c.GridID, c.Pos2, p2.Tilt.ToFlipDirection())
+
+	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+		entity.Position(c.Pos1), id1, c.GridID, p1.Tilt.ToFlipDirection()))
+	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+		entity.Position(c.Pos2), id2, c.GridID, p2.Tilt.ToFlipDirection()))
+
+	if c.OnFailure != nil {
+		c.OnFailure()
+	}
+
+	return errors.New("fusion échouée")
+}
+
+// --- DISCARD TRAP COMMAND ---
 
 type DiscardTrapCommand struct {
 	World     *domain.World
@@ -376,7 +551,6 @@ func (c *DiscardTrapCommand) CanExecute() bool {
 	if !ok {
 		return false
 	}
-	// On ne peut défausser qu'un piège révélé
 	return ent.GetType() == entity.TypeTrap && ent.GetState()&entity.Revealed != 0
 }
 
@@ -385,17 +559,13 @@ func (c *DiscardTrapCommand) Execute() error {
 		return errors.New("impossible de défausser ce piège")
 	}
 
-	// Consomme 1 point de mana (compte comme un tour/match)
 	c.World.Player.ConsumeMana(1)
 
 	grid, _ := c.World.GetGrid(c.GridID)
 	plot, _ := grid.Get(c.Position)
 	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
 
-	// Supprime l'entité du monde (défausse)
 	c.World.RemoveEntity(entity.ID(topID))
-
-	// Note: On pourrait émettre un événement spécifique si besoin
 
 	if c.OnSuccess != nil {
 		c.OnSuccess()
@@ -403,6 +573,8 @@ func (c *DiscardTrapCommand) Execute() error {
 
 	return nil
 }
+
+// --- END TURN & SKIP COMMANDS ---
 
 type EndTurnCommand struct {
 	World *domain.World
@@ -413,7 +585,6 @@ func (c *EndTurnCommand) CanExecute() bool {
 }
 
 func (c *EndTurnCommand) Execute() error {
-	// Consomme 1 point de sanité par tour passé
 	if c.World.Player.Stats.Sanity > 0 {
 		c.World.Player.Stats.Sanity--
 	}
@@ -423,6 +594,48 @@ func (c *EndTurnCommand) Execute() error {
 
 	return nil
 }
+
+// SkipTurnCommand ferme toutes les tuiles non appairées ouvertes (comme les séismes) et termine le tour.
+type SkipTurnCommand struct {
+	World *domain.World
+}
+
+func (c *SkipTurnCommand) CanExecute() bool {
+	return true
+}
+
+func (c *SkipTurnCommand) Execute() error {
+	gridID := c.World.CurrentGridID
+	if grid, ok := c.World.GetGrid(gridID); ok {
+		for pos, plot := range grid.Plots {
+			if len(plot.EntitiesID) == 0 {
+				continue
+			}
+
+			topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+			if ent, exists := c.World.Entities.Get(entity.ID(topID)); exists {
+				state := ent.GetState()
+
+				// Cache et anime toutes les tuiles révélées qui ne sont pas validées
+				if state&entity.Revealed != 0 && state&entity.Matched == 0 {
+					_, _ = c.World.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection())
+
+					c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+						entity.Position(pos),
+						string(ent.GetID()),
+						gridID,
+						plot.Tilt.ToFlipDirection(),
+					))
+				}
+			}
+		}
+	}
+
+	endTurn := &EndTurnCommand{World: c.World}
+	return endTurn.Execute()
+}
+
+// --- MANAGEMENT & LOOT COMMANDS ---
 
 type SpawnTestEntitiesCommand struct {
 	World  *domain.World
@@ -452,7 +665,6 @@ func (c *SpawnTestEntitiesCommand) Execute() error {
 	}
 
 	c.World.SpawnCreature(c.GridID, "lumifly", entity.Position{X: 3, Y: 3})
-
 	return nil
 }
 
@@ -471,7 +683,6 @@ func (c *ClearBoardCommand) Execute() error {
 		return errors.New("grille non trouvée")
 	}
 
-	// Supprime toutes les entités de ce grid
 	for _, e := range c.World.Entities.GetAllActive() {
 		if e.GetGridID() == c.GridID {
 			c.World.RemoveEntity(e.GetID())
@@ -479,7 +690,6 @@ func (c *ClearBoardCommand) Execute() error {
 	}
 
 	grid.InitialMatchableCount = 0
-
 	return nil
 }
 
@@ -516,7 +726,7 @@ func (c *UsePortablePortalCommand) Execute() error {
 type UseScannerItemCommand struct {
 	World     *domain.World
 	GridID    string
-	ItemIndex int // L'index de l'objet dans la liste d'inventaire du joueur
+	ItemIndex int
 }
 
 func (c *UseScannerItemCommand) CanExecute() bool {
@@ -524,13 +734,11 @@ func (c *UseScannerItemCommand) CanExecute() bool {
 		return false
 	}
 
-	// 1. Vérifie si l'index est valide dans l'inventaire
 	inv := &c.World.Player.Inventory
 	if c.ItemIndex < 0 || c.ItemIndex >= len(inv.Items) {
 		return false
 	}
 
-	// 2. Récupère l'objet sans le supprimer pour vérification
 	item, err := inv.GetItem(c.ItemIndex)
 	if err != nil {
 		return false
@@ -544,37 +752,37 @@ func (c *UseScannerItemCommand) CanExecute() bool {
 }
 
 func (c *UseScannerItemCommand) Execute() error {
+	item, err := c.World.Player.Inventory.GetItem(c.ItemIndex)
+	if err != nil {
+		return err
+	}
+
 	if !c.CanExecute() {
 		return errors.New("impossible d'utiliser le scanner (item invalide ou inutilisable)")
 	}
 
-	// 4. 🛠️ AJUSTEMENT : Utilise c.GridID s'il est fourni, sinon replie-toi sur c.World.CurrentGridID
 	targetGrid := c.GridID
 	if targetGrid == "" {
 		targetGrid = c.World.CurrentGridID
 	}
 
-	// Déclenche l'effet de scan dans le monde
-	err := c.World.TriggerScannerEffect(targetGrid)
+	err = c.World.TriggerScannerEffect(targetGrid, item.GetCumulationLevel())
 	if err != nil {
 		return fmt.Errorf("échec de l'effet de scan : %w", err)
 	}
 
-	// Si le scan a fonctionné, on consomme l'objet en le retirant de l'inventaire
-	inv := &c.World.Player.Inventory
-	err = inv.RemoveItem(c.ItemIndex)
+	err = c.World.RemoveLootItem(c.ItemIndex)
 	if err != nil {
 		return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
 	}
 
-	fmt.Printf("[ITEM] Le joueur a utilisé le cri de l'Echo Hound depuis l'emplacement %d\\n", c.ItemIndex)
-
+	fmt.Printf("[ITEM] Le joueur a utilisé le cri de l'Echo Hound depuis l'emplacement %d\n", c.ItemIndex)
 	return nil
 }
 
 type UseLootItemCommand struct {
 	World     *domain.World
-	ItemIndex int // L'index de l'objet dans l'inventaire
+	ItemIndex int
 }
 
 func (c *UseLootItemCommand) CanExecute() bool {
@@ -588,109 +796,38 @@ func (c *UseLootItemCommand) CanExecute() bool {
 	}
 
 	item, err := inv.GetItem(c.ItemIndex)
-	if err != nil {
+	if err != nil || !item.IsUsable {
 		return false
 	}
 
-	if !item.IsUsable {
-		return false
+	if ability, exists := ItemAbilities[item.Name]; exists {
+		return ability.CanExecute(c.World)
 	}
 
-	switch item.Name {
-	case player.DreamberryItemName,
-		player.MoonstoneItemName,
-		player.CrystalShardItemName,
-		player.WhisperingHerbItemName,
-		player.SpecterItemName,
-		player.BurrowerItemName:
-		return true
-	default:
-		return false
-	}
+	return false
 }
 
 func (c *UseLootItemCommand) Execute() error {
-	if !c.CanExecute() {
-		return errors.New("impossible d'utiliser cet objet de butin")
-	}
-
-	inv := &c.World.Player.Inventory
-	item, err := inv.GetItem(c.ItemIndex)
+	item, err := c.World.Player.Inventory.GetItem(c.ItemIndex)
 	if err != nil {
 		return err
 	}
 
-	var message string
-
-	switch item.Name {
-	case player.DreamberryItemName:
-		const healthRestoration = 5
-		c.World.Player.Heal(healthRestoration)
-		message = fmt.Sprintf("Dreamberry consommée : +%d santé.", healthRestoration)
-
-	case player.MoonstoneItemName:
-		const sanityRestoration = 5
-		c.World.Player.RestoreSanity(sanityRestoration)
-		message = fmt.Sprintf("Moonstone consommée : +%d sanité.", sanityRestoration)
-
-	case player.CrystalShardItemName:
-		const manaRestoration = 5
-		c.World.Player.RestoreMana(manaRestoration)
-		message = fmt.Sprintf("Crystal Shard consommée : +%d mana.", manaRestoration)
-
-	case player.WhisperingHerbItemName:
-		message = "Une herbe chuchotante murmure un secret apaisant..."
-
-	case player.SpecterItemName:
-		gridID := c.World.CurrentGridID
-		creatures := c.World.Entities.GetByType(entity.TypeCreature)
-		removed := 0
-		for _, e := range creatures {
-			if e.GetGridID() != gridID {
-				continue
-			}
-			c.World.RemoveEntity(e.GetID())
-			removed++
-			if removed >= 2 {
-				break
-			}
-		}
-		if removed < 2 {
-			return errors.New("spectre inutilisable : moins de deux créatures disponibles")
-		}
-		message = "Spectre utilisé : une paire de créatures a disparu du plateau."
-
-	case player.BurrowerItemName:
-		gridID := c.World.CurrentGridID
-		creatures := c.World.Entities.GetByType(entity.TypeCreature)
-		marked := false
-		for _, e := range creatures {
-			if e.GetGridID() != gridID {
-				continue
-			}
-			creatureEnt, ok := e.(*creature.Creature)
-			if !ok {
-				continue
-			}
-			if creatureEnt.MovementProfile == nil {
-				continue
-			}
-			creatureEnt.MovementProfile.Perception.LeavesTracks = true
-			creatureEnt.MovementProfile.Perception.TrackType = "mud"
-			creatureEnt.MovementProfile.Perception.TrackDuration = 3
-			marked = true
-			break
-		}
-		if !marked {
-			return errors.New("burrower inutilisable : aucune créature sur la grille")
-		}
-		message = "Burrower activé : une créature laissera bientôt des traces de boue."
-
-	default:
-		return errors.New("objet de butin non pris en charge")
+	ability, exists := ItemAbilities[item.Name]
+	if !exists {
+		return fmt.Errorf("aucune capacité définie pour l'objet : %s", item.Name)
 	}
 
-	err = inv.RemoveItem(c.ItemIndex)
+	if !ability.CanExecute(c.World) {
+		return fmt.Errorf("les conditions d'utilisation pour %s ne sont pas remplies (aucune pile trouvée ?)", item.Name)
+	}
+
+	message, errAbility := ability.Execute(c.World, item.GetCumulationLevel())
+	if errAbility != nil {
+		return errAbility
+	}
+
+	err = c.World.RemoveLootItem(c.ItemIndex)
 	if err != nil {
 		return fmt.Errorf("erreur lors de la suppression de l'objet : %w", err)
 	}
@@ -699,14 +836,13 @@ func (c *UseLootItemCommand) Execute() error {
 		c.World.EventBus.PublishImmediate(event.NewItemMessageEvent(message))
 	}
 
-	fmt.Printf("[ITEM] %s utilisé depuis l'emplacement %d\n", item.Name, c.ItemIndex)
+	fmt.Printf("[ITEM] %s utilisé (Ability activée) depuis l'emplacement %d\n", item.Name, c.ItemIndex)
 	return nil
 }
 
-// --- COMMANDE DÉDIÉE À LA DREAMBERRY ---
 type UseDreamberryItemCommand struct {
 	World     *domain.World
-	ItemIndex int // L'index de l'objet dans l'inventaire
+	ItemIndex int
 }
 
 func (c *UseDreamberryItemCommand) CanExecute() bool {
@@ -724,7 +860,6 @@ func (c *UseDreamberryItemCommand) CanExecute() bool {
 		return false
 	}
 
-	// La commande ne s'occupe QUE de la dreamberry utilisable
 	if item.Name != "dreamberry" || !item.IsUsable {
 		return false
 	}
@@ -737,20 +872,19 @@ func (c *UseDreamberryItemCommand) Execute() error {
 		return errors.New("impossible d'utiliser la dreamberry (item invalide ou inutilisable)")
 	}
 
-	// 1. Applique l'effet de restauration de mana
-	const manaRestorationAmount = 5 // À ajuster selon l'équilibrage
+	const manaRestorationAmount = 5
 	c.World.Player.RestoreMana(manaRestorationAmount)
 
-	// 2. Consomme l'objet en le retirant de l'inventaire
-	inv := &c.World.Player.Inventory
-	err := inv.RemoveItem(c.ItemIndex)
+	err := c.World.RemoveLootItem(c.ItemIndex)
 	if err != nil {
 		return fmt.Errorf("erreur lors de la suppression de la dreamberry : %w", err)
 	}
 
-	fmt.Printf("[ITEM] Le joueur a consommé une Dreamberry (Mana +%d) depuis l'emplacement %d\\n", manaRestorationAmount, c.ItemIndex)
+	fmt.Printf("[ITEM] Le joueur a consommé une Dreamberry (Mana +%d) depuis l'emplacement %d\n", manaRestorationAmount, c.ItemIndex)
 	return nil
 }
+
+// --- NAVIGATION & ZONE COMMANDS ---
 
 type ClearAllBoardsCommand struct {
 	World *domain.World
@@ -761,11 +895,9 @@ func (c *ClearAllBoardsCommand) CanExecute() bool {
 }
 
 func (c *ClearAllBoardsCommand) Execute() error {
-	// Supprime toutes les entités
 	for _, e := range c.World.Entities.GetAllActive() {
 		c.World.RemoveEntity(e.GetID())
 	}
-
 	return nil
 }
 
@@ -785,7 +917,6 @@ func (c *SwitchGridCommand) Execute() error {
 	}
 	c.World.SetCurrentGrid(c.GridID)
 
-	// Update player position to center of new grid
 	grid, _ := c.World.GetGrid(c.GridID)
 	playerPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
 	c.World.SetPlayerPosition(playerPos)
@@ -810,7 +941,7 @@ func (c *UnlockNavigationCommand) Execute() error {
 	}
 
 	grid.NavigationForcedOpen = true
-	fmt.Printf("[DEBUG] Navigation forcée pour la zone %s\\n", c.GridID)
+	fmt.Printf("[DEBUG] Navigation forcée pour la zone %s\n", c.GridID)
 	return nil
 }
 
@@ -828,7 +959,6 @@ func (c *SwitchZoneCommand) CanExecute() bool {
 		return false
 	}
 
-	// La navigation n'est possible que si le seuil de complétion est atteint
 	return c.World.IsNavigationOpen(c.World.CurrentGridID)
 }
 
@@ -837,7 +967,6 @@ func (c *SwitchZoneCommand) Execute() error {
 		return errors.New("aucune zone connectée dans cette direction ou conditions non remplies")
 	}
 
-	// Marque les sorties comme révélées et appairées lors de la transition (pour cohérence visuelle)
 	if grid, ok := c.World.GetGrid(c.World.CurrentGridID); ok {
 		grid.ExitsState[c.Direction] = [2]entity.TileState{
 			entity.Revealed | entity.Matched,
@@ -846,9 +975,8 @@ func (c *SwitchZoneCommand) Execute() error {
 	}
 
 	targetID, _ := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)
-	c.World.SetCurrentGrid(targetID)
+	c.World.SetCurrentGridFrom(targetID, c.Direction)
 
-	// Positionne le joueur de l'autre côté de la grille (entrée logique)
 	grid, _ := c.World.GetGrid(targetID)
 	newPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
 
@@ -884,7 +1012,8 @@ func (c *RotateGridCommand) Execute() error {
 	return c.World.RotateGrid(c.GridID)
 }
 
-// flipToPlayerState convertit une direction de flip en offset de position et en ancrage pour le joueur.
+// --- HELPERS ---
+
 func flipToPlayerState(f domain.FlipDirection) (entity.Position, player.BorderPosition) {
 	switch f {
 	case domain.FlipTop:
@@ -904,6 +1033,6 @@ func flipToPlayerState(f domain.FlipDirection) (entity.Position, player.BorderPo
 	case domain.FlipTopLeft:
 		return entity.Position{X: -1, Y: -1}, player.BorderTopLeft
 	default:
-		return entity.Position{X: 0, Y: 0}, player.BorderTop // Fallback
+		return entity.Position{X: 0, Y: 0}, player.BorderTop
 	}
 }

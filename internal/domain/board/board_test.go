@@ -7,7 +7,6 @@ import (
 )
 
 func TestNewGrid(t *testing.T) {
-	// Ajout du biome forest pour correspondre à la signature
 	g := NewGrid("test", 4, 4, BiomeForest)
 
 	if g.Width != 4 || g.Height != 4 {
@@ -31,7 +30,6 @@ func TestGridGet(t *testing.T) {
 		t.Error("Got wrong plot position")
 	}
 
-	// Test out of bounds
 	_, err = g.Get(Position{X: 10, Y: 10})
 	if err == nil {
 		t.Error("Should return error for out of bounds")
@@ -64,13 +62,11 @@ func TestGridIsValid(t *testing.T) {
 func TestGetNeighbors(t *testing.T) {
 	g := NewGrid("test", 4, 4, BiomeForest)
 
-	// Corner should have 3 neighbors (horizontal, vertical, diagonal)
 	neighbors := g.GetNeighbors(Position{X: 0, Y: 0})
 	if len(neighbors) != 3 {
 		t.Errorf("Corner should have 3 neighbors, got %d", len(neighbors))
 	}
 
-	// Center should have 8 neighbors
 	neighbors = g.GetNeighbors(Position{X: 1, Y: 1})
 	if len(neighbors) != 8 {
 		t.Errorf("Center should have 8 neighbors, got %d", len(neighbors))
@@ -120,5 +116,33 @@ func TestCalculateFlipDirection(t *testing.T) {
 		if result != tc.expected {
 			t.Errorf("At (%d, %d) expected %s, got %s", tc.localX, tc.localY, tc.expected.String(), result.String())
 		}
+	}
+}
+
+func TestGridRotateClockwise(t *testing.T) {
+	g := NewGrid("test", 4, 4, BiomeForest)
+
+	pos := Position{X: 1, Y: 0}
+	g.PlaceEntity(pos, "test_entity")
+
+	g.RotateClockwise()
+
+	if g.MainBearing != BearingEast {
+		t.Errorf("Expected MainBearing to be East (1), got %d", g.MainBearing)
+	}
+
+	newPos := Position{X: 3, Y: 1}
+	plot, err := g.Get(newPos)
+	if err != nil {
+		t.Fatalf("Plot at %v not found after rotation: %v", newPos, err)
+	}
+
+	if len(plot.EntitiesID) != 1 || plot.EntitiesID[0] != "test_entity" {
+		t.Errorf("Expected entity at %v, but plot entities are %v", newPos, plot.EntitiesID)
+	}
+
+	oldPlot, _ := g.Get(pos)
+	if len(oldPlot.EntitiesID) != 0 {
+		t.Errorf("Expected old plot at %v to be empty, but got %v", pos, oldPlot.EntitiesID)
 	}
 }

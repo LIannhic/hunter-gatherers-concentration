@@ -72,10 +72,13 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Grid` : Plateau individuel (Tuiles, Biomes, Pentes)
   - `DreamPlane` : Réseau de grilles connectées. Gère les `DiscoveryStates` (Hidden, Adjacent, Visited) pour la minimap.
   - `LayoutGenerator` : Algorithmes de génération de la structure du plan onirique.
+  - **Persistance de Navigation** : Gère la révélation automatique des entrées et le scellage dynamique des sorties via les événements `NavigationOpened`/`NavigationClosed`.
 - **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
   - `TileState` : Hidden, Revealed, Matched, Blocked
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
+  - `CumulationLevel` : Niveau de cumul (0 à 2) utilisé pour la fusion et le scaling visuel.
   - `Manager` : Stockage et accès rapide aux entités
+  - `DebugState` : État global de débogage permettant d'outrepasser les règles de difficulté, de filtrer les entités et de forcer les shaders.
   - `AddTag(string)`, `HasTag(string)`, `RemoveTag(string)` : Méthodes permettant de gérer les propriétés dynamiques ou visuelles des entités (ex: "moss_lure", "flying").
   - `ThreatZone` : (Creature) Liste de directions attaquées localement.
 - **`component/`** : Stockage et définition des composants (`Store`)
@@ -94,6 +97,8 @@ func (s *LifecycleSystem) Update(world *World) {
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)
 - Une séparation claire : le plateau fournit la géométrie, les entités portent la logique
 - Un système plus flexible pour les entités spéciales (ex: les portails de commencement qui se bloquent après un délai)
+- **Unification de l'interface `Hoverable`** : Toutes les entités interactives (tuiles, butin) et les sorties implémentent `Hoverable`, permettant un effet d'inclinaison (tilt) unifié au survol.
+- **Système de Cumul (Merge)** : Une mécanique permettant de fusionner des paires identiques pour augmenter leur valeur visuelle et stratégique avant la capture.
 
 ---
 
@@ -138,8 +143,10 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 ### Objectif
 
-Le cœur du jeu est le mécanisme d'association de tuiles (Memory). Différents types d'associations existent :
-- **Identical** : Paire identique
+Le cœur du jeu est le mécanisme d'association de tuiles (Memory). Pour le moment, seul le type d'association suivant est actif :
+- **Identical** : Paire identique (même ID)
+
+D'autres types d'associations sont prévus pour le futur et ne sont pas encore actifs :
 - **Logical** : Clé/Serrure, Marteau/Enclume
 - **Elemental** : Feu + Bois, Eau + Plante
 - **Narrative** : Fragments d'histoire
@@ -322,15 +329,17 @@ L'inventaire agit comme un tampon entre la session de récolte onirique et le fo
 ### Fonctionnement du LootSystem
 
 1. **Détection** : Le système écoute les événements `TileMatched`.
-2. **Instanciation** : Il crée un `LootItem` à partir des métadonnées de l'entité matchée (nom de l'espèce ou type de ressource).
-3. **Transfert** : L'objet est ajouté au premier slot disponible de l'inventaire du joueur.
-4. **Overflow** : Si l'inventaire est plein (30 slots), le butin est détruit et un événement `InventoryFull` est émis pour déclencher un retour visuel.
+2. **Instanciation** : Il crée un `LootItem` à partir des métadonnées de l'entité matchée. `LootItem` est maintenant une entité de plein droit (`entity.Entity`) de type `TypeLoot`.
+3. **Grille d'Inventaire** : L'inventaire est géré comme une `Grid` dédiée (`InventoryGridID = "inventory"`). Cela permet d'utiliser les mêmes systèmes de rendu et de survol que pour le plateau de jeu.
+4. **Transfert** : L'objet est ajouté à la fois à la liste logique du joueur via `AddLootItem` et placé spatialement sur la grille d'inventaire pour la synchronisation.
+5. **Overflow** : Si l'inventaire est plein (30 slots), le butin est détruit et un événement `InventoryFull` est émis pour déclencher un retour visuel.
 
 ### Caractéristiques de l'Inventaire
 
 - **Multi-sélection** : Permet de sélectionner plusieurs objets pour une suppression groupée.
 - **Sécurité** : Certains objets (ex: Portail Portatif) possèdent le tag `IsDeletable: false` et ne peuvent pas être supprimés par le joueur.
 - **Affichage** : Utilise un système de clipping et de défilement fluide (pixel par pixel) pour suggérer la profondeur de la réserve.
+- **Support des Niveaux** : Les constructeurs d'objets (`NewXXXItem`) acceptent un paramètre de niveau pour instancier directement des butins puissants.
 
 ---
 
@@ -348,16 +357,44 @@ Le domaine communique l'intention de profondeur au moteur de rendu via les évé
 - **Calque Normal** : Pour les tuiles physiques (Memory), les ressources et les déplacements standards.
 - **Calque Over** : Pour les entités volantes ou les effets de surface (griffures).
 
+### Fusion et Cumul (MERGE)
+
+Une nouvelle étape de gameplay s'insère avant la capture :
+- **Principe** : Fusionner 2 entités identiques de même niveau via le bouton **MERGE**.
+- **Effet** : Une entité est retirée, l'autre augmente son `CumulationLevel` (Niveau max 2).
+- **Match** : Le bouton **MATCH** valide des paires de même rang. Un match de haut niveau donne un butin plus puissant. Les associations sont désormais gérées de manière centralisée par l'**AssocEngine** dans la couche Domain, qui impose une égalité stricte des niveaux de cumul.
+- **Mana** : La fusion a un coût progressif, et la révélation d'une tuile cumulée consomme du Mana.
+
+Certains butins peuvent être utilisés directement depuis l'inventaire pour octroyer des bonus :
+
+- **Shadowstalker** : Octroie l'état **Évanescent** pendant 1 tour. Le joueur ne subit aucun dégât (physique ou d'erreur de match). Le cadre de sélection du plateau devient **gris** pour signaler cet état.
+- **Echo Hound** : Déclenche un scanner révélant les positions des entités cachées.
+- **Fleeing Sprite** : Révèle visuellement les zones de menace de toutes les créatures sur la grille actuelle pendant 1 tour via des arcs blancs.
+- **Flutterwing** : Restaure 10 Sanité et accorde l'état **Grâce** (3 tours), permettant d'éviter les attaques lors des révélations.
+- **Burrower** : Force une créature à laisser des traces de boue lors de son prochain déplacement.
+- **Spectre** : Fait disparaître une paire de créatures du plateau.
+- **Ressources Globales** : Restaurent de la santé, de la mana ou de la santé mentale (+5).
+- **Ressources Exclusives** : Restaurent des statistiques de manière plus puissante (+15) ou équilibrée.
+
+### Alchimie et Pénalités de Ressources
+
+Tout comme les créatures, l'interaction avec les ressources est soumise à une rigueur alchimique :
+- **Match Invalide** : Tenter d'appairer des ressources incompatibles provoque une déstabilisation magique (-5 Mana par ressource révélée).
+- **Skip de Match Valide** : Ignorer une paire de ressources compatible gaspille leur potentiel énergétique (-5 Mana par ressource révélée).
+
 ### Animation de fermeture et relief
 
-Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement. Elles utilisent la propriété `Tilt` (pente) de la parcelle. Cela simule une tuile qui "retombe" selon la gravité du terrain.
+Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement :
+- **Pente (Tilt)** : Elles utilisent la propriété `Tilt` de la parcelle pour une retombée "naturelle".
+- **Navigation** : Les entrées/sorties se scellent (Révélé -> Caché) de l'intérieur vers l'extérieur tant que la zone n'est pas sécurisée, et s'ouvrent à nouveau (Caché -> Révélé) une fois les objectifs atteints.
 
 ### Orientation Persistante et Mathématiques D4
 
 Le moteur gère une accumulation réelle des transformations géométriques :
-- **Composition à Droite** : Chaque nouveau mouvement (flip) est composé avec l'état actuel de l'entité (`current * apply`).
+- **Composition SUR l'état** : Chaque nouveau mouvement (flip) est appliqué sur l'état actuel de l'entité (`apply * current`). Cela respecte la logique physique où le joueur manipule une tuile déjà orientée.
 - **Fermeture Physique** : La fermeture d'une tuile (via la pente du terrain) est une transformation réelle qui modifie l'orientation logique face cachée.
 - **Réversibilité** : Grâce aux propriétés du groupe $D_4$, deux flips identiques s'annulent ($T^2 = I$), permettant de retrouver l'état d'origine si le joueur et le terrain agissent sur le même axe.
+- **Nomenclature Relative** : Les créatures utilisent des directions relatives (`Forward`, `Backward`, `Left`, `Right`) pour définir leurs zones de menace. Ces directions sont transformées en coordonnées absolues du plateau via la matrice D4 de l'entité.
 
 ### Distinction Invisibilité vs Profondeur
 

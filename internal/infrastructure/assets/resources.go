@@ -10,6 +10,7 @@ package assets
 
 import (
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -63,6 +64,38 @@ var (
 		Secondary: color.RGBA{120, 180, 220, 255},
 		Accent:    color.RGBA{240, 250, 255, 255},
 		Bg:        color.RGBA{50, 70, 90, 255},
+	}
+
+	// MossTruffle - Truffe de mousse (Forêt)
+	MossTrufflePalette = ResourcePalette{
+		Primary:   color.RGBA{100, 140, 60, 255},  // Vert mousse
+		Secondary: color.RGBA{70, 100, 40, 255},   // Vert sombre
+		Accent:    color.RGBA{200, 220, 150, 255}, // Vert clair brillant
+		Bg:        color.RGBA{45, 55, 40, 255},
+	}
+
+	// VoidBloom - Fleur du vide (Grotte)
+	VoidBloomPalette = ResourcePalette{
+		Primary:   color.RGBA{100, 60, 140, 255},  // Indigo/Violet
+		Secondary: color.RGBA{50, 30, 80, 255},    // Violet profond
+		Accent:    color.RGBA{200, 150, 255, 255}, // Violet néon
+		Bg:        color.RGBA{30, 25, 45, 255},
+	}
+
+	// EchoCrystal - Cristal d'écho (Marais)
+	EchoCrystalPalette = ResourcePalette{
+		Primary:   color.RGBA{80, 200, 180, 255},  // Turquoise
+		Secondary: color.RGBA{40, 120, 100, 255},  // Sarcelle sombre
+		Accent:    color.RGBA{150, 255, 220, 255}, // Cyan clair
+		Bg:        color.RGBA{20, 50, 45, 255},
+	}
+
+	// SandCore - Noyau de sable (Désert)
+	SandCorePalette = ResourcePalette{
+		Primary:   color.RGBA{240, 200, 100, 255}, // Sable doré
+		Secondary: color.RGBA{180, 140, 60, 255},  // Ocre
+		Accent:    color.RGBA{255, 250, 200, 255}, // Jaune pâle brillant
+		Bg:        color.RGBA{60, 50, 30, 255},
 	}
 )
 
@@ -229,6 +262,71 @@ func generateCrystalShard(size int, p ResourcePalette) *ebiten.Image {
 	vector.DrawFilledCircle(img, centerX-5, centerY-10, 3, sparkleColor, true)
 	vector.DrawFilledCircle(img, centerX+3, centerY-5, 2, sparkleColor, true)
 
+	return img
+}
+
+// generateMossTruffle crée l'icône d'une truffe de mousse
+func generateMossTruffle(size int, p ResourcePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+	centerX, centerY := float32(size/2), float32(size/2)
+	// Forme bosselée
+	vector.DrawFilledCircle(img, centerX, centerY, float32(size/4), p.Primary, true)
+	vector.DrawFilledCircle(img, centerX-10, centerY-8, float32(size/6), p.Primary, true)
+	vector.DrawFilledCircle(img, centerX+8, centerY+5, float32(size/6), p.Primary, true)
+	// Points de mousse
+	vector.DrawFilledCircle(img, centerX-5, centerY+10, 4, p.Secondary, true)
+	vector.DrawFilledCircle(img, centerX+12, centerY-5, 3, p.Accent, true)
+	return img
+}
+
+// generateVoidBloom crée l'icône d'une fleur du vide
+func generateVoidBloom(size int, p ResourcePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+	centerX, centerY := float32(size/2), float32(size/2)
+	// Pétales éthérés
+	for i := 0; i < 6; i++ {
+		angle := float64(i) * 3.14159 * 2 / 6
+		px := centerX + float32(math.Cos(angle))*20
+		py := centerY + float32(math.Sin(angle))*20
+		vector.DrawFilledCircle(img, px, py, 12, p.Primary, true)
+	}
+	// Noyau sombre
+	vector.DrawFilledCircle(img, centerX, centerY, 10, p.Secondary, true)
+	// Aura
+	vector.DrawFilledCircle(img, centerX, centerY, 6, p.Accent, true)
+	return img
+}
+
+// generateEchoCrystal crée l'icône d'un cristal d'écho
+func generateEchoCrystal(size int, p ResourcePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+	centerX, centerY := float32(size/2), float32(size/2)
+	// Prismes
+	vector.DrawFilledRect(img, centerX-10, centerY-20, 20, 40, p.Primary, true)
+	vector.DrawFilledRect(img, centerX-22, centerY-5, 15, 25, p.Secondary, true)
+	vector.DrawFilledRect(img, centerX+7, centerY-15, 15, 30, p.Secondary, true)
+	// Brillance
+	vector.DrawFilledCircle(img, centerX, centerY-10, 5, p.Accent, true)
+	// Ondes
+	vector.StrokeCircle(img, centerX, centerY, 30, 2, p.Accent, true)
+	return img
+}
+
+// generateSandCore crée l'icône d'un noyau de sable
+func generateSandCore(size int, p ResourcePalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(p.Bg)
+	centerX, centerY := float32(size/2), float32(size/2)
+	// Sphère centrale
+	vector.DrawFilledCircle(img, centerX, centerY, float32(size/5), p.Primary, true)
+	// Anneau de sable
+	vector.StrokeCircle(img, centerX, centerY, 25, 4, p.Secondary, true)
+	// Étincelles de chaleur
+	vector.DrawFilledRect(img, centerX-25, centerY-25, 4, 4, p.Accent, true)
+	vector.DrawFilledRect(img, centerX+20, centerY+20, 4, 4, p.Accent, true)
 	return img
 }
 

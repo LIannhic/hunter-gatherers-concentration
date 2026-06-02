@@ -77,26 +77,33 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Un état (TileState : Hidden, Revealed, Matched, Blocked)
   - Des tags dynamiques pour le comportement ou le rendu (ex: `moss_lure`, `dangerous_on_reveal`)
   - Des composants optionnels (Lifecycle, Matchable, CreatureAI, etc.)
-  - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (face, côtés, etc.).
+  - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (Forward, Backward, Left, Right). Supporte **8 directions cardinales et ordinales** transformées par sa matrice D4.
 
 - **Board/Grid** : Gère la géométrie du plateau
   - Chaque tuile contient une référence optionnelle à une entité
   - Les tuiles ne portent plus d'état ; c'est l'entité qui le porte
   - Permet la recherche rapide des entités par position
-  - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles.
+  - **Inventory Grid** : L'inventaire est désormais une grille logicielle (`InventoryGridID`), permettant un traitement spatial uniforme (hover, highlights).
+  - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles. Les transformations sont cumulatives (`apply * current`).
+  - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2). Cela influence les règles de match et le rendu (échelle x1.15 par niveau si révélé).
 
 - **Systems** : Mettent à jour l'état du monde
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
   - **ResourceLifecycleSystem** : Gère la maturation des ressources
-  - **LootSystem** : Transforme les matches réussis en objets d'inventaire
+  - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire. Le butin hérite du niveau de cumul de la paire.
   - **TrackSystem** : Gère la décomposition temporelle des traces
+
+- **Interface `Hoverable`** : Unifie l'interaction de survol pour les tuiles, les sorties de navigation et les objets de l'inventaire. Centralise la logique d'autorisation (ex: blocage des tuiles scellées).
 
 - **TurnTimer** (`timer.go`) : Compte à rebours temps réel par tour
   - Décrémente à chaque frame (60 fps)
   - Déclenche un auto-skip à l'expiration
   - Phase de panique (< 3s) utilisée pour les feedbacks visuels (pulse Sanity Gauge)
   - Durée maximale synchronisée avec `meta.DifficultySettings.TurnTimerDuration`
+
+- **Buffs et Protection** :
+  - `ImmunityTurns` : Géré dans `Player`, permet de bloquer tous les dégâts. Utilisé par l'effet du Shadowstalker.
 
 - **StatusEffects** (`player/status.go`) : Altérations mentales du joueur
   - `Aphasia`, `Agnosia`, `Ataxia`, `Amnesia`
@@ -135,7 +142,8 @@ if revealCmd.CanExecute() {
 
 **Commandes principales :**
 - `RevealTileCommand` : Révèle une entité, met à jour la position périphérique du joueur et vérifie la **Confrontation** (dégâts si dans la `ThreatZone`).
-- `MatchTilesCommand` : Tente d'appairer deux entités et applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide).
+- `MatchTilesCommand` : Tente d'appairer deux entités identiques de même niveau de cumul. Applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide). Pour le moment, seul l'appairage par similarité est actif.
+- `MergeTilesCommand` : Fusionne deux entités identiques normales en une seule version cumulée.
 - `SwitchGridCommand` : Change de grille active.
 - `UsePortablePortalCommand` : Active un portail portable pour créer une zone de dégagement et extraire le joueur du plan
 
@@ -163,15 +171,13 @@ pos, ok := world.FindAvailable3x3DeploymentArea(gridID)
 pos, ok := world.findBest3x3DeploymentArea(gridID)
 ```
 
-#### Déploiement du Portail
+#### Déploiement du Portail et Effet Séisme
 
-```go
-// Déploie à la meilleure position trouvée automatiquement
-portal, err := world.DeployPortablePortal(gridID)
+Lors du déploiement (`DeployPortablePortalAt`), la méthode `clear3x3DeploymentArea` est appelée systématiquement. Elle retire toutes les entités des 8 parcelles adjacentes pour garantir une zone de sécurité visuelle et logique.
 
-// Déploie à une position spécifique (centre de la zone 3x3)
-portal, err := world.DeployPortablePortalAt(gridID, center)
-```
+#### Feedback Graphique (Vortex)
+
+Un shader spécial `vortex.kage` est déclenché par l'application (`app.go`) uniquement lorsque le portail est actif (`IsVictoryTimerActive`). Le shader utilise les coordonnées réelles du portail (via `GetTileCenter`) pour ancrer la distorsion.
 
 #### Activation via Commande
 
@@ -212,7 +218,11 @@ Séparation des responsabilités :
     - **Tapis de Jeu (Playmat)** : 700x700. Contient le plateau, les boutons et les **Effets Plein Écran** (ex: Scanner de l'Echo Hound).
 - **Input**: Capture les événements, gère la navigation entre les zones et les raccourcis clavier.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
-- **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip.
+- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
+
+- **DebugWindow** (`ui/debug/window.go`) : Console de débogage interactive (F12) permettant de modifier les statistiques, la difficulté, et de filtrer les entités spawnables.
+
+- **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip. Coordonne le **Feedback de Coût** vers les jauges du HUD.
 
 ### 5. App (Wiring)
 

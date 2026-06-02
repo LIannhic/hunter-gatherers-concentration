@@ -9,11 +9,13 @@ import (
 type Type int
 
 const (
-	Identical Type = iota // Paire identique (Memory classique)
-	Logical               // Clé + Serrure, Marteau + Enclume
-	Elemental             // Feu + Bois, Eau + Plante
-	Narrative             // Indices d'histoire, symboles liés
-	Orientation           // Moitiés de flèches de navigation
+	Identical   Type = iota // Paire identique (Memory classique)
+	Logical                 // Clé + Serrure, Marteau + Enclume
+	Elemental               // Feu + Bois, Eau + Plante
+	Narrative               // Indices d'histoire, symboles liés
+	Orientation             // Moitiés de flèches de navigation
+	Creature                // Capture de créature
+	Trap                    // Neutralisation de piège
 )
 
 func (t Type) String() string {
@@ -28,6 +30,10 @@ func (t Type) String() string {
 		return "narrative"
 	case Orientation:
 		return "orientation"
+	case Creature:
+		return "creature_capture"
+	case Trap:
+		return "trap_neutralization"
 	}
 	return "unknown"
 }
@@ -63,6 +69,9 @@ type Matchable interface {
 	GetElement() string
 	GetNarrativeTag() string
 	GetMatchTypes() []string
+	GetCumulationLevel() int
+	IsCumulated() bool
+	GetCategory() string
 }
 
 // --- Implémentations concrètes des stratégies ---
@@ -80,10 +89,18 @@ func (s *IdenticalStrategy) Resolve(a, b Matchable) (Result, error) {
 	if !s.CanAssociate(a, b) {
 		return Result{Success: false}, errors.New("pas une paire identique")
 	}
+
+	matchType := Identical
+	if a.GetCategory() == "creature" {
+		matchType = Creature
+	} else if a.GetCategory() == "trap" {
+		matchType = Trap
+	}
+
 	return Result{
 		Success: true,
-		Type:    Identical,
-		Message: "Paire identique trouvée !",
+		Type:    matchType,
+		Message: fmt.Sprintf("Paire identique de %s trouvée !", a.GetCategory()),
 		Effects: []Effect{
 			{Type: "collect", Target: "player"},
 		},
@@ -273,16 +290,29 @@ type OrientationStrategy struct{}
 func (s *OrientationStrategy) Type() Type { return Orientation }
 
 func (s *OrientationStrategy) CanAssociate(a, b Matchable) bool {
-	tagA, tagB := a.GetMatchID(), b.GetMatchID()
-	// On attend des tags comme "exit_north_0" et "exit_north_1"
-	if len(tagA) < 11 || len(tagB) < 11 {
+	// 1. On vérifie si ce sont des éléments de navigation (Sorties)
+	if a.GetCategory() == "navigation" && b.GetCategory() == "navigation" {
+		tagA, tagB := a.GetMatchID(), b.GetMatchID()
+		// On attend des tags comme "exit_north_0" et "exit_north_1"
+		if len(tagA) < 11 || len(tagB) < 11 {
+			return false
+		}
+		prefixA := tagA[:len(tagA)-1]
+		prefixB := tagB[:len(tagB)-1]
+
+		// Même direction mais index différent (0 et 1)
+		if prefixA == prefixB && tagA != tagB && (prefixA == "exit_north_" || prefixA == "exit_south_" || prefixA == "exit_east_" || prefixA == "exit_west_") {
+			// On vérifie que les deux tuiles ont une orientation cohérente vers cette direction
+			// Pour les sorties, on attend que le "Haut" de l'asset pointe vers l'extérieur du plateau.
+			// TODO: Implémenter la vérification stricte de GetOrientation() == targetDir.
+			return true
+		}
 		return false
 	}
-	prefixA := tagA[:len(tagA)-1]
-	prefixB := tagB[:len(tagB)-1]
 
-	// Même direction mais index différent
-	return prefixA == prefixB && tagA != tagB && (prefixA == "exit_north_" || prefixA == "exit_south_" || prefixA == "exit_east_" || prefixA == "exit_west_")
+	// 2. TODO : Implémenter la logique générique pour toutes les tuiles
+	// basées sur leur GetOrientation() réelle et la direction de la sortie
+	return false
 }
 
 func (s *OrientationStrategy) Resolve(a, b Matchable) (Result, error) {
@@ -311,15 +341,22 @@ func NewEngine() *Engine {
 	return &Engine{
 		strategies: []Strategy{
 			&IdenticalStrategy{},
-			NewLogicalStrategy(),
-			NewElementalStrategy(),
-			NewNarrativeStrategy(),
+			// Note : Les stratégies Logique, Élémentaire et Narrative sont désactivées
+			// pour le moment. Toutes les tuiles s'associent par similarité.
+			// NewLogicalStrategy(),
+			// NewElementalStrategy(),
+			// NewNarrativeStrategy(),
 			&OrientationStrategy{},
 		},
 	}
 }
 
 func (e *Engine) TryAssociate(a, b Matchable) (Result, error) {
+	// Centralisation du contrôle de cumul : seules les tuiles de même niveau s'associent
+	if a.GetCumulationLevel() != b.GetCumulationLevel() {
+		return Result{Success: false}, fmt.Errorf("niveaux de cumul incompatibles (%d vs %d)", a.GetCumulationLevel(), b.GetCumulationLevel())
+	}
+
 	// Essaie chaque stratégie dans l'ordre de spécificité
 	for _, strategy := range e.strategies {
 		if strategy.CanAssociate(a, b) {

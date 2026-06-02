@@ -10,25 +10,51 @@ import (
 
 // IDs de source et noms pour les objets et ressources
 const (
+    // Butin initial
 	PortablePortalItemSourceID   = "portable_portal"
 	PortablePortalItemName       = "portail portable"
-	PortablePortalLootTaxPercent = 25
+	PortablePortalLootTaxPercent = 50
 
-	EchoHoundItemSourceID        = "echo_hound_source"
-	EchoHoundItemName            = "echo_hound"
-
-	DreamberryItemSourceID       = "dreamberry_source"
-	DreamberryItemName           = "dreamberry"
-	MoonstoneItemSourceID        = "moonstone_source"
-	MoonstoneItemName            = "moonstone"
-	CrystalShardItemSourceID     = "crystal_shard_source"
+    // Butin ressources
+	CrystalShardItemSourceID     = "crystal_shard"
 	CrystalShardItemName         = "crystal_shard"
-	WhisperingHerbItemSourceID   = "whispering_herb_source"
+	DreamberryItemSourceID       = "dreamberry"
+	DreamberryItemName           = "dreamberry"
+	MoonstoneItemSourceID        = "moonstone"
+	MoonstoneItemName            = "moonstone"
+	WhisperingHerbItemSourceID   = "whispering_herb"
 	WhisperingHerbItemName       = "whispering_herb"
-	SpecterItemSourceID          = "specter_source"
+
+	// Butin ressources exclusives
+	MossTruffleItemSourceID     = "moss_truffle"
+	MossTruffleItemName         = "moss_truffle"
+	EchoCrystalItemSourceID      = "echo_crystal"
+	EchoCrystalItemName          = "echo_crystal"
+	VoidBloomItemSourceID        = "void_bloom"
+	VoidBloomItemName            = "void_bloom"
+	SandCoreItemSourceID         = "sand_core"
+	SandCoreItemName             = "sand_core"
+
+	// Butin créatures
+	BurrowerItemSourceID         = "burrower"
+   	BurrowerItemName             = "burrower"
+	EchoHoundItemSourceID        = "echo_hound"
+   	EchoHoundItemName            = "echo_hound"
+   	FleeingSpriteSourceID        = "fleeing_sprite"
+   	FleeingSpriteName            = "fleeing_sprite"
+	FlutterwingItemSourceID      = "flutterwing"
+	FlutterwingItemName          = "flutterwing"
+	LumiflyItemSourceID          = "lumifly"
+	LumiflyItemName              = "lumifly"
+	MossMonkeyItemSourceID       = "moss_monkey"
+	MossMonkeyItemName           = "moss_monkey"
+	ShadowstalkerItemSourceID    = "shadowstalker"
+	ShadowstalkerItemName        = "shadowstalker"
+	SpecterItemSourceID          = "specter"
 	SpecterItemName              = "specter"
-	BurrowerItemSourceID         = "burrower_source"
-	BurrowerItemName             = "burrower"
+	StonewardenItemSourceID      = "stonewarden"
+	StonewardenItemName          = "stonewarden"
+
 )
 
 // --- Types de base ---
@@ -47,12 +73,12 @@ type Stats struct {
 
 // LootItem représente un objet physique ou une entité capturée dans l'inventaire.
 type LootItem struct {
-	ID          string      // Identifiant unique de l'instance
-	Name        string      // Nom affiché de l'objet
-	Type        entity.Type // Catégorie d'objet (Artefact, Créature, Ressource...)
-	SourceID    string      // ID de référence pour les données sources (ex: atlas)
-	IsUsable    bool        // Si l'objet possède une action d'utilisation
-	IsDeletable bool        // Si l'objet peut être supprimé manuellement par le joueur
+	entity.BaseEntity
+	Name         string      // Nom affiché de l'objet
+	SourceID     string      // ID de référence pour les données sources (ex: atlas)
+	OriginalType entity.Type // Type d'entité d'origine (Créature, Ressource...)
+	IsUsable     bool        // Si l'objet possède une action d'utilisation
+	IsDeletable  bool        // Si l'objet peut être supprimé manuellement par le joueur
 }
 
 // BorderPosition définit l'ancrage du joueur sur la périphérie du plateau.
@@ -117,6 +143,14 @@ type Player struct {
 	StatusEffects *StatusEffects
 	Position      entity.Position
 	anchor        BorderPosition // Position sur la bordure du plateau
+
+	// Buffs temporaires
+	ImmunityTurns int // Nombre de tours d'immunité restants
+	ThreatVisionTurns int // Nombre de tours où les zones de menace sont visibles
+	GraceTurns int // Nombre de tours où les créatures n'attaquent pas lors de la révélation (Flutterwing)
+
+	// Effets visuels (Shaders)
+	VisualEffects map[string]int // "blur", "bubble", etc. -> Durée en tours
 }
 
 // --- Constructeurs ---
@@ -142,6 +176,7 @@ func New(id string) *Player {
 			VisionRange:          1,
 			RevealEfficiency:     1.0,
 		},
+		VisualEffects: make(map[string]int),
 	}
 }
 
@@ -157,93 +192,240 @@ func NewInventory(maxSize int) *Inventory {
 
 // Constructeurs d'objets spécifiques
 
-func NewPortablePortalItem() *LootItem {
-	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        PortablePortalItemName,
-		Type:        entity.TypeArtefact,
-		SourceID:    PortablePortalItemSourceID,
-		IsUsable:    true,
-		IsDeletable: false,
+func NewPortablePortalItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         PortablePortalItemName,
+		SourceID:     PortablePortalItemSourceID,
+		OriginalType: entity.TypeArtefact,
+		IsUsable:     true,
+		IsDeletable:  false,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewEchoHoundItem() *LootItem {
-	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        EchoHoundItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    EchoHoundItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+func NewEchoHoundItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         EchoHoundItemName,
+		SourceID:     EchoHoundItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewDreamberryItem() *LootItem {
-	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        DreamberryItemName,
-		Type:        entity.TypeResource,
-		SourceID:    DreamberryItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+func NewDreamberryItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         DreamberryItemName,
+		SourceID:     DreamberryItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewMoonstoneItem() *LootItem {
-	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        MoonstoneItemName,
-		Type:        entity.TypeResource,
-		SourceID:    MoonstoneItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+func NewMoonstoneItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         MoonstoneItemName,
+		SourceID:     MoonstoneItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewCrystalShardItem() *LootItem {
-	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        CrystalShardItemName,
-		Type:        entity.TypeResource,
-		SourceID:    CrystalShardItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+func NewCrystalShardItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         CrystalShardItemName,
+		SourceID:     CrystalShardItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewWhisperingHerbItem() *LootItem {
-	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        WhisperingHerbItemName,
-		Type:        entity.TypeResource,
-		SourceID:    WhisperingHerbItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+func NewWhisperingHerbItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         WhisperingHerbItemName,
+		SourceID:     WhisperingHerbItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewSpecterItem() *LootItem {
-	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        SpecterItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    SpecterItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+func NewSpecterItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         SpecterItemName,
+		SourceID:     SpecterItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
 
-func NewBurrowerItem() *LootItem {
-	return &LootItem{
-		ID:          string(entity.NewID()),
-		Name:        BurrowerItemName,
-		Type:        entity.TypeCreature,
-		SourceID:    BurrowerItemSourceID,
-		IsUsable:    true,
-		IsDeletable: true,
+func NewShadowstalkerItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         ShadowstalkerItemName,
+		SourceID:     ShadowstalkerItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
 	}
+	item.SetCumulationLevel(level)
+	return item
 }
+
+func NewMossMonkeyItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         MossMonkeyItemName,
+		SourceID:     MossMonkeyItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewStonewardenItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         StonewardenItemName,
+		SourceID:     StonewardenItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewLumiflyItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         LumiflyItemName,
+		SourceID:     LumiflyItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewBurrowerItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         BurrowerItemName,
+		SourceID:     BurrowerItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewFleeingSpriteItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         FleeingSpriteName,
+		SourceID:     FleeingSpriteSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewFlutterwingItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         FlutterwingItemName,
+		SourceID:     FlutterwingItemSourceID,
+		OriginalType: entity.TypeCreature,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewMossTruffleItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         MossTruffleItemName,
+		SourceID:     MossTruffleItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewEchoCrystalItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         EchoCrystalItemName,
+		SourceID:     EchoCrystalItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewVoidBloomItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         VoidBloomItemName,
+		SourceID:     VoidBloomItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
+func NewSandCoreItem(level int) *LootItem {
+	item := &LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         SandCoreItemName,
+		SourceID:     SandCoreItemSourceID,
+		OriginalType: entity.TypeResource,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+	item.SetCumulationLevel(level)
+	return item
+}
+
 
 // --- Méthodes de l'Inventaire ---
 
@@ -352,6 +534,9 @@ func (p *Player) IsAlive() bool {
 
 // TakeDamage applique des dégâts après réduction par les résistances.
 func (p *Player) TakeDamage(amount int, damageType string) {
+	if p.ImmunityTurns > 0 {
+		return // Immunisé
+	}
 	resistance := p.Skills.Resistances[damageType]
 	actual := amount - (amount * resistance / 100)
 	p.Stats.Health -= actual
@@ -390,6 +575,14 @@ func (p *Player) ConsumeSanity(amount int) {
 	p.Stats.Sanity -= amount
 	if p.Stats.Sanity < 0 {
 		p.Stats.Sanity = 0
+	}
+
+	// Décrémentation des buffs de tour
+	if amount > 0 && p.ImmunityTurns > 0 {
+		p.ImmunityTurns--
+	}
+	if amount > 0 && p.ThreatVisionTurns > 0 {
+		p.ThreatVisionTurns--
 	}
 }
 

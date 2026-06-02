@@ -1,0 +1,25 @@
+//kage:unit pixels
+
+package main
+
+var Intensity float
+var Resolution vec2
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+    clr := vec4(0, 0, 0, 0)
+    samples := 9
+    // Décalage en pixels (environ 2 pixels à intensité max)
+    offset := 2.0 * Intensity
+
+    clr += imageSrc0At(srcPos + vec2(-offset, -offset))
+    clr += imageSrc0At(srcPos + vec2(0, -offset))
+    clr += imageSrc0At(srcPos + vec2(offset, -offset))
+    clr += imageSrc0At(srcPos + vec2(-offset, 0))
+    clr += imageSrc0At(srcPos)
+    clr += imageSrc0At(srcPos + vec2(offset, 0))
+    clr += imageSrc0At(srcPos + vec2(-offset, offset))
+    clr += imageSrc0At(srcPos + vec2(0, offset))
+    clr += imageSrc0At(srcPos + vec2(offset, offset))
+
+    return clr / float(samples)
+}

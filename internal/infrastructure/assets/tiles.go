@@ -15,69 +15,80 @@
 package assets
 
 import (
-	"image/color"
-	"math"
+    "image/color"
+    "math"
 
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
+    "github.com/hajimehoshi/ebiten/v2"
+    "github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 // TileTheme représente un thème visuel pour les tuiles
 type TileTheme struct {
-	HiddenBg        color.Color
-	HiddenPattern   color.Color
-	HiddenBorder    color.Color
-	RevealedBg      color.Color
-	RevealedPattern color.Color
-	MatchedBg       color.Color
-	MatchedPattern  color.Color
+    HiddenBg        color.Color
+    HiddenPattern   color.Color
+    HiddenBorder    color.Color
+    RevealedBg      color.Color
+    RevealedPattern color.Color
+    MatchedBg       color.Color
+    MatchedPattern  color.Color
 }
 
 // Themes disponibles (tous libres de droit - générés procéduralement)
 var (
-	// ThemeDefault - Thème classique bleu-violet
-	ThemeDefault = TileTheme{
-		HiddenBg:        color.RGBA{45, 40, 65, 255},
-		HiddenPattern:   color.RGBA{65, 60, 90, 255},
-		HiddenBorder:    color.RGBA{100, 95, 130, 255},
-		RevealedBg:      color.RGBA{55, 55, 75, 255},
-		RevealedPattern: color.RGBA{75, 75, 95, 255},
-		MatchedBg:       color.RGBA{40, 90, 50, 255},
-		MatchedPattern:  color.RGBA{60, 130, 70, 255},
-	}
+    // ThemeDefault - Thème classique bleu-violet
+    ThemeDefault = TileTheme{
+       HiddenBg:        color.RGBA{45, 40, 65, 255},
+       HiddenPattern:   color.RGBA{65, 60, 90, 255},
+       HiddenBorder:    color.RGBA{100, 95, 130, 255},
+       RevealedBg:      color.RGBA{55, 55, 75, 255},
+       RevealedPattern: color.RGBA{75, 75, 95, 255},
+       MatchedBg:       color.RGBA{40, 90, 50, 255},
+       MatchedPattern:  color.RGBA{60, 130, 70, 255},
+    }
 
-	// ThemeForest - Thème nature/forestier
-	ThemeForest = TileTheme{
-		HiddenBg:        color.RGBA{35, 55, 35, 255},
-		HiddenPattern:   color.RGBA{50, 80, 50, 255},
-		HiddenBorder:    color.RGBA{80, 120, 70, 255},
-		RevealedBg:      color.RGBA{45, 70, 45, 255},
-		RevealedPattern: color.RGBA{65, 100, 65, 255},
-		MatchedBg:       color.RGBA{60, 100, 60, 255},
-		MatchedPattern:  color.RGBA{90, 140, 80, 255},
-	}
+    // ThemeForest - Thème nature/forestier
+    ThemeForest = TileTheme{
+       HiddenBg:        color.RGBA{35, 55, 35, 255},
+       HiddenPattern:   color.RGBA{50, 80, 50, 255},
+       HiddenBorder:    color.RGBA{80, 120, 70, 255},
+       RevealedBg:      color.RGBA{45, 70, 45, 255},
+       RevealedPattern: color.RGBA{65, 100, 65, 255},
+       MatchedBg:       color.RGBA{60, 100, 60, 255},
+       MatchedPattern:  color.RGBA{90, 140, 80, 255},
+    }
 
-	// ThemeCave - Thème caverne/obscur
-	ThemeCave = TileTheme{
-		HiddenBg:        color.RGBA{40, 35, 45, 255},
-		HiddenPattern:   color.RGBA{55, 50, 60, 255},
-		HiddenBorder:    color.RGBA{90, 80, 100, 255},
-		RevealedBg:      color.RGBA{50, 45, 55, 255},
-		RevealedPattern: color.RGBA{70, 65, 80, 255},
-		MatchedBg:       color.RGBA{70, 60, 80, 255},
-		MatchedPattern:  color.RGBA{100, 90, 120, 255},
-	}
+    // ThemeCave - Thème caverne/obscur
+    ThemeCave = TileTheme{
+       HiddenBg:        color.RGBA{40, 35, 45, 255},
+       HiddenPattern:   color.RGBA{55, 50, 60, 255},
+       HiddenBorder:    color.RGBA{90, 80, 100, 255},
+       RevealedBg:      color.RGBA{50, 45, 55, 255},
+       RevealedPattern: color.RGBA{70, 65, 80, 255},
+       MatchedBg:       color.RGBA{70, 60, 80, 255},
+       MatchedPattern:  color.RGBA{100, 90, 120, 255},
+    }
 
-	// ThemeSwamp - Thème marais/mystique
-	ThemeSwamp = TileTheme{
-		HiddenBg:        color.RGBA{35, 50, 40, 255},
-		HiddenPattern:   color.RGBA{50, 70, 55, 255},
-		HiddenBorder:    color.RGBA{70, 100, 75, 255},
-		RevealedBg:      color.RGBA{45, 65, 50, 255},
-		RevealedPattern: color.RGBA{65, 90, 70, 255},
-		MatchedBg:       color.RGBA{55, 85, 60, 255},
-		MatchedPattern:  color.RGBA{80, 120, 85, 255},
-	}
+    // ThemeSwamp - Thème marais/mystique
+    ThemeSwamp = TileTheme{
+       HiddenBg:        color.RGBA{35, 50, 40, 255},
+       HiddenPattern:   color.RGBA{50, 70, 55, 255},
+       HiddenBorder:    color.RGBA{70, 100, 75, 255},
+       RevealedBg:      color.RGBA{45, 65, 50, 255},
+       RevealedPattern: color.RGBA{65, 90, 70, 255},
+       MatchedBg:       color.RGBA{55, 85, 60, 255},
+       MatchedPattern:  color.RGBA{80, 120, 85, 255},
+    }
+
+    // ThemeDesert - Thème sable/désertique
+    ThemeDesert = TileTheme{
+       HiddenBg:        color.RGBA{195, 145, 85, 255},  // Sable ocre chaud
+       HiddenPattern:   color.RGBA{160, 115, 65, 255},  // Ombre du motif de sable
+       HiddenBorder:    color.RGBA{225, 185, 125, 255}, // Bordure sable clair / ensoleillé
+       RevealedBg:      color.RGBA{210, 165, 105, 255}, // Sable légèrement plus lumineux au clic
+       RevealedPattern: color.RGBA{180, 135, 80, 255},  // Motif révélé
+       MatchedBg:       color.RGBA{215, 130, 60, 255},  // Teinte orangée/terracotta chaleureuse pour la validation
+       MatchedPattern:  color.RGBA{240, 170, 90, 255},  // Éclat doré pour le motif validé
+    }
 )
 
 // generateTileHidden crée une tuile face cachée avec motif décoratif

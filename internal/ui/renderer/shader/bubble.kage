@@ -1,0 +1,28 @@
+//kage:unit pixels
+
+package main
+
+var Center vec2     // Normalized [0,1]
+var Intensity float
+var Resolution vec2 // Size in pixels
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+    center := Center * Resolution
+
+    pos := dstPos.xy - center
+    dist := length(pos)
+
+    // Rayon en pixels (environ 65 pixels à intensité max)
+    radius := 196.0 * Intensity
+
+    if dist < radius {
+        // Calcul de la distortion sphérique
+        strength := 1.0 - sqrt(1.0 - pow(dist / radius, 2.0))
+
+        // On déplace le point de lecture vers le centre pour l'effet de loupe/bulle
+        // On utilise srcPos pour la lecture
+        return imageSrc0At(srcPos - pos * strength * 0.5)
+    }
+
+    return imageSrc0At(srcPos)
+}

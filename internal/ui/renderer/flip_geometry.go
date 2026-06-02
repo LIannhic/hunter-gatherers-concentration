@@ -7,6 +7,7 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -56,11 +57,13 @@ func GetTransformationGeometry(t entity.Transformation) [4][2]float32 {
 	case entity.TransIdentity:
 		return [4][2]float32{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
 	case entity.TransRot90:
-		return [4][2]float32{{1, 0}, {1, 1}, {0, 1}, {0, 0}}
+		// Correction : rotation 90° horaire (v, 1-u)
+		return [4][2]float32{{0, 1}, {0, 0}, {1, 0}, {1, 1}}
 	case entity.TransRot180:
 		return [4][2]float32{{1, 1}, {0, 1}, {0, 0}, {1, 0}}
 	case entity.TransRot270:
-		return [4][2]float32{{0, 1}, {0, 0}, {1, 0}, {1, 1}}
+		// Correction : rotation 270° horaire (1-v, u)
+		return [4][2]float32{{1, 0}, {1, 1}, {0, 1}, {0, 0}}
 	case entity.TransMirrorH:
 		return [4][2]float32{{1, 0}, {0, 0}, {0, 1}, {1, 1}}
 	case entity.TransMirrorD1:
@@ -196,15 +199,11 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 	// 2. Interpolation des coins pour une échelle de 75%
 	const scale = 0.75
 	vIcon := make([]ebiten.Vertex, 4)
-	uvCoords := GetTransformationGeometry(trans)
-	w, h := float32(ui.FaceSize), float32(ui.FaceSize)
 
 	for i := 0; i < 4; i++ {
 		vIcon[i] = vFace[i]
 		vIcon[i].DstX = cx + (vFace[i].DstX-cx)*scale
 		vIcon[i].DstY = cy + (vFace[i].DstY-cy)*scale
-		vIcon[i].SrcX = uvCoords[i][0] * w
-		vIcon[i].SrcY = uvCoords[i][1] * h
 	}
 
 	var icon *ebiten.Image
@@ -220,6 +219,22 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 		icon = r.assets.GetResourceIcon(ent.ResourceType, stageName)
 		if len(stageName) > 0 {
 			label = string(stageName[0])
+		}
+	case *player.LootItem:
+		// On tente de récupérer l'icône appropriée selon le type d'origine ou le SourceID
+		if ent.OriginalType == entity.TypeCreature {
+			icon = r.assets.GetCreatureIcon(ent.SourceID)
+		} else if ent.OriginalType == entity.TypeResource {
+			icon = r.assets.GetResourceIcon(ent.SourceID, "")
+		} else {
+			// Fallback sur le SourceID pour les artefacts etc.
+			icon = r.assets.GetImage("resource_" + ent.SourceID)
+		}
+		if icon == nil {
+			// Dernier recours : première lettre du nom
+			if len(ent.Name) > 0 {
+				label = string(ent.Name[0])
+			}
 		}
 	}
 
@@ -542,5 +557,110 @@ func (r *BoardRenderer) drawSlices(screen *ebiten.Image, geo thickGeometry, dir 
 	}
 	if showLeft {
 		r.drawGeometryPart(screen, geo.V, geo.I[30:36], sliceImg)
+	}
+}
+
+func (r *BoardRenderer) renderEarthquakeTile360(screen *ebiten.Image, x, y float64, progress float64, ent entity.Entity, themeName string, thicknessColor color.Color, flipDir entity.FlipDirection) {
+	margin := (r.tileSize - ui.FaceSize) / 2
+	tx, ty := float32(x+margin), float32(y+margin)
+	cx, cy := float32(x+r.tileSize/2), float32(y+r.tileSize/2)
+
+	hiddenImg := r.assets.GetTileImage("hidden", themeName)
+	revealedImg := r.getEntityRevealedImage(ent, themeName)
+	visualState := ent.GetState()
+	frontImg := revealedImg
+	backImg := hiddenImg
+
+	// Lissage du progrès pour la fluidité 3D
+	tp := float32(smoothProgress(progress))
+
+	g := r.createGeometry()
+	r.initVerts(g.V)
+
+	// 1. Élévation 3D : la tuile s'élève et redescend en parabole parfaite
+	elevation := 1.0 + float32(math.Sin(float64(tp)*math.Pi))*0.50
+
+	// 2. Rotation 360° avec sens constant
+	angle := float32(tp * 2 * math.Pi)
+	cosAngle := math.Cos(float64(angle))
+	scale := float32(math.Abs(cosAngle))
+
+	for i := 0; i < 4; i++ {
+		var vx, vy float32
+		switch i {
+		case 0:
+			vx, vy = tx, ty
+		case 1:
+			vx, vy = tx+ui.FaceSize, ty
+		case 2:
+			vx, vy = tx+ui.FaceSize, ty+ui.FaceSize
+		case 3:
+			vx, vy = tx, ty+ui.FaceSize
+		}
+
+		relX := vx - cx
+		relY := vy - cy
+
+		switch flipDir {
+		case entity.FlipLeft, entity.FlipRight:
+			vx = cx + relX*scale
+		case entity.FlipTop, entity.FlipBottom:
+			vy = cy + relY*scale
+		case entity.FlipTopRight, entity.FlipBottomLeft:
+			u := (relX + relY) * 0.5
+			v := (relX - relY) * 0.5
+			v *= scale
+			vx = cx + u + v
+			vy = cy + u - v
+		case entity.FlipTopLeft, entity.FlipBottomRight:
+			u := (relX - relY) * 0.5
+			v := (relX + relY) * 0.5
+			v *= scale
+			vx = cx + u + v
+			vy = cy - u + v
+		default:
+			vx = cx + relX*scale
+		}
+
+		g.V[i].DstX = cx + (vx-cx)*elevation
+		g.V[i].DstY = cy + (vy-cy)*elevation
+	}
+
+	// 3. Mapping des UV : On part de la transformation par défaut (TransIdentity)
+	uvCoords := GetTransformationGeometry(entity.TransIdentity)
+	for i := 0; i < 4; i++ {
+		g.V[i].SrcX = uvCoords[i][0] * ui.FaceSize
+		g.V[i].SrcY = uvCoords[i][1] * ui.FaceSize
+	}
+
+	// 4. Tranche et rotation globale du plateau
+	r.extrude(g.V, flipDir, false, 0, tp, thicknessColor)
+	r.ApplyBoardRotation(g.V, cx, cy)
+
+	// 5. Logique des Faces (360°)
+	// Un cosinus positif signifie que la position géométrique correspond à la face avant.
+	// Si l'entité est masquée, on inverse la visibilité pour démarrer par le dos.
+	isFrontVisible := cosAngle > 0
+	if visualState&entity.Revealed == 0 && visualState&entity.Matched == 0 {
+		isFrontVisible = !isFrontVisible
+	}
+
+	if isFrontVisible {
+		// On dessine d'abord l'arrière, puis la face avant.
+		r.drawGeometryPart(screen, g.V, g.I[6:12], backImg)
+		r.drawGeometryPart(screen, g.V, g.I[:6], frontImg)
+	} else {
+		// On dessine d'abord la face avant, puis l'arrière.
+		r.drawGeometryPart(screen, g.V, g.I[:6], frontImg)
+		r.drawGeometryPart(screen, g.V, g.I[6:12], backImg)
+	}
+
+	// Dessin des tranches
+	r.drawSlices(screen, g, flipDir, r.assets.GetImage("white"))
+
+	// 6. Affichage de l'icône de l'entité uniquement au milieu du vol (quand la face est visible)
+	showIcon := isFrontVisible && ent != nil && ent.GetType() != entity.TypeTrap
+	if showIcon {
+		r.renderFlippingEntityTriangles(screen, g.V[:4], ent, entity.TransIdentity)
 	}
 }

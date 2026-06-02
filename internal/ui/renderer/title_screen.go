@@ -25,26 +25,30 @@ type Rect struct {
 	X, Y, W, H int
 }
 
+func (r Rect) Contains(x, y int) bool {
+	return x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H
+}
+
 // NewTitleScreen crée un nouvel écran titre
 func NewTitleScreen() *TitleScreen {
 	return &TitleScreen{
-		width: 800,
-		height: 600,
+		width: 1280,
+		height: 720,
 		buttonRect: Rect{
-			X: 300,
-			Y: 320,
+			X: 540,
+			Y: 300,
 			W: 200,
 			H: 50,
 		},
 		profileButtonRect: Rect{
-			X: 300,
-			Y: 380,
+			X: 540,
+			Y: 360,
 			W: 200,
 			H: 50,
 		},
 		playtestButtonRect: Rect{
-			X: 300,
-			Y: 440,
+			X: 540,
+			Y: 420,
 			W: 200,
 			H: 50,
 		},
@@ -79,7 +83,7 @@ func (t *TitleScreen) Render(screen *ebiten.Image, hasSaves bool) {
 	t.drawPlaytestButton(screen)
 
 	// Instructions
-	hint := "En jeu: Appuyez sur \\ pour retourner au menu"
+	hint := "En jeu: Appuyez sur echap pour retourner au menu"
 	hintX := t.width/2 - len(hint)*3
 	text.Draw(screen, hint, basicfont.Face7x13, hintX, 500, color.RGBA{100, 100, 100, 255})
 }
@@ -121,26 +125,17 @@ func (t *TitleScreen) drawButton(screen *ebiten.Image) {
 
 // IsStartButtonClicked vérifie si le bouton démarrer a été cliqué
 func (t *TitleScreen) IsStartButtonClicked(x, y int) bool {
-	return x >= t.buttonRect.X &&
-		x <= t.buttonRect.X+t.buttonRect.W &&
-		y >= t.buttonRect.Y &&
-		y <= t.buttonRect.Y+t.buttonRect.H
+	return t.buttonRect.Contains(x, y)
 }
 
 // IsPlaytestButtonClicked vérifie si le bouton playtest a été cliqué
 func (t *TitleScreen) IsPlaytestButtonClicked(x, y int) bool {
-	return x >= t.playtestButtonRect.X &&
-		x <= t.playtestButtonRect.X+t.playtestButtonRect.W &&
-		y >= t.playtestButtonRect.Y &&
-		y <= t.playtestButtonRect.Y+t.playtestButtonRect.H
+	return t.playtestButtonRect.Contains(x, y)
 }
 
 // IsProfileButtonClicked vérifie si le bouton profil a été cliqué
 func (t *TitleScreen) IsProfileButtonClicked(x, y int) bool {
-	return x >= t.profileButtonRect.X &&
-		x <= t.profileButtonRect.X+t.profileButtonRect.W &&
-		y >= t.profileButtonRect.Y &&
-		y <= t.profileButtonRect.Y+t.profileButtonRect.H
+	return t.profileButtonRect.Contains(x, y)
 }
 
 // drawPlaytestButton dessine le bouton de playtest

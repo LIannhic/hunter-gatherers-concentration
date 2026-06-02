@@ -11,6 +11,8 @@ type MockMatchable struct {
 	element      string
 	narrativeTag string
 	matchTypes   []string
+	cumulLevel   int
+	category     string
 }
 
 func (m *MockMatchable) GetMatchID() string       { return m.matchID }
@@ -18,6 +20,9 @@ func (m *MockMatchable) GetLogicKey() string      { return m.logicKey }
 func (m *MockMatchable) GetElement() string       { return m.element }
 func (m *MockMatchable) GetNarrativeTag() string  { return m.narrativeTag }
 func (m *MockMatchable) GetMatchTypes() []string { return m.matchTypes }
+func (m *MockMatchable) GetCumulationLevel() int { return m.cumulLevel }
+func (m *MockMatchable) IsCumulated() bool       { return m.cumulLevel > 0 }
+func (m *MockMatchable) GetCategory() string     { return m.category }
 
 func TestIdenticalStrategy(t *testing.T) {
 	strategy := &IdenticalStrategy{}
@@ -206,6 +211,32 @@ func TestAssocEnginePriority(t *testing.T) {
 	// Should use the custom strategy (registered first = higher priority)
 	if result.Type != 999 {
 		t.Error("Should use custom strategy")
+	}
+}
+
+func TestAssocEngineCumulationLevel(t *testing.T) {
+	engine := NewEngine()
+
+	// Niv 0 vs Niv 1 - should fail regardless of identity
+	a := &MockMatchable{matchID: "dragon", cumulLevel: 0}
+	b := &MockMatchable{matchID: "dragon", cumulLevel: 1}
+
+	result, err := engine.TryAssociate(a, b)
+	if err == nil {
+		t.Error("Should return error for different cumulation levels")
+	}
+	if result.Success {
+		t.Error("Should not succeed for different cumulation levels")
+	}
+
+	// Niv 1 vs Niv 1 - should succeed
+	c := &MockMatchable{matchID: "dragon", cumulLevel: 1}
+	result, err = engine.TryAssociate(b, c)
+	if err != nil {
+		t.Errorf("Association failed for same levels: %v", err)
+	}
+	if !result.Success {
+		t.Error("Should succeed for same cumulation levels")
 	}
 }
 

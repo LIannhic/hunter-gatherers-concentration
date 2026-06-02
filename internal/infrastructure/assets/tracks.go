@@ -65,6 +65,20 @@ var (
 		Shadow:    color.RGBA{200, 50, 50, 220},   // Rouge intense
 		Alpha:     180,
 	}
+
+	// IntentThreat - Marqueur blanc de menace
+	IntentThreatPalette = TrackPalette{
+		Primary: color.RGBA{255, 255, 255, 120},
+		Alpha:   120,
+	}
+
+	// IntentBeamWhite - Version blanche du rayon d'intention
+	IntentBeamWhitePalette = TrackPalette{
+		Primary:   color.RGBA{255, 255, 255, 180},
+		Secondary: color.RGBA{255, 255, 255, 150},
+		Shadow:    color.RGBA{200, 200, 200, 220},
+		Alpha:     180,
+	}
 )
 
 // generateMudTrack crée l'indice de trace dans la boue
@@ -215,6 +229,19 @@ func generateIntentBeam(size int, p TrackPalette) *ebiten.Image {
 	return img
 }
 
+// generateIntentThreat crée un marqueur de menace (carré blanc semi-transparent avec bordure)
+func generateIntentThreat(size int, p TrackPalette) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	img.Fill(color.RGBA{0, 0, 0, 0})
+
+	// Remplissage blanc semi-transparent
+	vector.DrawFilledRect(img, 2, 2, float32(size-4), float32(size-4), p.Primary, true)
+	// Bordure blanche opaque
+	vector.StrokeRect(img, 2, 2, float32(size-4), float32(size-4), 2, color.White, true)
+
+	return img
+}
+
 // GenerateTrackAsset génère l'asset visual d'une trace selon son type
 func GenerateTrackAsset(kind string, size int) *ebiten.Image {
 	switch kind {
@@ -228,6 +255,10 @@ func GenerateTrackAsset(kind string, size int) *ebiten.Image {
 		return generateFootprintTrack(size, FootprintsPalette)
 	case "intent_beam":
 		return generateIntentBeam(size, IntentBeamPalette)
+	case "intent_beam_white":
+		return generateIntentBeam(size, IntentBeamWhitePalette)
+	case "intent_threat":
+		return generateIntentThreat(size, IntentThreatPalette)
 	default:
 		// Fallback : retourne une trace générique
 		return generateMudTrack(size, MudPalette)

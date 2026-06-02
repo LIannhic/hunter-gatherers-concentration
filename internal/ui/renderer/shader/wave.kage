@@ -1,0 +1,18 @@
+//kage:unit pixels
+
+package main
+
+var Time float
+var Intensity float
+var Resolution vec2
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+    // Fréquence basée sur les pixels
+    freq := 0.12
+    // Amplitude en pixels (max 5 pixels à intensité max)
+    amp := 5.0 * Intensity
+
+    offset := vec2(0.0, sin(dstPos.x * freq + Time * 5.0) * amp)
+
+    return imageSrc0At(srcPos + offset)
+}

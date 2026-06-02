@@ -127,7 +127,7 @@ berryImg := manager.GetResourceIcon("dreamberry")
 flyImg := manager.GetCreatureIcon("lumifly")
 ```
 
-Note : Les états visuels (Hidden, Revealed, Matched) à partir de la fusion #18 sont gérés par les entités, pas par les tuiles. Le manager d'assets utilise les états des entités pour afficher le bon visuel.
+Note : Les états visuels (Hidden, Revealed, Matched) à partir de la fusion #18 sont gérés par les entités, pas par les tuiles. Le manager d'assets utilise les états des entités pour afficher le bon visuel. Les entités **Cumulées** ne changent de taille que lorsqu'elles sont **Révélées** ou **Matchées**.
 
 ## 🎨 Personnalisation
 

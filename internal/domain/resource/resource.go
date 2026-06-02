@@ -121,8 +121,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 		r.SetMatchable(component.Matchable{
 			MatchID:    "dreamberry",
-			MatchTypes: []string{"identical", "elemental"},
-			Element:    "ethereal",
+			MatchTypes: []string{"identical"},
 		})
 
 	case "moonstone":
@@ -143,8 +142,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 		r.SetMatchable(component.Matchable{
 			MatchID:    "moonstone",
-			LogicKey:   "mineral",
-			MatchTypes: []string{"identical", "logical"},
+			MatchTypes: []string{"identical"},
 		})
 
 	case "whispering_herb":
@@ -164,10 +162,8 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 			DegradeRate:  2,
 		})
 		r.SetMatchable(component.Matchable{
-			MatchID:      "whispering_herb",
-			NarrativeTag: "healing",
-			MatchTypes:   []string{"identical", "narrative", "elemental"},
-			Element:      "life",
+			MatchID:    "whispering_herb",
+			MatchTypes: []string{"identical"},
 		})
 
 	case "crystal_shard":
@@ -189,7 +185,58 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		r.SetMatchable(component.Matchable{
 			MatchID:    "crystal_shard",
 			MatchTypes: []string{"identical"},
-			Element:    "ethereal",
+		})
+
+	case "moss_truffle":
+		r.SetLifecycle(component.Lifecycle{
+			CurrentStage: 1,
+			MaxStages:    2,
+			StageNames:   []string{"jeune", "mature"},
+			TurnsToNext:  5,
+		})
+		r.SetValue(component.Value{BaseValue: 300, CurrentValue: 300})
+		r.SetMatchable(component.Matchable{
+			MatchID:    "moss_truffle",
+			MatchTypes: []string{"identical"},
+		})
+
+	case "void_bloom":
+		r.SetLifecycle(component.Lifecycle{
+			CurrentStage: 0,
+			MaxStages:    3,
+			StageNames:   []string{"graine", "éclosion", "pleine"},
+			TurnsToNext:  4,
+		})
+		r.SetValue(component.Value{BaseValue: 400, CurrentValue: 100})
+		r.SetMatchable(component.Matchable{
+			MatchID:    "void_bloom",
+			MatchTypes: []string{"identical"},
+		})
+
+	case "echo_crystal":
+		r.SetLifecycle(component.Lifecycle{
+			CurrentStage: 0,
+			MaxStages:    2,
+			StageNames:   []string{"vibrant", "résonnant"},
+			TurnsToNext:  -1,
+		})
+		r.SetValue(component.Value{BaseValue: 350, CurrentValue: 350})
+		r.SetMatchable(component.Matchable{
+			MatchID:    "echo_crystal",
+			MatchTypes: []string{"identical"},
+		})
+
+	case "sand_core":
+		r.SetLifecycle(component.Lifecycle{
+			CurrentStage: 0,
+			MaxStages:    2,
+			StageNames:   []string{"chaud", "ardent"},
+			TurnsToNext:  6,
+		})
+		r.SetValue(component.Value{BaseValue: 250, CurrentValue: 250})
+		r.SetMatchable(component.Matchable{
+			MatchID:    "sand_core",
+			MatchTypes: []string{"identical"},
 		})
 	}
 

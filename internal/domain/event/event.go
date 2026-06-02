@@ -21,6 +21,7 @@ const (
 	TurnEnded          Type = "turn_ended"
 	TileRevealed       Type = "tile_revealed"
 	TileMatched        Type = "tile_matched"
+	TileMerged         Type = "tile_merged"
 	LootAcquired       Type = "loot_acquired"
 	InventoryFull      Type = "inventory_full"
 	EntityCreated      Type = "entity_created"
@@ -30,6 +31,8 @@ const (
 	WorldGenerated     Type = "world_generated"
 	CreatureFled       Type = "creature_fled"
 	ItemMessage        Type = "item_message"
+	NavigationOpened   Type = "navigation_opened"
+	NavigationClosed   Type = "navigation_closed"
 	// Animation events pour l'UI
 	AnimationStarted Type = "animation_started"
 	AnimationEnded   Type = "animation_ended"
@@ -189,7 +192,7 @@ func NewEntityRevealedEvent(tilePos entity.Position, entityID string, gridID str
 	}
 }
 
-func NewTileMatchedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type) Event {
+func NewTileMatchedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type, level int) Event {
 	return Event{
 		Type:     TileMatched,
 		SourceID: entityID,
@@ -198,6 +201,22 @@ func NewTileMatchedEvent(tilePos entity.Position, entityID string, name string, 
 			"entity_id":   entityID,
 			"name":        name,
 			"entity_type": entityType,
+			"level":       level,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewTileMergedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type, level int) Event {
+	return Event{
+		Type:     TileMerged,
+		SourceID: entityID,
+		Payload: map[string]interface{}{
+			"position":    tilePos,
+			"entity_id":   entityID,
+			"name":        name,
+			"entity_type": entityType,
+			"level":       level,
 		},
 		Timestamp: time.Now(),
 	}
@@ -315,6 +334,28 @@ func NewWorldGeneratedEvent(planeID string, zoneCount int) Event {
 	}
 }
 
+func NewNavigationOpenedEvent(gridID string) Event {
+	return Event{
+		Type:     NavigationOpened,
+		SourceID: "system",
+		Payload: map[string]interface{}{
+			"grid_id": gridID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewNavigationClosedEvent(gridID string) Event {
+	return Event{
+		Type:     NavigationClosed,
+		SourceID: "system",
+		Payload: map[string]interface{}{
+			"grid_id": gridID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
 // GameState représente l'état actuel du jeu
 type GameState string
 
@@ -334,4 +375,28 @@ func NewPhaseChangedEvent(from, to GameState) Event {
 		},
 		Timestamp: time.Now(),
 	}
+}
+
+// NewAnimationStartedEvent crée un événement signalant le début d'une animation graphique.
+func NewAnimationStartedEvent(animationType string, targetID string) Event {
+    return Event{
+       Type:     AnimationStarted,
+       SourceID: targetID,
+       Payload: map[string]interface{}{
+          "animation_type": animationType,
+       },
+       Timestamp: time.Now(),
+    }
+}
+
+// NewAnimationEndedEvent crée un événement signalant la fin d'une animation graphique.
+func NewAnimationEndedEvent(animationType string, targetID string) Event {
+    return Event{
+       Type:     AnimationEnded,
+       SourceID: targetID,
+       Payload: map[string]interface{}{
+          "animation_type": animationType,
+       },
+       Timestamp: time.Now(),
+    }
 }

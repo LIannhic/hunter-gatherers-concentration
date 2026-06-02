@@ -16,7 +16,7 @@ const (
 	BtnMatch ButtonID = iota
 	BtnSkip
 	BtnEndTurn
-	BtnMenu
+	BtnMerge
 )
 
 const btnCount = 4
@@ -73,7 +73,7 @@ func NewManager(getRevealedTileCount func() int, getPlayer func() *player.Player
 			{ui.ActionBtn3X, ui.ActionBtn3Y},
 			{ui.ActionBtn4X, ui.ActionBtn4Y},
 		},
-		baseLabels: [btnCount]string{"MATCH", "SKIP", "TURN", "MENU"},
+		baseLabels: [btnCount]string{"MATCH", "SKIP", "TURN", "MERGE"},
 	}
 	m.resetScramble()
 	return m
@@ -108,13 +108,21 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 
 	// --- RÈGLE MÉTIER : Activation selon le nombre de tuiles révélées ---
 	if revealedCount >= 2 {
-		// Le système verrouille la grille et active Match + Skip
-		states[BtnMatch].Active = true
+		// Le système verrouille la grille et active Skip
 		states[BtnSkip].Active = true
+
+		// Match et Merge sont soumis à des conditions sur l'état des tuiles
+		// Pour l'instant, on active Merge si 2 tuiles sont retournées (la commande vérifiera si elles sont déjà cumulées)
+		states[BtnMerge].Active = true
+
+		// Match n'est activé QUE si les conditions de la commande sont remplies (tuiles cumulées)
+		// Comme le manager est réactif, on laisse l'input handler ou la commande fournir cette info ?
+		// Pour rester simple et réactif ici, on active les boutons si 2 tuiles sont là,
+		// mais on pourrait affiner si on passait l'état "Cumulated" au manager.
+		states[BtnMatch].Active = true
 	}
-	// Les boutons EndTurn et Menu restent toujours actifs
+	// Le bouton EndTurn reste toujours actif
 	states[BtnEndTurn].Active = true
-	states[BtnMenu].Active = true
 
 	// --- V0.2 : TRANSITION END GAME ---
 	if m.isVictoryActive != nil && m.isVictoryActive() {

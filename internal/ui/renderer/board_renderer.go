@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"strings"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -51,6 +52,9 @@ type BoardRenderer struct {
 	trackRenderer *TrackRenderer
 	// Animation manager pour translations et calques
 	AnimManager *AnimationManager
+
+	// Hits en attente d'être affichés (creatureID -> position)
+	pendingHits map[string]entity.Position
 }
 
 // HoverState suit le progrès du survol pour une tuile
@@ -113,6 +117,7 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		hoverStates:          make(map[string]*HoverState),
 		bounceStates:         make(map[string]*BounceState),
 		trackRenderer:        NewTrackRenderer(ui.TileSize),
+		pendingHits:          make(map[string]entity.Position),
 	}
 	// Initialise le gestionnaire d'animations lié au renderer
 	r.AnimManager = NewAnimationManager(r)
@@ -147,7 +152,7 @@ func (r *BoardRenderer) ClearAnimations() {
 
 // StartFlipAnimation démarre une animation de flip pour une tuile
 func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir entity.FlipDirection, entityID string, finalState entity.TileState, startTrans, endTrans entity.Transformation) {
-	key := fmt.Sprintf("%s:%d,%d", gridID, pos.X, pos.Y)
+	key := fmt.Sprintf("%s:%d,%d:%s", gridID, pos.X, pos.Y, entityID)
 	r.flipAnimations[key] = &FlipAnimation{
 		GridID:         gridID,
 		Position:       pos,
@@ -178,8 +183,10 @@ func (r *BoardRenderer) UpdateAnimations(world *domain.World) {
 				Type:     event.AnimationEnded,
 				SourceID: anim.EntityID,
 				Payload: map[string]interface{}{
-					"grid_id":  anim.GridID,
-					"position": anim.Position,
+					"grid_id":        anim.GridID,
+					"position":       anim.Position,
+					"animation_type": "flip", // Précise le type pour filtrage
+					"tile_state":     anim.TileState,
 				},
 			})
 		}
@@ -268,22 +275,87 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 
 		// Mode détermine la strate de rendu (under, normal, over)
 		var layer Layer = LayerNormal
-		if modeStr, ok := e.Payload["mode"].(string); ok {
-			switch modeStr {
-			case "under":
-				layer = LayerUnder
-			case "over":
-				layer = LayerOver
-			default:
-				layer = LayerNormal
-			}
+		modeStr, _ := e.Payload["mode"].(string)
+
+		switch modeStr {
+		case "under":
+			layer = LayerUnder
+		case "over", "earthquake": // Le séisme est un rendu Over, tout simplement.
+			layer = LayerOver
+		default:
+			layer = LayerNormal
 		}
 
 		if r.AnimManager != nil {
-			// Durée: 60 ticks = ~1s à 60fps
-			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 60, layer)
+			flipDir := entity.FlipRight
+			if modeStr == "earthquake" {
+				flipDir = r.computeFlipDirection(board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y})
+			}
+			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 60, layer, modeStr, flipDir)
 		}
 	})
+
+	// Démarre l'animation d'attaque après le flip d'une créature
+	world.EventBus.SubscribeFunc(event.AnimationEnded, func(e event.Event) {
+		if animType, ok := e.Payload["animation_type"].(string); ok && animType == "flip" {
+			// On ne déclenche l'attaque QUE si la tuile finit Révélée (pas si on la cache)
+			if finalState, ok := e.Payload["tile_state"].(entity.TileState); ok && finalState&entity.Revealed == 0 {
+				return
+			}
+
+			ent, ok := world.Entities.Get(entity.ID(e.SourceID))
+			if !ok || ent.GetType() != entity.TypeCreature {
+				return
+			}
+
+			creature := ent.(*domain.Creature)
+			dx, dy := creature.GetLungeDirectionVector()
+
+			var hitTarget *entity.Position
+			if pos, ok := r.pendingHits[e.SourceID]; ok {
+				target := pos
+				hitTarget = &target
+				delete(r.pendingHits, e.SourceID)
+			}
+
+			if r.AnimManager != nil {
+				r.AnimManager.StartAttack(world, e.SourceID, dx, dy, hitTarget)
+			}
+		}
+	})
+
+	// Enregistre les hits subis par le joueur pour les synchroniser avec l'attaque
+	world.EventBus.SubscribeFunc(event.PlayerDamaged, func(e event.Event) {
+		if pos, ok := e.Payload["position"].(entity.Position); ok {
+			r.pendingHits[e.SourceID] = pos
+		}
+	})
+}
+
+func (r *BoardRenderer) computeFlipDirection(from, to board.Position) entity.FlipDirection {
+	dx := to.X - from.X
+	dy := to.Y - from.Y
+
+	switch {
+	case dx == 0 && dy < 0:
+		return entity.FlipTop
+	case dx > 0 && dy < 0:
+		return entity.FlipTopRight
+	case dx > 0 && dy == 0:
+		return entity.FlipRight
+	case dx > 0 && dy > 0:
+		return entity.FlipBottomRight
+	case dx == 0 && dy > 0:
+		return entity.FlipBottom
+	case dx < 0 && dy > 0:
+		return entity.FlipBottomLeft
+	case dx < 0 && dy == 0:
+		return entity.FlipLeft
+	case dx < 0 && dy < 0:
+		return entity.FlipTopLeft
+	default:
+		return entity.FlipRight
+	}
 }
 
 // GetTileSize retourne la taille des tuiles
@@ -310,10 +382,10 @@ func (r *BoardRenderer) ApplyTransformation(geom *ebiten.GeoM, t entity.Transfor
 	case entity.TransMirrorV:
 		geom.Scale(1, -1)
 	case entity.TransMirrorD1: // Diagonale \
-		geom.Rotate(math.Pi / 2)
+		geom.Rotate(-math.Pi / 2)
 		geom.Scale(1, -1)
 	case entity.TransMirrorD2: // Diagonale /
-		geom.Rotate(-math.Pi / 2)
+		geom.Rotate(math.Pi / 2)
 		geom.Scale(1, -1)
 	}
 }
@@ -339,9 +411,8 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 		// Toujours rendu sur le plateau (Board area)
 		r.renderEmptyGrid(screen, world.CurrentGridID, world, false)
 
-		isPortalZone := world.DreamPlane != nil && (world.CurrentGridID == world.DreamPlane.StartZoneID || world.CurrentGridID == world.DreamPlane.EndZoneID)
 		getCenter := func(pos board.Position) (float64, float64) {
-			return r.getTileCenter(pos, grid, isPortalZone)
+			return r.GetTileCenter(pos, grid)
 		}
 
 		// --- 3. STRATE : UNDER (Souterraine) ---
@@ -447,6 +518,20 @@ func (r *BoardRenderer) renderMovementsOver(screen *ebiten.Image, world *domain.
 func (r *BoardRenderer) renderEffectsOver(screen *ebiten.Image, world *domain.World) {
 	if world.CurrentGridID != "" {
 		r.renderScannerEffects(screen, world.CurrentGridID, world)
+
+		// Rendu des menaces d'attaque (Intensions d'attaque) au-dessus de tout
+		if r.trackRenderer != nil {
+			getCenter := func(pos board.Position) (float64, float64) {
+				grid, _ := world.GetGrid(world.CurrentGridID)
+				return r.GetTileCenter(pos, grid)
+			}
+			r.trackRenderer.RenderAttackThreats(screen, world, getCenter)
+
+			// Si le bonus du Fleeing Sprite est actif, on affiche toutes les zones de menace
+			if world.Player != nil && world.Player.ThreatVisionTurns > 0 {
+				r.trackRenderer.RenderPotentialThreats(screen, world, getCenter)
+			}
+		}
 	}
 }
 
@@ -549,6 +634,12 @@ func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, di
 	numTiles := 2
 	isVertical := (dir == entity.DirEast || dir == entity.DirWest)
 
+	themeName := "default"
+	if grid != nil {
+		themeName = string(grid.Biome)
+	}
+	theme := r.assets.GetTheme(themeName)
+
 	for i := 0; i < numTiles; i++ {
 		tx, ty := ex, ey
 		if isVertical {
@@ -576,19 +667,19 @@ func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, di
 		var tileImg *ebiten.Image
 		if tileState&entity.Blocked != 0 {
 			if tileState&entity.Revealed != 0 {
-				tileImg = r.assets.GetImage("tile_blocked")
+				tileImg = r.assets.GetImage("tile_blocked_" + themeName)
 			} else {
-				tileImg = r.assets.GetImage("tile_sealed")
+				tileImg = r.assets.GetImage("tile_sealed_" + themeName)
 			}
 		} else if tileState&entity.Revealed != 0 {
-			tileImg = r.assets.GetImage("tile_exit")
+			tileImg = r.assets.GetImage("tile_exit_" + themeName)
 		} else {
-			tileImg = r.assets.GetImage("tile_hidden")
+			tileImg = r.assets.GetImage("tile_hidden_" + themeName)
 		}
 
-		// --- GESTION DES ANIMATIONS (FLIP & HOVER) ---
-		entityID := fmt.Sprintf("exit_%s_%d", directionToName(dir), i)
+		entityID := fmt.Sprintf("exit_%s_%d", board.DirectionToName(dir), i)
 
+		// --- GESTION DES ANIMATIONS (FLIP) ---
 		var animation *FlipAnimation
 		for _, anim := range r.flipAnimations {
 			if anim.EntityID == entityID && anim.GridID == world.CurrentGridID {
@@ -598,78 +689,83 @@ func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, di
 		}
 
 		if animation != nil && animation.IsActive() {
-			grid, _ := world.GetGrid(world.CurrentGridID)
-			themeName := "default"
-			if grid != nil {
-				themeName = string(grid.Biome)
-			}
-			theme := r.assets.GetTheme(themeName)
 			r.renderFlippingTile(screen, tx, ty, animation, nil, themeName, theme.HiddenBorder)
 			continue
 		}
 
-		op := &ebiten.DrawImageOptions{}
+		// --- RENDU AVEC TILT (IDLE GEOMETRY) ---
+		margin := (r.tileSize - ui.FaceSize) / 2
+		gtx, gty := float32(tx+margin), float32(ty+margin)
 
-		// Gestion de la rotation et du miroir pour former la flèche
-		if tileState&entity.Revealed != 0 && tileImg == r.assets.GetImage("tile_exit") {
-			op.GeoM.Translate(-r.tileSize/2, -r.tileSize/2)
+		geo := r.generateIdleGeometry(gtx, gty, entityID, theme.HiddenBorder)
+		// Pas de rotation globale du plateau pour les éléments du Playmat (sauf si souhaité)
+		// r.ApplyBoardRotation(geo.V, cx, cy)
 
-			// Rotation de base selon la direction de la sortie
-			var angle float64
+		// Réglage des UV pour l'icône de sortie (flèche)
+		// La texture tile_exit est déjà une flèche pointant vers le Nord?
+		// Non, les assets générés sont spécifiques.
+		// Mais ici on utilise DrawTriangles, donc on doit gérer la rotation de la flèche via UV ou sommets.
+
+		// Si c'est la flèche de sortie, on applique la rotation/miroir aux UV
+		if tileState&entity.Revealed != 0 && tileImg == r.assets.GetImage("tile_exit_"+themeName) {
+			var finalTrans entity.Transformation
+
 			switch dir {
+			case entity.DirNorth:
+				// Inversé : i=0 est le miroir (gauche), i=1 est l'identité (droite)
+				if i == 0 {
+					finalTrans = entity.TransMirrorH
+				} else {
+					finalTrans = entity.TransIdentity
+				}
 			case entity.DirEast:
-				angle = math.Pi / 2
+				// Inversé + Rotation 180° sur le bas (i=1)
+				if i == 0 {
+					finalTrans = entity.Compose(entity.TransRot270, entity.TransMirrorH)
+				} else {
+					finalTrans = entity.Compose(entity.TransRot270, entity.TransRot180)
+				}
 			case entity.DirSouth:
-				angle = math.Pi
+				// Déjà correct : i=0 est l'original, i=1 est le miroir
+				if i == 0 {
+					finalTrans = entity.TransRot180
+				} else {
+					finalTrans = entity.Compose(entity.TransRot180, entity.TransMirrorH)
+				}
 			case entity.DirWest:
-				angle = -math.Pi / 2
+				// Inversé + Rotation 180° sur le bas (i=1)
+				if i == 0 {
+					finalTrans = entity.Compose(entity.TransRot90, entity.TransRot180)
+				} else {
+					finalTrans = entity.Compose(entity.TransRot90, entity.TransMirrorH)
+				}
 			}
-			op.GeoM.Rotate(angle)
 
-			// Effet miroir pour la deuxième tuile afin de compléter la flèche
-			if i == 1 {
-				op.GeoM.Scale(-1, 1)
+			uvCoords := GetTransformationGeometry(finalTrans)
+			for j := 0; j < 4; j++ {
+				geo.V[j].SrcX = uvCoords[j][0] * ui.FaceSize
+				geo.V[j].SrcY = uvCoords[j][1] * ui.FaceSize
 			}
-
-			op.GeoM.Translate(tx+r.tileSize/2, ty+r.tileSize/2)
-		} else {
-			op.GeoM.Translate(tx, ty)
 		}
 
-		// Application du Hover
-		hover, hasHover := r.hoverStates[entityID]
-		if hasHover && hover.Progress > 0 {
-			// Création d'une géométrie temporaire pour le hover
-			margin := (r.tileSize - ui.FaceSize) / 2
-			htx, hty := float32(tx+margin), float32(ty+margin)
+		// Dessin
+		r.drawGeometryPart(screen, geo.V, geo.I[6:12], r.assets.GetImage("tile_hidden_"+themeName)) // Dos
+		r.drawGeometryPart(screen, geo.V, geo.I[:6], tileImg)                                       // Face
 
-			// On simule une entité vide pour la géométrie
-			geo := r.generateIdleGeometry(htx, hty, entityID, color.RGBA{100, 100, 200, 255})
-			r.drawSlices(screen, geo, hover.Dir, r.assets.GetImage("white"))
-
-			// Ajustement de l'opacité/élévation simple si on n'utilise pas drawSlices complet
-			scale := 1.0 + 0.05*float64(hover.Progress)
-			op.GeoM.Translate(-tx-r.tileSize/2, -ty-r.tileSize/2)
-			op.GeoM.Scale(scale, scale)
-			op.GeoM.Translate(tx+r.tileSize/2, ty+r.tileSize/2)
+		// Slices
+		id := entityID
+		hover, hasHover := r.hoverStates[id]
+		bounce, hasBounce := r.bounceStates[id]
+		if (hasHover && hover.Progress > 0) || (hasBounce && bounce.ImpactT < 1.0) {
+			hDir := entity.FlipTop
+			if hasHover {
+				hDir = hover.Dir
+			} else if hasBounce {
+				hDir = bounce.Dir
+			}
+			r.drawSlices(screen, geo, hDir, r.assets.GetImage("white"))
 		}
-
-		screen.DrawImage(tileImg, op)
 	}
-}
-
-func directionToName(dir entity.Direction) string {
-	switch dir {
-	case entity.DirNorth:
-		return "north"
-	case entity.DirEast:
-		return "east"
-	case entity.DirSouth:
-		return "south"
-	case entity.DirWest:
-		return "west"
-	}
-	return "unknown"
 }
 
 func (r *BoardRenderer) getGridSpacing(gridWidth, gridHeight int) (spacingX, spacingY, padX, padY float64) {
@@ -701,9 +797,10 @@ func (r *BoardRenderer) calculateTileScreenPos(pos board.Position, grid *board.G
 	return sx, sy
 }
 
-// getTileCenter retourne le centre d'une case en coordonnées écran, avec rotation globale appliquée
-func (r *BoardRenderer) getTileCenter(pos board.Position, grid *board.Grid, isPortal bool) (float64, float64) {
-	x, y := r.calculateTileScreenPos(pos, grid, isPortal)
+// GetTileCenter retourne le centre d'une case en coordonnées écran, avec rotation globale appliquée
+func (r *BoardRenderer) GetTileCenter(pos board.Position, grid *board.Grid) (float64, float64) {
+	isPortalZone := grid.ID == "zone_start" || grid.ID == "zone_end" // Simplification pour l'export
+	x, y := r.calculateTileScreenPos(pos, grid, isPortalZone)
 	cx, cy := x+r.tileSize/2, y+r.tileSize/2
 
 	if r.boardRotation != 0 {
@@ -810,6 +907,13 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 		return
 	}
 
+	// Gestion du décalage d'attaque
+	if comp, ok := world.Components.Get(entityID, "attacking_animation"); ok {
+		aa := comp.(*component.AttackingAnimation)
+		x += aa.OffsetX
+		y += aa.OffsetY
+	}
+
 	visualState := ent.GetState()
 	if forceReveal {
 		visualState |= entity.Revealed
@@ -866,6 +970,19 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	geo := r.generateIdleGeometry(tx, ty, entityID, theme.HiddenBorder)
 	r.ApplyBoardRotation(geo.V, cx, cy)
 
+	// --- CUMUL : Mise à l'échelle et couleur (Uniquement si RÉVÉLÉ) ---
+	if (visualState&entity.Revealed != 0 || visualState&entity.Matched != 0) && ent.GetCumulationLevel() > 0 {
+		cumulScale := 1.0 + 0.15*float64(ent.GetCumulationLevel())
+		for i := range geo.V {
+			geo.V[i].DstX = cx + (geo.V[i].DstX-cx)*float32(cumulScale)
+			geo.V[i].DstY = cy + (geo.V[i].DstY-cy)*float32(cumulScale)
+
+			// Teinte légèrement dorée/brillante
+			geo.V[i].ColorR *= 1.2
+			geo.V[i].ColorG *= 1.1
+		}
+	}
+
 	// Application de l'alpha aux sommets pour la transparence (Ghost)
 	if alpha < 1.0 {
 		for i := range geo.V {
@@ -915,54 +1032,89 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	}
 }
 
-func (r *BoardRenderer) renderEntityAt(screen *ebiten.Image, x, y float64, e entity.Entity) {
-	centerX := float32(x + r.tileSize/2)
+func (r *BoardRenderer) getEntityRevealedImage(ent entity.Entity, themeName string) *ebiten.Image {
+	if ent == nil {
+		return r.assets.GetTileImage("revealed", themeName)
+	}
 
-	switch ent := e.(type) {
-	case *domain.Creature:
-		icon := r.assets.GetCreatureIcon(ent.Species)
-		op := &ebiten.DrawImageOptions{}
-
-		// 1. Centrage de l'asset
-		w, h := icon.Bounds().Dx(), icon.Bounds().Dy()
-		op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
-
-		// 2. Application de la transformation D4 (Orientation)
-		r.ApplyTransformation(&op.GeoM, ent.GetTransformation())
-
-		// 3. Mise à l'échelle et placement final
-		op.GeoM.Scale(0.75, 0.75)
-		op.GeoM.Translate(x+r.tileSize/2, y+r.tileSize/2)
-		screen.DrawImage(icon, op)
-
-		behaviorColor := color.RGBA{200, 200, 200, 255}
-		switch ent.Behavior.State {
-		case "hunting":
-			behaviorColor = color.RGBA{255, 100, 100, 255}
-		case "fleeing":
-			behaviorColor = color.RGBA{100, 100, 255, 255}
-		case "pollinating":
-			behaviorColor = color.RGBA{100, 255, 100, 255}
+	switch ent.GetType() {
+	case entity.TypeTrap:
+		return r.assets.GetTileImage("trap", themeName)
+	case entity.TypeStructure:
+		if ent.HasTag("start_portal") || ent.HasTag("finish_portal") || ent.HasTag("portable_portal") || ent.HasTag("portal") {
+			return r.assets.GetTileImage("portal", themeName)
+		} else if ent.HasTag("dolmen") {
+			return r.assets.GetTileImage("dolmen", themeName)
+		} else if ent.HasTag("obelisk") {
+			return r.assets.GetTileImage("obelisk", themeName)
 		}
-		vector.DrawFilledCircle(screen, centerX, float32(y+10), 4, behaviorColor, true)
-
-	case *domain.Resource:
-		stageName := ent.Lifecycle.GetCurrentStageName()
-		icon := r.assets.GetResourceIcon(ent.ResourceType, stageName)
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-r.tileSize/2, -r.tileSize/2)
-		op.GeoM.Scale(0.75, 0.75)
-		op.GeoM.Translate(x+r.tileSize/2, y+r.tileSize/2)
-		screen.DrawImage(icon, op)
-
-		if len(stageName) > 0 {
-			label := string(stageName[0])
-			text.Draw(screen, label, basicfont.Face7x13, int(x+r.tileSize-12), int(y+r.tileSize-5), color.White)
-		}
+		return r.assets.GetTileImage("structure", themeName)
+	case entity.TypeArtefact:
+		return r.assets.GetTileImage("revealed", themeName)
+	case entity.TypeLoot:
+		return r.assets.GetTileImage("revealed", themeName)
+	case entity.TypeCreature, entity.TypeResource, entity.TypeTrack:
+		return r.assets.GetTileImage("revealed", themeName)
+	default:
+		return r.assets.GetTileImage("revealed", themeName)
 	}
 }
 
 func (r *BoardRenderer) ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool) {
+	// 1. Vérification de l'inventaire
+	if float64(screenX) >= ui.InventoryX && float64(screenX) <= ui.InventoryX+ui.InventoryW &&
+		float64(screenY) >= ui.InventoryY && float64(screenY) <= ui.InventoryY+ui.InventoryH {
+
+		// Zone des slots (commence à InventoryY + 40, s'arrête avant les boutons à InventoryY + 321)
+		slotZoneY := ui.InventoryY + 40
+		if float64(screenY) >= float64(slotZoneY) && float64(screenY) <= float64(ui.InventoryY+321) {
+			localY := float64(screenY) - float64(slotZoneY) + float64(world.Player.Inventory.ScrollOffset)
+			localX := float64(screenX) - ui.InventoryX - 5
+
+			rowH := ui.LootSlotSize + ui.LootSlotPadding
+			row := int(localY / rowH)
+			col := int(localX / rowH)
+
+			if col >= 0 && col < ui.LootSlotsPerRow {
+				return board.Position{X: col, Y: row}, board.InventoryGridID, true
+			}
+		}
+	}
+
+	// 2. Vérification des sorties (Navigation)
+	px := float64(screenX) - ui.PlaymatX
+	py := float64(screenY) - ui.PlaymatY
+
+	if px >= ui.ExitNorthX && px < ui.ExitNorthX+ui.ExitNorthW && py >= ui.ExitNorthY && py < ui.ExitNorthY+ui.ExitNorthH {
+		index := 0
+		if px >= ui.ExitNorthX+ui.TileSize {
+			index = 1
+		}
+		return board.Position{X: index, Y: 0}, "exit_north", true
+	}
+	if px >= ui.ExitEastX && px < ui.ExitEastX+ui.ExitEastW && py >= ui.ExitEastY && py < ui.ExitEastY+ui.ExitEastH {
+		index := 0
+		if py >= ui.ExitEastY+ui.TileSize {
+			index = 1
+		}
+		return board.Position{X: index, Y: 0}, "exit_east", true
+	}
+	if px >= ui.ExitSouthX && px < ui.ExitSouthX+ui.ExitSouthW && py >= ui.ExitSouthY && py < ui.ExitSouthY+ui.ExitSouthH {
+		index := 0
+		if px >= ui.ExitSouthX+ui.TileSize {
+			index = 1
+		}
+		return board.Position{X: index, Y: 0}, "exit_south", true
+	}
+	if px >= ui.ExitWestX && px < ui.ExitWestX+ui.ExitWestW && py >= ui.ExitWestY && py < ui.ExitWestY+ui.ExitWestH {
+		index := 0
+		if py >= ui.ExitWestY+ui.TileSize {
+			index = 1
+		}
+		return board.Position{X: index, Y: 0}, "exit_west", true
+	}
+
+	// 3. Vérification de la grille de jeu principale
 	gridID := world.CurrentGridID
 	if gridID == "" {
 		return board.Position{}, "", false
@@ -997,6 +1149,39 @@ func (r *BoardRenderer) ScreenToLocalTile(screenX, screenY int, world *domain.Wo
 		return 0, 0, "", false
 	}
 
+	// Cas de l'inventaire
+	if gID == board.InventoryGridID {
+		slotZoneY := float64(ui.InventoryY + 40)
+		rowH := float64(ui.LootSlotSize + ui.LootSlotPadding)
+		tileScreenX := ui.InventoryX + 5 + float64(pos.X)*rowH
+		tileScreenY := slotZoneY + float64(pos.Y)*rowH - float64(world.Player.Inventory.ScrollOffset)
+		return int(float64(screenX) - tileScreenX), int(float64(screenY) - tileScreenY), gID, true
+	}
+
+	// Cas des sorties
+	if strings.HasPrefix(gID, "exit_") {
+		px := float64(screenX) - ui.PlaymatX
+		py := float64(screenY) - ui.PlaymatY
+		var ex, ey float64
+		switch gID {
+		case "exit_north":
+			ex, ey = ui.ExitNorthX, ui.ExitNorthY
+		case "exit_east":
+			ex, ey = ui.ExitEastX, ui.ExitEastY
+		case "exit_south":
+			ex, ey = ui.ExitSouthX, ui.ExitSouthY
+		case "exit_west":
+			ex, ey = ui.ExitWestX, ui.ExitWestY
+		}
+		if gID == "exit_north" || gID == "exit_south" {
+			ex += float64(pos.X) * r.tileSize
+		} else {
+			ey += float64(pos.X) * r.tileSize
+		}
+		return int(px - ex), int(py - ey), gID, true
+	}
+
+	// Cas standard
 	grid, _ := world.GetGrid(gID)
 	isPortalZone := world.DreamPlane != nil && (gID == world.DreamPlane.StartZoneID || gID == world.DreamPlane.EndZoneID)
 
@@ -1009,10 +1194,31 @@ func (r *BoardRenderer) RenderSelectionHighlight(screen *ebiten.Image, pos board
 	if !ok {
 		return
 	}
-	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
 
-	x, y := r.calculateTileScreenPos(pos, grid, isPortalZone)
-	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, highlightColor, true)
+	var x, y float64
+	if gridID == board.InventoryGridID {
+		// Gestion spécifique pour la grille d'inventaire
+		slotZoneY := float64(ui.InventoryY + 40)
+		rowH := ui.LootSlotSize + ui.LootSlotPadding
+		x = ui.InventoryX + 5 + float64(pos.X)*rowH
+		y = slotZoneY + float64(pos.Y)*rowH - world.Player.Inventory.ScrollOffset
+
+		// Ne dessine pas si en dehors de la zone visible de l'inventaire
+		if y+ui.LootSlotSize <= slotZoneY || y >= slotZoneY+331 {
+			return
+		}
+	} else {
+		isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+		x, y = r.calculateTileScreenPos(pos, grid, isPortalZone)
+	}
+
+	// Effet d'immunité (Shadowstalker) - On remplace la couleur par du gris si actif
+	finalColor := highlightColor
+	if world.Player != nil && world.Player.ImmunityTurns > 0 {
+		finalColor = color.RGBA{150, 150, 160, 255} // Gris pierre/éthéré bien visible
+	}
+
+	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, finalColor, true)
 }
 
 func (r *BoardRenderer) RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World) {
@@ -1079,6 +1285,20 @@ func (r *BoardRenderer) renderMovingEntities(screen *ebiten.Image, world *domain
 		curX := anim.CurrentX
 		curY := anim.CurrentY
 
+		if r.AnimManager != nil {
+			if transAnim, ok := r.AnimManager.animes[id]; ok && transAnim.Mode == "earthquake" {
+				progress := float64(transAnim.Tick) / math.Max(1, float64(transAnim.Duration))
+				grid, _ := world.GetGrid(world.CurrentGridID)
+				themeName := "default"
+				if grid != nil {
+					themeName = string(grid.Biome)
+				}
+				theme := r.assets.GetTheme(themeName)
+				r.renderEarthquakeTile360(screen, curX, curY, progress, ent, themeName, theme.HiddenBorder, transAnim.FlipDirection)
+				continue
+			}
+		}
+
 		// Création d'un plot fictif pour renderTileAt
 		fakePlot := &board.Plot{
 			Position:   board.Position{X: anim.TargetGridX, Y: anim.TargetGridY},
@@ -1141,26 +1361,116 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 	r.effectRenderer.DrawScannerEffect(screen, srcImg, int(ui.PlaymatX), int(ui.PlaymatY), progress, erase, thickness, revealColor)
 }
 
-// getEntityRevealedImage retourne l'image révélée appropriée pour une entité et un thème
-func (r *BoardRenderer) getEntityRevealedImage(ent entity.Entity, themeName string) *ebiten.Image {
-	if ent == nil {
-		return r.assets.GetTileImage("revealed", themeName)
+func (r *BoardRenderer) RenderInventoryLoot(target *ebiten.Image, world *domain.World, selectedIdx int, selection map[int]bool, confirmAll bool) {
+	inv := &world.Player.Inventory
+	grid, ok := world.GetGrid(board.InventoryGridID)
+	if !ok {
+		return
 	}
 
-	if ent.GetType() == entity.TypeTrap {
-		return r.assets.GetTileImage("trap", themeName)
-	}
+	rowH := ui.LootSlotSize + ui.LootSlotPadding
+	theme := r.assets.GetTheme("default")
 
-	if ent.GetType() == entity.TypeStructure {
-		if ent.HasTag("start_portal") || ent.HasTag("finish_portal") || ent.HasTag("portable_portal") {
-			return r.assets.GetTileImage("portal", themeName)
-		} else if ent.HasTag("dolmen") {
-			return r.assets.GetTileImage("dolmen", themeName)
-		} else if ent.HasTag("obelisk") {
-			return r.assets.GetTileImage("obelisk", themeName)
+	for i := 0; i < inv.MaxSize; i++ {
+		row := i / ui.LootSlotsPerRow
+		col := i % ui.LootSlotsPerRow
+
+		sx := float64(col)*rowH + 5
+		sy := float64(row)*rowH - inv.ScrollOffset
+
+		// On saute ce qui est hors du viewport du buffer (331px de haut)
+		if sy+ui.LootSlotSize < 0 || sy > 331 {
+			continue
 		}
-		return r.assets.GetTileImage("structure", themeName)
-	}
 
-	return r.assets.GetTileImage("revealed", themeName)
+		pos := board.Position{X: col, Y: row}
+		plot, err := grid.Get(pos)
+		if err != nil || len(plot.EntitiesID) == 0 {
+			// Slot vide : on dessine juste le fond
+			r.renderEmptySquareAt(target, sx, sy)
+			continue
+		}
+
+		entityID := plot.EntitiesID[len(plot.EntitiesID)-1]
+		ent, ok := world.Entities.Get(entity.ID(entityID))
+		if !ok {
+			r.renderEmptySquareAt(target, sx, sy)
+			continue
+		}
+
+		// Rendu du slot avec TILT
+		margin := (r.tileSize - ui.FaceSize) / 2
+		gtx, gty := float32(sx+margin), float32(sy+margin)
+
+		// Note: On utilise entityID pour récupérer le hover state
+		geo := r.generateIdleGeometry(gtx, gty, entityID, theme.HiddenBorder)
+
+		// Détermine l'image de la face selon le type d'objet
+		faceImg := r.getEntityRevealedImage(ent, "default")
+
+		// On dessine le slot
+		r.drawGeometryPart(target, geo.V, geo.I[6:12], r.assets.GetImage("tile_hidden_default")) // Dos
+		r.drawGeometryPart(target, geo.V, geo.I[:6], faceImg)                                    // Face
+
+		// Icône de l'entité (Loot)
+		r.renderFlippingEntityTriangles(target, geo.V[:4], ent, entity.TransIdentity)
+
+		// Highlights persistants (Usage / Suppression)
+		// On les dessine inclinés par dessus la face
+		highlight := selection[i]
+		if confirmAll && i < len(inv.Items) && inv.Items[i].IsDeletable {
+			highlight = true
+		}
+
+		if selectedIdx == i {
+			// Bordure bleue de sélection active
+			indices := []uint16{0, 1, 2, 0, 2, 3}
+			r.drawTiltedFrame(target, geo.V[:4], indices, color.RGBA{0, 180, 255, 200})
+		} else if highlight {
+			// Bordure rouge de suppression
+			indices := []uint16{0, 1, 2, 0, 2, 3}
+			r.drawTiltedFrame(target, geo.V[:4], indices, color.RGBA{255, 100, 100, 200})
+		}
+
+		// Slices pour le tilt
+		hover, hasHover := r.hoverStates[entityID]
+		if hasHover && hover.Progress > 0 {
+			// Bordure cyan de survol (Tilted)
+			indices := []uint16{0, 1, 2, 0, 2, 3}
+			r.drawTiltedFrame(target, geo.V[:4], indices, color.RGBA{0, 255, 255, 100})
+		}
+
+		bounce, hasBounce := r.bounceStates[entityID]
+		if (hasHover && hover.Progress > 0) || (hasBounce && bounce.ImpactT < 1.0) {
+			hDir := entity.FlipTop
+			if hasHover {
+				hDir = hover.Dir
+			} else if hasBounce {
+				hDir = bounce.Dir
+			}
+			r.drawSlices(target, geo, hDir, r.assets.GetImage("white"))
+		}
+	}
+}
+
+// drawTiltedFrame dessine un cadre rectangulaire incliné en utilisant les sommets fournis
+func (r *BoardRenderer) drawTiltedFrame(target *ebiten.Image, v []ebiten.Vertex, indices []uint16, clr color.Color) {
+	cr, cg, cb, ca := clr.RGBA()
+	fR, fG, fB, fA := float32(cr)/0xffff, float32(cg)/0xffff, float32(cb)/0xffff, float32(ca)/0xffff
+
+	// Pour l'instant, on dessine une face semi-transparente pour marquer la sélection
+	vFrame := make([]ebiten.Vertex, 4)
+	copy(vFrame, v)
+	for i := range vFrame {
+		vFrame[i].ColorR, vFrame[i].ColorG, vFrame[i].ColorB, vFrame[i].ColorA = fR, fG, fB, fA*0.3
+		vFrame[i].SrcX, vFrame[i].SrcY = 0, 0
+	}
+	r.drawGeometryPart(target, vFrame, indices, r.assets.GetImage("white"))
+
+	// Et on ajoute les 4 lignes de bordure
+	for i := 0; i < 4; i++ {
+		p1 := v[i]
+		p2 := v[(i+1)%4]
+		vector.StrokeLine(target, p1.DstX, p1.DstY, p2.DstX, p2.DstY, 2, clr, true)
+	}
 }
