@@ -100,21 +100,23 @@ func TestCreatureOrientationRespectsTransformation(t *testing.T) {
 
 type mockWorldQuery struct{}
 
-func (m *mockWorldQuery) GetPlayerPosition() entity.Position { return entity.Position{} }
+func (m *mockWorldQuery) GetPlayerPosition() entity.Position                             { return entity.Position{} }
 func (m *mockWorldQuery) GetNearbyCreatures(pos entity.Position, radius int) []*Creature { return nil }
-func (m *mockWorldQuery) GetResources(pos entity.Position, radius int) []string { return nil }
-func (m *mockWorldQuery) IsValidMove(pos entity.Position) bool { return true }
-func (m *mockWorldQuery) GetTileState(pos entity.Position) string { return "" }
-func (m *mockWorldQuery) GetEmptyPlots() []entity.Position { return nil }
-func (m *mockWorldQuery) GetGridTotalPlots() int { return 0 }
-func (m *mockWorldQuery) IsGridSaturatedWithTraps() bool { return false }
-func (m *mockWorldQuery) HasActivityNearby(pos entity.Position, radius int) bool { return false }
-func (m *mockWorldQuery) IsTileRevealed(pos entity.Position) bool { return false }
-func (m *mockWorldQuery) WasTileRecentlyRevealed(pos entity.Position) bool { return false }
-func (m *mockWorldQuery) FindNearestTarget(from entity.Position, targetType TargetType) *entity.Position { return nil }
-func (m *mockWorldQuery) GetTileType(pos entity.Position) string { return "" }
+func (m *mockWorldQuery) GetResources(pos entity.Position, radius int) []string          { return nil }
+func (m *mockWorldQuery) IsValidMove(pos entity.Position) bool                           { return true }
+func (m *mockWorldQuery) GetTileState(pos entity.Position) string                        { return "" }
+func (m *mockWorldQuery) GetEmptyPlots() []entity.Position                               { return nil }
+func (m *mockWorldQuery) GetGridTotalPlots() int                                         { return 0 }
+func (m *mockWorldQuery) IsGridSaturatedWithTraps() bool                                 { return false }
+func (m *mockWorldQuery) HasActivityNearby(pos entity.Position, radius int) bool         { return false }
+func (m *mockWorldQuery) IsTileRevealed(pos entity.Position) bool                        { return false }
+func (m *mockWorldQuery) WasTileRecentlyRevealed(pos entity.Position) bool               { return false }
+func (m *mockWorldQuery) FindNearestTarget(from entity.Position, targetType TargetType) *entity.Position {
+	return nil
+}
+func (m *mockWorldQuery) GetTileType(pos entity.Position) string            { return "" }
 func (m *mockWorldQuery) GetEntitiesAt(pos entity.Position) []entity.Entity { return nil }
-func (m *mockWorldQuery) IsWalkable(c *Creature, pos entity.Position) bool { return true }
+func (m *mockWorldQuery) IsWalkable(c *Creature, pos entity.Position) bool  { return true }
 
 func TestNavigationRelativeUsesTransformedOrientation(t *testing.T) {
 	creature := New("test", entity.Position{X: 0, Y: 0})

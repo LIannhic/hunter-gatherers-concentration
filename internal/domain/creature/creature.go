@@ -89,10 +89,10 @@ func (c *Creature) GetComponent(name string) interface{} {
 }
 
 // Association compliance
-func (c *Creature) GetMatchID() string       { return c.Species }
-func (c *Creature) GetLogicKey() string      { return "" }
-func (c *Creature) GetElement() string       { return "" }
-func (c *Creature) GetNarrativeTag() string  { return "" }
+func (c *Creature) GetMatchID() string      { return c.Species }
+func (c *Creature) GetLogicKey() string     { return "" }
+func (c *Creature) GetElement() string      { return "" }
+func (c *Creature) GetNarrativeTag() string { return "" }
 func (c *Creature) GetMatchTypes() []string { return []string{"identical"} }
 
 // Action représente une intention de la créature
@@ -289,7 +289,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("flying")
 		c.AddTag("passive")
 
@@ -349,7 +349,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideBounce},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("dangerous")
 		c.AddTag("aggressive")
 
@@ -393,7 +393,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"dirt", "soil"}},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("elusive")
 
 	case "specter":
@@ -434,7 +434,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
 			Collision:  CollisionHandler{Type: CollideStop},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("static")
 
 	case "echo_hound":
@@ -464,7 +464,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("fast")
 
 	case "fleeing_sprite":
@@ -501,13 +501,13 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic:     AcousticSilent,
 				LeavesTracks: false, // Le singe mousse ne laisse pas de traces, mais des pièges
 			},
-			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Frequency: MovementFrequency{Type: FreqDelay, Delay: 1},
 			// NOTE: Le comportement du singe-mousse est validé. Son orientation Backward
 			// est intentionnelle pour son mode de déplacement "à reculons" ou sa zone de menace.
 			Orientation: Orientation{Direction: Backward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("territorial")
 		c.AddTag("dangerous_on_reveal")
 		c.AddTag("climb")

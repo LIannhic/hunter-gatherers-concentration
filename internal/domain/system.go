@@ -794,36 +794,36 @@ func (w *World) CanFlipTile() bool {
 
 // HideAllUnmatchedTiles referme toutes les tuiles révélées qui n'ont pas été associées sur la grille courante.
 func (w *World) HideAllUnmatchedTiles() {
-    gridID := w.CurrentGridID
-    grid, ok := w.GetGrid(gridID)
-    if !ok {
-        return
-    }
+	gridID := w.CurrentGridID
+	grid, ok := w.GetGrid(gridID)
+	if !ok {
+		return
+	}
 
-    for pos, plot := range grid.Plots {
-        if len(plot.EntitiesID) == 0 {
-            continue
-        }
+	for pos, plot := range grid.Plots {
+		if len(plot.EntitiesID) == 0 {
+			continue
+		}
 
-        topID := plot.EntitiesID[len(plot.EntitiesID)-1]
-        if ent, exists := w.Entities.Get(entity.ID(topID)); exists {
-            state := ent.GetState()
+		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+		if ent, exists := w.Entities.Get(entity.ID(topID)); exists {
+			state := ent.GetState()
 
-            // Si la tuile est visible mais pas encore validée (Matched)
-            if state&entity.Revealed != 0 && state&entity.Matched == 0 {
-                // Modifie l'état logique (retourne la tuile)
-                _, _ = w.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection())
+			// Si la tuile est visible mais pas encore validée (Matched)
+			if state&entity.Revealed != 0 && state&entity.Matched == 0 {
+				// Modifie l'état logique (retourne la tuile)
+				_, _ = w.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection())
 
-                // Notifie immédiatement le renderer graphique pour jouer l'animation de fermeture
-                w.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-                    entity.Position(pos),
-                    string(ent.GetID()),
-                    gridID,
-                    plot.Tilt.ToFlipDirection(),
-                ))
-            }
-        }
-    }
+				// Notifie immédiatement le renderer graphique pour jouer l'animation de fermeture
+				w.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+					entity.Position(pos),
+					string(ent.GetID()),
+					gridID,
+					plot.Tilt.ToFlipDirection(),
+				))
+			}
+		}
+	}
 }
 
 // =============================================================================
