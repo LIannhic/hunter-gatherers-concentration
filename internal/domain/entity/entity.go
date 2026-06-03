@@ -286,7 +286,7 @@ func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
 		mid := tileSize / 2
 		dx := localX - mid
 		dy := localY - mid
-		if abs(dx) > abs(dy) {
+		if Abs(dx) > Abs(dy) {
 			if dx < 0 {
 				horizontal = 0
 			} else {
@@ -333,11 +333,21 @@ func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
 	return FlipTop // Fallback
 }
 
-func abs(x int) int {
+func Abs(x int) int {
 	if x < 0 {
 		return -x
 	}
 	return x
+}
+
+func Sign(x int) int {
+	if x < 0 {
+		return -1
+	}
+	if x > 0 {
+		return 1
+	}
+	return 0
 }
 
 func (t Type) String() string {

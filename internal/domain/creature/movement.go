@@ -1,7 +1,6 @@
 package creature
 
 import (
-	"math"
 	"math/rand"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/component"
@@ -54,7 +53,7 @@ func (mt *MovementTrigger) ShouldTrigger(world WorldQuery, creature *Creature) b
 func (mt *MovementTrigger) checkProximity(world WorldQuery, pos entity.Position) bool {
 	for x := -mt.Radius; x <= mt.Radius; x++ {
 		for y := -mt.Radius; y <= mt.Radius; y++ {
-			if math.Abs(float64(x))+math.Abs(float64(y)) <= float64(mt.Radius) {
+			if entity.Abs(x)+entity.Abs(y) <= mt.Radius {
 				checkPos := entity.Position{X: pos.X + x, Y: pos.Y + y}
 				if world.WasTileRecentlyRevealed(checkPos) {
 					return true
@@ -144,12 +143,12 @@ func (nl *NavigationLogic) patrol(world WorldQuery, creature *Creature) entity.P
 	}
 	target := nl.PatrolRoute[nl.PatrolIndex]
 	current := creature.GetPosition()
-	dir := entity.Position{X: Sign(target.X - current.X), Y: Sign(target.Y - current.Y)}
+	dir := entity.Position{X: entity.Sign(target.X - current.X), Y: entity.Sign(target.Y - current.Y)}
 
 	if dir.X == 0 && dir.Y == 0 {
 		nl.PatrolIndex = (nl.PatrolIndex + 1) % len(nl.PatrolRoute)
 		target = nl.PatrolRoute[nl.PatrolIndex]
-		dir = entity.Position{X: Sign(target.X - current.X), Y: Sign(target.Y - current.Y)}
+		dir = entity.Position{X: entity.Sign(target.X - current.X), Y: entity.Sign(target.Y - current.Y)}
 	}
 	return dir
 }
@@ -164,13 +163,10 @@ func (nl *NavigationLogic) relative(world WorldQuery, creature *Creature) entity
 
 	// 2. On prend en compte l'orientation actuelle de la créature.
 	// Si la créature regarde à l'Est, son "En avant" ({X:0, Y:-1} local) doit devenir un mouvement vers l'Est spatial.
-	orient, hasOrient := creature.GetComponent("orientation").(*Orientation)
+	orient := creature.GetOrientation()
 
-	finalDir := baseDir
-	if hasOrient {
-		// On applique la rotation de l'orientation au vecteur baseDir
-		finalDir = applyOrientationToVector(orient, baseDir)
-	}
+	// On applique la rotation de l'orientation au vecteur baseDir
+	finalDir := applyOrientationToVector(orient, baseDir)
 
 	// 3. On calcule la case du monde visée pour tester sa validité
 	targetPos := entity.Position{
@@ -190,8 +186,8 @@ func (nl *NavigationLogic) relative(world WorldQuery, creature *Creature) entity
 }
 
 // Fonction utilitaire pour adapter un vecteur (X, Y) local à l'orientation absolue de la grille
-func applyOrientationToVector(o *Orientation, localDir entity.Position) entity.Position {
-	switch o.Direction {
+func applyOrientationToVector(dir entity.Direction, localDir entity.Position) entity.Position {
+	switch dir {
 	case entity.DirNorth:
 		return localDir // Pas de changement
 	case entity.DirEast:
@@ -219,7 +215,7 @@ func (nl *NavigationLogic) moveToward(world WorldQuery, creature *Creature) enti
 	if target == nil {
 		return nl.wander(world, creature)
 	}
-	return entity.Position{X: Sign(target.X - creature.GetPosition().X), Y: Sign(target.Y - creature.GetPosition().Y)}
+	return entity.Position{X: entity.Sign(target.X - creature.GetPosition().X), Y: entity.Sign(target.Y - creature.GetPosition().Y)}
 }
 
 func (nl *NavigationLogic) moveAway(world WorldQuery, creature *Creature) entity.Position {
@@ -227,7 +223,7 @@ func (nl *NavigationLogic) moveAway(world WorldQuery, creature *Creature) entity
 	if target == nil {
 		return nl.wander(world, creature)
 	}
-	return entity.Position{X: Sign(creature.GetPosition().X - target.X), Y: Sign(creature.GetPosition().Y - target.Y)}
+	return entity.Position{X: entity.Sign(creature.GetPosition().X - target.X), Y: entity.Sign(creature.GetPosition().Y - target.Y)}
 }
 
 // ============================================================================
@@ -426,9 +422,21 @@ const (
 type CollisionHandler struct {
 	Type            CollisionType
 	CanPhaseThrough []string
+	Exceptions      func(world WorldQuery, creature *Creature, targetPos entity.Position) bool // Règles dynamiques d'exception
 }
 
 func (ch *CollisionHandler) HandleCollision(world WorldQuery, creature *Creature, attemptedPos entity.Position) (entity.Position, bool) {
+	// 1. Vérifie les exceptions dynamiques en premier
+	if ch.Exceptions != nil && ch.Exceptions(world, creature, attemptedPos) {
+		return attemptedPos, true
+	}
+
+	// 2. Si la case est marchable, on y va directement
+	if world.IsWalkable(creature, attemptedPos) {
+		return attemptedPos, true
+	}
+
+	// 3. Sinon, on applique le comportement de collision
 	switch ch.Type {
 	case CollideStop:
 		return creature.GetPosition(), false
@@ -452,12 +460,12 @@ func (ch *CollisionHandler) trySlide(world WorldQuery, creature *Creature, attem
 	current := creature.GetPosition()
 	dx, dy := attemptedPos.X-current.X, attemptedPos.Y-current.Y
 	if dy != 0 {
-		if slidePos := (entity.Position{X: current.X, Y: attemptedPos.Y}); world.IsValidMove(slidePos) {
+		if slidePos := (entity.Position{X: current.X, Y: attemptedPos.Y}); world.IsWalkable(creature, slidePos) {
 			return slidePos, true
 		}
 	}
 	if dx != 0 {
-		if slidePos := (entity.Position{X: attemptedPos.X, Y: current.Y}); world.IsValidMove(slidePos) {
+		if slidePos := (entity.Position{X: attemptedPos.X, Y: current.Y}); world.IsWalkable(creature, slidePos) {
 			return slidePos, true
 		}
 	}
@@ -466,7 +474,7 @@ func (ch *CollisionHandler) trySlide(world WorldQuery, creature *Creature, attem
 		{X: current.X, Y: current.Y + 1}, {X: current.X, Y: current.Y - 1},
 	}
 	for _, pos := range lateral {
-		if world.IsValidMove(pos) {
+		if world.IsWalkable(creature, pos) {
 			return pos, true
 		}
 	}
@@ -516,6 +524,7 @@ type WorldQuery interface {
 	FindNearestTarget(from entity.Position, targetType TargetType) *entity.Position
 	GetTileType(pos entity.Position) string
 	GetEntitiesAt(pos entity.Position) []entity.Entity
+	IsWalkable(c *Creature, pos entity.Position) bool
 }
 
 type ExtendedWorldState interface {
@@ -524,16 +533,6 @@ type ExtendedWorldState interface {
 	MoveEntitySilent(creature *Creature, newPos entity.Position) bool
 	CanMoveTo(pos entity.Position) bool
 	SwapEntities(pos1, pos2 entity.Position) bool
-}
-
-func Sign(x int) int {
-	if x < 0 {
-		return -1
-	}
-	if x > 0 {
-		return 1
-	}
-	return 0
 }
 
 // Profiles préconfigurés mis à jour avec la sémantique de perception

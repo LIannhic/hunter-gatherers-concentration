@@ -151,9 +151,27 @@ type Mobility struct {
 	MovePattern  string // "static", "random", "hunter", "flee"
 	Speed        int    // Tuiles par tour
 	LastMoveTime time.Time
+	Size         Size
+	Weight       Weight
 }
 
 func (m Mobility) Type() string { return "mobility" }
+
+type Size int
+
+const (
+	SizeSmall Size = iota
+	SizeMedium
+	SizeLarge
+)
+
+type Weight int
+
+const (
+	WeightLight Weight = iota
+	WeightMedium
+	WeightHeavy
+)
 
 // Behavior pour IA des créatures
 type Behavior struct {

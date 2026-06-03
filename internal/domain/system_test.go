@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/creature"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 )
@@ -484,5 +485,98 @@ func TestDiscoveryUpdate(t *testing.T) {
 	}
 	if plane.DiscoveryStates["C"] != board.StateAdjacent {
 		t.Errorf("Grid C should now be Adjacent, got %v", plane.DiscoveryStates["C"])
+	}
+}
+
+func TestSameSpeciesCollision(t *testing.T) {
+	w := NewWorld()
+	w.CreateGrid("test", 5, 5, board.BiomeForest)
+	engine := NewEngine(w)
+	w.Engine = engine
+
+	// Spawn two lumiflies
+	c1, _ := w.SpawnCreature("test", "lumifly", entity.Position{X: 1, Y: 1})
+	c2, _ := w.SpawnCreature("test", "lumifly", entity.Position{X: 1, Y: 2})
+
+	// Force both to be passive and clear any bias
+	c1.SetMovementProfile(creature.PassiveProfile())
+	c2.SetMovementProfile(creature.PassiveProfile())
+
+	// Setup c1 to move towards c2 (South)
+	c1.MovementProfile.Trigger.Type = creature.TriggerAuto
+	c1.MovementProfile.Navigation.Type = creature.NavRelative
+	c1.MovementProfile.Navigation.PatrolRoute = []entity.Position{{X: 0, Y: 1}}
+	c1.MovementProfile.Navigation.PatrolIndex = 0
+	c1.SetOrientation(entity.DirNorth)
+
+	// Run movement system
+	engine.movementSystem.Update(w)
+
+	// c1 should NOT have moved to (1,2) because c2 (same species) is there
+	if c1.GetPosition().X == 1 && c1.GetPosition().Y == 2 {
+		t.Error("Creature should NOT have moved to a plot occupied by the same species")
+	}
+
+	// Ensure it stayed at (1,1)
+	if c1.GetPosition().X != 1 || c1.GetPosition().Y != 1 {
+		t.Errorf("Creature should have stayed at (1,1), but is at %v", c1.GetPosition())
+	}
+
+	// Spawn a shadowstalker at (1,3)
+	_, _ = w.SpawnCreature("test", "shadowstalker", entity.Position{X: 1, Y: 3})
+
+	// Setup c2 to move towards (1,3) (South)
+	c2.MovementProfile.Trigger.Type = creature.TriggerAuto
+	c2.MovementProfile.Navigation.Type = creature.NavRelative
+	c2.MovementProfile.Navigation.PatrolRoute = []entity.Position{{X: 0, Y: 1}}
+	c2.MovementProfile.Navigation.PatrolIndex = 0
+	c2.SetOrientation(entity.DirNorth)
+
+	// Reset turn moved flag for c2 to ensure it can move
+	c2.MovementProfile.Frequency.TurnLastMoved = -1
+	// Also disable c1 for this step to avoid noise
+	c1.MovementProfile.Trigger.Type = creature.TriggerPassive
+
+	// Let's force ModeOver on c2 to allow cohabitation with different species
+	c2.MovementProfile.Mode.Type = creature.ModeOver
+
+	engine.movementSystem.Update(w)
+
+	// c2 (lumifly) should BE ABLE to move to (1,3) because it's a different species (shadowstalker)
+	// and lumifly has ModeOver (flying) which allows cohabitation with different species
+	if c2.GetPosition().X == 1 && c2.GetPosition().Y == 3 {
+		// Success
+	} else {
+		t.Errorf("Creature (lumifly) should have been able to move over different species (shadowstalker), but is at %v", c2.GetPosition())
+	}
+}
+
+func TestBurrowerRelativeSquareMovement(t *testing.T) {
+	w := NewWorld()
+	w.CreateGrid("test", 5, 5, board.BiomeForest)
+	engine := NewEngine(w)
+	w.Engine = engine
+
+	c, err := w.SpawnCreature("test", "burrower", entity.Position{X: 2, Y: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetOrientation(entity.DirNorth)
+	c.MovementProfile.Frequency.TurnLastMoved = -1
+	t.Logf("Burrower initial orientation=%v trigger=%v nav=%v delay=%d turnLastMoved=%d turnCounter=%d", c.MovementProfile.Orientation.Direction, c.MovementProfile.Trigger.Type, c.MovementProfile.Navigation.Type, c.MovementProfile.Frequency.Delay, c.MovementProfile.Frequency.TurnLastMoved, c.MovementProfile.Frequency.TurnCounter)
+
+	expectedPositions := []entity.Position{
+		{X: 3, Y: 2},
+		{X: 3, Y: 1},
+		{X: 2, Y: 1},
+		{X: 2, Y: 2},
+	}
+
+	for turn, expected := range expectedPositions {
+		engine.movementSystem.Update(w)
+		if c.GetPosition() != expected {
+			t.Errorf("Turn %d: expected burrower at %v, got %v", turn+1, expected, c.GetPosition())
+		}
+		w.Turn++
 	}
 }

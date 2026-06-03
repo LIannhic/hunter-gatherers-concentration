@@ -2172,7 +2172,9 @@ func (s *CreatureMovementSystem) executeMove(c *creature.Creature, profile *crea
 		Y: currentPos.Y + direction.Y,
 	}
 
-	profile.Orientation = directionToOrientation(direction)
+	if profile.Navigation.Type != creature.NavRelative {
+		profile.Orientation = directionToOrientation(direction)
+	}
 
 	finalPos, success := s.handleCollision(profile.Collision, c, newPos, currentPos, world, grid)
 	if !success {
@@ -2194,7 +2196,8 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 				X: c.GetPosition().X + nav.WanderBias.X,
 				Y: c.GetPosition().Y + nav.WanderBias.Y,
 			}
-			if s.isWalkable(c, newPos, grid, world) {
+			wa := &worldAdapter{world: world, grid: grid}
+			if wa.IsWalkable(c, newPos) {
 				return nav.WanderBias
 			}
 		}
@@ -2230,19 +2233,18 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 
 		// 2. On ajuste le vecteur selon l'orientation (Direction) de la créature
 		finalDir := baseDir
-		if orient, ok := c.GetComponent("orientation").(*creature.Orientation); ok {
-			switch orient.Direction {
-			case entity.DirEast:
-				// Rotation de 90° horaire : (X, Y) devient (-Y, X)
-				finalDir = entity.Position{X: -baseDir.Y, Y: baseDir.X}
-			case entity.DirSouth:
-				// Rotation de 180° : (X, Y) devient (-X, -Y)
-				finalDir = entity.Position{X: -baseDir.X, Y: -baseDir.Y}
-			case entity.DirWest:
-				// Rotation de 270° : (X, Y) devient (Y, -X)
-				finalDir = entity.Position{X: baseDir.Y, Y: -baseDir.X}
-				// case entity.DirNorth: reste identique (finalDir = baseDir)
-			}
+		dir := c.GetOrientation()
+		switch dir {
+		case entity.DirEast:
+			// Rotation de 90° horaire : (X, Y) devient (-Y, X)
+			finalDir = entity.Position{X: -baseDir.Y, Y: baseDir.X}
+		case entity.DirSouth:
+			// Rotation de 180° : (X, Y) devient (-X, -Y)
+			finalDir = entity.Position{X: -baseDir.X, Y: -baseDir.Y}
+		case entity.DirWest:
+			// Rotation de 270° : (X, Y) devient (Y, -X)
+			finalDir = entity.Position{X: baseDir.Y, Y: -baseDir.X}
+			// case entity.DirNorth: reste identique (finalDir = baseDir)
 		}
 
 		// 3. On calcule la position absolue ciblée sur la grille
@@ -2251,15 +2253,17 @@ func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationL
 			Y: c.GetPosition().Y + finalDir.Y,
 		}
 
-		// 4. Si le déplacement est impossible, on retourne un vecteur nul {0, 0} pour ce tour.
-		if !s.isWalkable(c, targetPos, grid, world) {
-			return entity.Position{X: 0, Y: 0}
-		}
-
-		// 5. Le déplacement est valide, on met à jour l'index persistant de l'IA pour le prochain tour
+		// --- NOUVEAU : On incrémente TOUJOURS l'index pour le prochain tour,
+		// même si le mouvement actuel est bloqué, comme demandé par l'utilisateur.
 		profile := c.MovementProfile
 		if profile != nil {
 			profile.Navigation.PatrolIndex = (nav.PatrolIndex + 1) % len(nav.PatrolRoute)
+		}
+
+		// 4. Si le déplacement est impossible, on retourne un vecteur nul {0, 0} pour ce tour.
+		wa := &worldAdapter{world: world, grid: grid}
+		if !wa.IsWalkable(c, targetPos) {
+			return entity.Position{X: 0, Y: 0}
 		}
 
 		return finalDir
@@ -2368,8 +2372,8 @@ func (s *CreatureMovementSystem) MoveSpeciesOneStepTowards(species string, targe
 		currentPos := c.GetPosition()
 		// Compute a single step towards the target (Manhattan step)
 		dir := entity.Position{
-			X: sign(target.X - currentPos.X),
-			Y: sign(target.Y - currentPos.Y),
+			X: entity.Sign(target.X - currentPos.X),
+			Y: entity.Sign(target.Y - currentPos.Y),
 		}
 		if dir == (entity.Position{X: 0, Y: 0}) {
 			continue
@@ -2377,7 +2381,18 @@ func (s *CreatureMovementSystem) MoveSpeciesOneStepTowards(species string, targe
 
 		newPos := entity.Position{X: currentPos.X + dir.X, Y: currentPos.Y + dir.Y}
 
-		finalPos, success := s.handleCollision(creature.CollisionHandler{Type: creature.CollidePhase}, c, newPos, currentPos, world, grid)
+		// Pour Shadowstalker, on utilise CollidePhase pour forcer le passage et le Swap.
+		// On s'assure qu'il peut passer à travers tout pour ne pas être bloqué si IsWalkable échoue.
+		coll := creature.CollisionHandler{Type: creature.CollideStop}
+		if c.MovementProfile != nil {
+			coll = c.MovementProfile.Collision
+			if c.MovementProfile.Mode.Type == creature.ModeSwap {
+				coll.Type = creature.CollidePhase
+				coll.CanPhaseThrough = []string{"ground", "wall", "structure"} // Tout traverser pour Swap
+			}
+		}
+
+		finalPos, success := s.handleCollision(coll, c, newPos, currentPos, world, grid)
 		if !success {
 			// try next creature
 			continue
@@ -2396,96 +2411,21 @@ func (s *CreatureMovementSystem) MoveSpeciesOneStepTowards(species string, targe
 }
 
 func (s *CreatureMovementSystem) isWalkable(c *creature.Creature, pos entity.Position, grid *board.Grid, world *World) bool {
-	tile, err := grid.Get(board.Position{X: pos.X, Y: pos.Y})
-	if err != nil || tile.Modifier.Obstructed {
-		return false
-	}
-
-	// Case vide : toujours ok
-	if len(tile.EntitiesID) == 0 {
-		return true
-	}
-
-	// Mode Phase (spectres) : traverse tout dans les limites
-	if c.MovementProfile != nil && c.MovementProfile.Collision.Type == creature.CollidePhase {
-		return true
-	}
-
-	// Capacité "Grimpe" : permet de passer par-dessus les autres entités
-	if c.HasTag("climb") {
-		return true
-	}
-
-	// Vérifie le sommet pour les pièges
-	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-	if ent, ok := world.Entities.Get(entity.ID(topID)); ok {
-		if ent.GetType() == entity.TypeTrap {
-			return true
-		}
-	}
-
-	// Cohabitation pour Over/Under
-	if c.MovementProfile != nil {
-		mode := c.MovementProfile.Mode.Type
-		if mode == creature.ModeOver || mode == creature.ModeUnder {
-			return true
-		}
-	}
-
-	return false
+	wa := &worldAdapter{world: world, grid: grid}
+	return wa.IsWalkable(c, pos)
 }
 
 func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler, c *creature.Creature, newPos, currentPos entity.Position, world *World, grid *board.Grid) (entity.Position, bool) {
-	canMove := s.isWalkable(c, newPos, grid, world)
-
-	switch coll.Type {
-	case creature.CollideStop:
-		if !canMove {
-			return currentPos, false
-		}
-		return newPos, true
-
-	case creature.CollideBounce:
-		if !canMove {
-			c.MovementProfile.Orientation.Rotate(180)
-			return currentPos, false
-		}
-		return newPos, true
-
-	case creature.CollideSlide:
-		if canMove {
+	// Mode Swap : toujours ok pour entrer (l'échange se fera après)
+	if c.MovementProfile != nil && c.MovementProfile.Mode.Type == creature.ModeSwap {
+		if grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
 			return newPos, true
 		}
-
-		dx := newPos.X - currentPos.X
-		dy := newPos.Y - currentPos.Y
-
-		// Tentative de glissade latérale
-		if dy != 0 {
-			slidePos := entity.Position{X: currentPos.X, Y: newPos.Y}
-			if s.isWalkable(c, slidePos, grid, world) {
-				return slidePos, true
-			}
-		}
-		if dx != 0 {
-			slidePos := entity.Position{X: newPos.X, Y: currentPos.Y}
-			if s.isWalkable(c, slidePos, grid, world) {
-				return slidePos, true
-			}
-		}
-		return currentPos, false
-
-	case creature.CollidePhase:
-		if !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
-			return currentPos, false
-		}
-		return newPos, true
 	}
 
-	if !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
-		return currentPos, false
-	}
-	return newPos, true
+	// 1. Délégation au CollisionHandler du domaine pour les règles génériques
+	wa := &worldAdapter{world: world, grid: grid}
+	return coll.HandleCollision(wa, c, newPos)
 }
 
 func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid) bool {
@@ -2522,18 +2462,23 @@ func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos ent
 	idStr := string(c.GetID())
 	grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
 
-	newTile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-	if err == nil && newTile != nil && len(newTile.EntitiesID) > 0 {
-		topID := newTile.EntitiesID[len(newTile.EntitiesID)-1]
-		if ent, ok := world.Entities.Get(entity.ID(topID)); ok && ent.GetType() == entity.TypeTrap {
-			world.RemoveEntity(ent.GetID())
-		}
-	}
-
 	// 1. Détermine la position dans la pile selon le mode PHYSIQUE de déplacement
 	mode := creature.ModeNormal
 	if c.MovementProfile != nil {
 		mode = c.MovementProfile.Mode.Type
+	}
+
+	// Si la créature n'est pas en ModeOver (vol), elle peut écraser/retirer
+	// un piège se trouvant au sommet de la nouvelle tuile. Les entités en
+	// ModeOver (ex: lumifly) ne doivent pas retirer les pièges en survol.
+	newTile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+	if err == nil && newTile != nil && len(newTile.EntitiesID) > 0 {
+		topID := newTile.EntitiesID[len(newTile.EntitiesID)-1]
+		if ent, ok := world.Entities.Get(entity.ID(topID)); ok && ent.GetType() == entity.TypeTrap {
+			if mode != creature.ModeOver {
+				world.RemoveEntity(ent.GetID())
+			}
+		}
 	}
 
 	switch mode {
@@ -2569,31 +2514,20 @@ func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos ent
 		// Elles sont gérées directement par le TrackRenderer via le manager d'entités.
 	}
 
-	// Émission de l'événement mis à jour
-	// hidden est vrai UNIQUEMENT si la créature est camouflée (cloaked)
-	// mode transmet la strate (under, normal, over)
-	world.EventBus.Publish(event.Event{
-		Type:     event.CreatureMoved,
-		SourceID: string(c.GetID()),
-		Payload: map[string]interface{}{
-			"from":    oldPos,
-			"to":      newPos,
-			"mode":    string(mode),
-			"hidden":  isCloaked, // Indique si on saute l'animation (Shadowstalker)
-			"audible": isAudible,
-		},
-	})
+	// Émission de l'événement mis à jour via le helper
+	world.EventBus.Publish(event.NewCreatureMovedEvent(
+		string(c.GetID()),
+		oldPos,
+		newPos,
+		string(mode),
+		isCloaked,
+		isAudible,
+	))
 	return true
 }
 
 func sign(x int) int {
-	if x < 0 {
-		return -1
-	}
-	if x > 0 {
-		return 1
-	}
-	return 0
+	return entity.Sign(x)
 }
 
 func directionToOrientation(dir entity.Position) creature.Orientation {
@@ -2668,6 +2602,168 @@ func (wa *worldAdapter) GetGridTotalPlots() int {
 	return wa.grid.Width * wa.grid.Height
 }
 
+func (wa *worldAdapter) IsTileRevealed(pos entity.Position) bool {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil || len(tile.EntitiesID) == 0 {
+		return false
+	}
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
+		return ent.GetState()&entity.Revealed != 0
+	}
+	return false
+}
+
+func (wa *worldAdapter) WasTileRecentlyRevealed(pos entity.Position) bool {
+	if wa.world.Engine == nil || wa.world.Engine.movementSystem == nil {
+		return false
+	}
+	for _, revealed := range wa.world.Engine.movementSystem.recentReveals {
+		if revealed.X == pos.X && revealed.Y == pos.Y {
+			return true
+		}
+	}
+	return false
+}
+
+func (wa *worldAdapter) FindNearestTarget(from entity.Position, targetType creature.TargetType) *entity.Position {
+	var nearest *entity.Position
+	minDist := 9999
+
+	switch targetType {
+	case creature.TargetPlayer:
+		pos := wa.world.playerPosition
+		nearest = &pos
+	case creature.TargetResource:
+		resources := wa.world.Entities.GetByType(entity.TypeResource)
+		for _, e := range resources {
+			if e.GetGridID() != wa.grid.ID {
+				continue
+			}
+			pos := e.GetPosition()
+			d := abs(pos.X-from.X) + abs(pos.Y-from.Y)
+			if d < minDist {
+				minDist = d
+				nearest = &pos
+			}
+		}
+	}
+	return nearest
+}
+
+func (wa *worldAdapter) GetTileType(pos entity.Position) string {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil {
+		return "invalid"
+	}
+	if tile.Modifier.Obstructed {
+		return "wall"
+	}
+	return "ground"
+}
+
+func (wa *worldAdapter) GetEntitiesAt(pos entity.Position) []entity.Entity {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil {
+		return nil
+	}
+	var result []entity.Entity
+	for _, id := range tile.EntitiesID {
+		if e, ok := wa.world.Entities.Get(entity.ID(id)); ok {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+func (wa *worldAdapter) IsWalkable(c *creature.Creature, pos entity.Position) bool {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil || tile.Modifier.Obstructed {
+		return false
+	}
+
+	// Case vide : toujours ok
+	if len(tile.EntitiesID) == 0 {
+		return true
+	}
+
+	// Mode Swap : toujours ok pour entrer (l'échange se fera après)
+	if c.MovementProfile != nil && c.MovementProfile.Mode.Type == creature.ModeSwap {
+		return true
+	}
+
+	// --- RÈGLES DE COHABITATION (Taille/Poids) ---
+	cSize := component.SizeMedium
+	cWeight := component.WeightMedium
+	if mob, ok := c.GetComponent("mobility").(*component.Mobility); ok {
+		cSize = mob.Size
+		cWeight = mob.Weight
+	}
+
+	canCohabitate := true
+	canPush := false
+
+	for _, id := range tile.EntitiesID {
+		if ent, ok := wa.world.Entities.Get(entity.ID(id)); ok {
+			if otherCreature, ok := ent.(*creature.Creature); ok {
+				// Même espèce : bloqué
+				if otherCreature.Species == c.Species {
+					return false
+				}
+
+				otherSize := component.SizeMedium
+				otherWeight := component.WeightMedium
+				if otherMob, ok := otherCreature.GetComponent("mobility").(*component.Mobility); ok {
+					otherSize = otherMob.Size
+					otherWeight = otherMob.Weight
+				}
+
+				// Cohabitation : possible si tailles différentes
+				if otherSize == cSize {
+					canCohabitate = false
+				}
+
+				// Priorité : possible si strictement plus lourd
+				if cWeight > otherWeight {
+					canPush = true
+				}
+			}
+		}
+	}
+
+	if canCohabitate || canPush {
+		return true
+	}
+
+	// Mode Phase (spectres) : traverse tout dans les limites
+	if c.MovementProfile != nil && c.MovementProfile.Collision.Type == creature.CollidePhase {
+		return true
+	}
+
+	// Capacité "Grimpe" : permet de passer par-dessus les autres entités
+	if c.HasTag("climb") {
+		return true
+	}
+
+	// Vérifie le sommet pour les pièges
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
+		if ent.GetType() == entity.TypeTrap {
+			return true
+		}
+	}
+
+	// Cohabitation pour Over/Under
+	if c.MovementProfile != nil {
+		mode := c.MovementProfile.Mode.Type
+		if mode == creature.ModeOver || mode == creature.ModeUnder {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (wa *worldAdapter) HasActivityNearby(pos entity.Position, radius int) bool {
 	// Vérifie si une révélation ou un mouvement a eu lieu dans le rayon
 	if wa.world.Engine.movementSystem == nil {
@@ -2688,20 +2784,12 @@ func (wa *worldAdapter) IsValidMove(pos entity.Position) bool {
 	if err != nil {
 		return false
 	}
-
-	// Retourne vrai si la case est vide ou contient un piège (accessible par défaut à l'IA simple)
-	if len(tile.EntitiesID) == 0 {
-		return true
+	// Une case est valide si elle n'est pas obstructed par une structure.
+	// Les entités de type ressource ou piège n'empêchent pas le mouvement.
+	if tile.Modifier.Obstructed {
+		return false
 	}
-
-	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
-		if ent.GetType() == entity.TypeTrap {
-			return true
-		}
-	}
-
-	return false
+	return true
 }
 
 func (wa *worldAdapter) GetTileState(pos entity.Position) string {
@@ -2725,24 +2813,20 @@ func (wa *worldAdapter) GetTileState(pos entity.Position) string {
 }
 
 func (wa *worldAdapter) IsGridSaturatedWithTraps() bool {
-	// On considère la grille saturée s'il ne reste plus aucune ressource à matcher
-	// et aucune créature à saboter (autre que les singes mousses eux-mêmes)
+	// La grille est saturée uniquement si chaque parcelle contient au moins
+	// un piège, indépendamment de la présence d'autres entités.
 	for _, plot := range wa.grid.Plots {
+		hasTrap := false
 		for _, id := range plot.EntitiesID {
 			if ent, ok := wa.world.Entities.Get(entity.ID(id)); ok {
-				eType := ent.GetType()
-				// S'il reste une ressource ou une créature (autre que moss_monkey), la grille n'est pas saturée
-				if eType == entity.TypeResource {
-					return false
-				}
-				if eType == entity.TypeCreature {
-					if c, ok := ent.(*creature.Creature); ok {
-						if c.Species != "moss_monkey" {
-							return false
-						}
-					}
+				if ent.GetType() == entity.TypeTrap {
+					hasTrap = true
+					break
 				}
 			}
+		}
+		if !hasTrap {
+			return false
 		}
 	}
 	return true
@@ -2754,10 +2838,7 @@ func (wa *worldAdapter) IsGridSaturatedWithTraps() bool {
 var ErrGridNotFound = errors.New("grid not found")
 
 func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
+	return entity.Abs(x)
 }
 
 // --- SYSTEM: ATTACK INTENT ---

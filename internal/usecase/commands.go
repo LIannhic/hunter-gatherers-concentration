@@ -1015,20 +1015,26 @@ func (c *RotateGridCommand) Execute() error {
 // --- HELPERS ---
 
 func flipToPlayerState(f domain.FlipDirection) (entity.Position, player.BorderPosition) {
+	// Note : Les coordonnées (X, Y) du joueur sur les arêtes sont calées mathématiquement.
+	// Si on flip une tuile en (X, Y), la position "bordure" est un décalage vers l'arête correspondante.
 	switch f {
 	case domain.FlipTop:
+		// Arête Nord de la tuile (X, Y)
 		return entity.Position{X: 0, Y: -1}, player.BorderTop
 	case domain.FlipTopRight:
 		return entity.Position{X: 1, Y: -1}, player.BorderTopRight
 	case domain.FlipRight:
+		// Arête Est de la tuile (X, Y)
 		return entity.Position{X: 1, Y: 0}, player.BorderRight
 	case domain.FlipBottomRight:
 		return entity.Position{X: 1, Y: 1}, player.BorderBottomRight
 	case domain.FlipBottom:
+		// Arête Sud de la tuile (X, Y)
 		return entity.Position{X: 0, Y: 1}, player.BorderBottom
 	case domain.FlipBottomLeft:
 		return entity.Position{X: -1, Y: 1}, player.BorderBottomLeft
 	case domain.FlipLeft:
+		// Arête Ouest de la tuile (X, Y)
 		return entity.Position{X: -1, Y: 0}, player.BorderLeft
 	case domain.FlipTopLeft:
 		return entity.Position{X: -1, Y: -1}, player.BorderTopLeft
