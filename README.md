@@ -75,7 +75,7 @@ Pour rompre le rythme classique du Memory et simuler l'urgence de la survie en p
 
 - **Durée** : dépend de la difficulté (10s en Easy, 8s en Normal, 5s en Hard, 4s en Insane).
 - **Reset** : le timer se réinitialise à chaque action volontaire (retourner une tuile, Match, Skip, Fin de tour).
-- **Auto-skip** : si le timer atteint 0, le système simule automatiquement un **Skip** — les tuiles retournées se referment et le tour est consommé, entraînant la pénalité de Santé Mentale associée.
+- **Auto-skip** : si le timer atteint 0, le système simule automatiquement un **Skip** via l'événement `turn_timer_expired` — les tuiles retournées se referment et le tour est consommé, entraînant la pénalité de Santé Mentale associée.
 - **Feedback visuel** :
   - Le bouton **Skip** se remplit progressivement d'une couleur violette, puis passe au rouge brique en phase d'alerte.
   - La jauge de **Santé Mentale** tremble de plus en plus fort lorsque le timer descend sous les 3 secondes (phase de panique).

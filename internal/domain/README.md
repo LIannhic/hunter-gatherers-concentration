@@ -68,11 +68,16 @@ func (s *LifecycleSystem) Update(world *World) {
 
 ### Implémentation
 
+- **`system/`** : Logique centrale du domaine
+  - `World` : Structure World (Cœur de l'état global).
+  - `Engine` : Orchestrateur des systèmes ECS.
+  - `ECS Systems` : Implémentations (IA, Mouvement, Lifecycle, Loot...).
+  - `Mechanics` : Flip, Match, Merge.
+  - `Navigation` : Gestion des grids et navigation.
+  - `Entities` : Logique de spawn.
+  - `Portal` : Système de portail portable.
+  - `Query` : Fonctions de recherche.
 - **`board/`** : Gestion de la géométrie et de la structure du monde
-  - `Grid` : Plateau individuel (Tuiles, Biomes, Pentes)
-  - `DreamPlane` : Réseau de grilles connectées. Gère les `DiscoveryStates` (Hidden, Adjacent, Visited) pour la minimap.
-  - `LayoutGenerator` : Algorithmes de génération de la structure du plan onirique.
-  - **Persistance de Navigation** : Gère la révélation automatique des entrées et le scellage dynamique des sorties via les événements `NavigationOpened`/`NavigationClosed`.
 - **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
   - `TileState` : Hidden, Revealed, Matched, Blocked
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
@@ -82,7 +87,9 @@ func (s *LifecycleSystem) Update(world *World) {
   - `AddTag(string)`, `HasTag(string)`, `RemoveTag(string)` : Méthodes permettant de gérer les propriétés dynamiques ou visuelles des entités (ex: "moss_lure", "flying").
   - `ThreatZone` : (Creature) Liste de directions attaquées localement.
 - **`component/`** : Stockage et définition des composants (`Store`)
-- **`system.go`** : Systèmes qui traitent les données
+- **`world.go`** : Agrégateur de l'état global (Grids, Entities, Player).
+- **`engine.go`** : Orchestrateur des systèmes. Sépare le cycle par tour (`Update`) du cycle temps réel (`UpdateFrame`).
+- **`system.go`** : Implémentation des systèmes ECS qui traitent les données.
   - `CreatureAISystem` : Gère les comportements de base des créatures
   - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes
   - `LifecycleSystem` : Gère la maturation des ressources
@@ -213,8 +220,13 @@ eventBus.SubscribeFunc(CreatureMoved, func(e Event) {
 })
 
 // Traitement batch (éviter les effets de bord en cascade)
+// Appelé à chaque frame par l'Engine pour garantir la fluidité UI
 eventBus.ProcessQueue()
 ```
+
+### Types d'événements et Priorité UI
+
+Certains événements critiques pour le rendu (comme `TileRevealed`) utilisent `PublishImmediate` pour forcer la mise à jour du Renderer avant la fin de la frame logique. Les autres utilisent `Publish` et sont consommés lors du `ProcessQueue`.
 
 ### Types d'événements
 
