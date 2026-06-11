@@ -675,44 +675,23 @@ func (app *Application) updatePlaying() error {
 		// mais on laisse passer le reste pour permettre de voir les effets en temps réel.
 	}
 
-	app.Engine.UpdateFrame()
+	// Calcul du delta-temps (dt)
+	dt := 1.0 / 60.0
 
-	if app.World.TurnTimer != nil {
-		dt := 1.0 / 60.0
-
-		isPortalZone := app.World.DreamPlane != nil && (app.World.CurrentGridID == app.World.DreamPlane.StartZoneID || app.World.CurrentGridID == app.World.DreamPlane.EndZoneID)
-		if isPortalZone {
-			dt = 0
-		}
-
-		if app.Input.IsPortablePortalMode() {
-			dt /= 5.0
-		}
-
-		if len(app.World.Components.QueryByComponent("moving_animation")) > 0 {
-			dt /= 4.0
-		}
-
-		if app.World.TurnTimer.Update(dt) {
-			fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
-			app.Input.ResetTimerSkip()
-			app.World.TurnTimer.Reset()
-		}
-
-		// Update max time from debug if overridden
-		if app.World.Debug.OverrideDifficulty {
-			if app.World.TurnTimer.MaxTime != app.World.Debug.Difficulty.TurnTimerDuration {
-				app.World.TurnTimer.SetMaxTime(app.World.Debug.Difficulty.TurnTimerDuration)
-			}
-		} else {
-			if app.World.TurnTimer.MaxTime != app.World.Difficulty.TurnTimerDuration {
-				app.World.TurnTimer.SetMaxTime(app.World.Difficulty.TurnTimerDuration)
-			}
-		}
+	isPortalZone := app.World.DreamPlane != nil && (app.World.CurrentGridID == app.World.DreamPlane.StartZoneID || app.World.CurrentGridID == app.World.DreamPlane.EndZoneID)
+	if isPortalZone {
+		dt = 0
 	}
 
-	app.HUD.Update()
-	app.World.EventBus.ProcessQueue()
+	if app.Input.IsPortablePortalMode() {
+		dt /= 5.0
+	}
+
+	if len(app.World.Components.QueryByComponent("moving_animation")) > 0 {
+		dt /= 4.0
+	}
+
+	app.Engine.UpdateFrame(dt)
 
 	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")

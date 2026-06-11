@@ -104,6 +104,11 @@ func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
 			}
 		})
 
+		// NOUVEAU : Auto-skip forcé par l'Engine (Expiration du Timer)
+		world.EventBus.SubscribeFunc(event.Type("turn_timer_expired"), func(e event.Event) {
+			h.ResetTimerSkip()
+		})
+
 		// Restauration de la logique de scellage
 		world.EventBus.SubscribeFunc(event.GridEntered, func(e event.Event) {
 			gridID := e.Payload["grid_id"].(string)
