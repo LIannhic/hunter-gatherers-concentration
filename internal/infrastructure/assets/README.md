@@ -146,3 +146,22 @@ Vous êtes libres de les utiliser, modifier et distribuer à des fins commercial
 - `creatures.go` - Icônes de créatures
 - `structures.go` - Génération des décors fixes
 - `tracks.go` - Traces environnementales
+
+## 🎵 Conseils pour l'Audio (Musiques et Sons)
+
+L'implémentation audio n'est pas encore finalisée, mais voici quelques recommandations pour les futurs assets :
+
+- **Format** : Utilisez de préférence le format `.ogg` (Vorbis) pour les musiques (meilleure compression) et `.wav` (PCM) pour les bruitages courts (réactivité).
+- **Boucles** : Assurez-vous que les musiques d'ambiance de biome peuvent boucler parfaitement sans coupure audible.
+- **Identité sonore** : Chaque biome gagnerait à avoir sa propre nappe sonore (ex: vent sableux pour le désert, échos lointains pour la grotte).
+- **Feedback** : Les sons de "Flip" et de "Match" sont cruciaux pour le game-feel ; ils doivent être courts et satisfaisants.
+
+## 🔗 Ressources Utiles
+
+Voici quelques sites recommandés pour trouver des assets de qualité (images et sons) sous licence libre (CC0 / Public Domain) :
+
+- [Itch.io (Asset Packs)](https://itch.io/game-assets/free) - Excellent pour le pixel art et les musiques indies.
+- [OpenGameArt](https://opengameart.org/) - La référence pour les ressources open-source.
+- [Kenney.nl](https://kenney.nl/assets) - Des assets de haute qualité, très cohérents visuellement.
+- [Sonniss (GDC Bundles)](https://sonniss.com/gameaudiobundles) - Énormes bibliothèques de bruitages pros gratuites.
+- [Freesound.org](https://freesound.org/) - Base de données communautaire de sons (vérifiez bien les licences).
