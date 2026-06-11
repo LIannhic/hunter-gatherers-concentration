@@ -341,11 +341,9 @@ func NewEngine() *Engine {
 	return &Engine{
 		strategies: []Strategy{
 			&IdenticalStrategy{},
-			// Note : Les stratégies Logique, Élémentaire et Narrative sont désactivées
-			// pour le moment. Toutes les tuiles s'associent par similarité.
-			// NewLogicalStrategy(),
-			// NewElementalStrategy(),
-			// NewNarrativeStrategy(),
+			NewLogicalStrategy(),
+			NewElementalStrategy(),
+			NewNarrativeStrategy(),
 			&OrientationStrategy{},
 		},
 	}
@@ -367,7 +365,7 @@ func (e *Engine) TryAssociate(a, b Matchable) (Result, error) {
 }
 
 func (e *Engine) RegisterStrategy(s Strategy) {
-	e.strategies = append([]Strategy{s}, e.strategies...) // Priorité aux nouvelles
+	e.strategies = append([]Strategy{s}, e.strategies...)
 }
 
 func (e *Engine) GetStrategies() []Strategy {

@@ -12,9 +12,11 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
+	dbg "github.com/LIannhic/hunter-gatherers-concentration/internal/ui/debug"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -26,19 +28,11 @@ type BoardRenderer interface {
 	RenderInventoryLoot(target *ebiten.Image, world *domain.World, selectedIdx int, selection map[int]bool, confirmAll bool)
 }
 
-// ScrollingMessage représente un message qui défile dans une zone dédiée
-type ScrollingMessage struct {
-	Text      string
-	X         float64
-	Scrolls   int // Nombre de passages effectués
-	TargetBox int // 0: Gauche (Portrait/Inventaire), 1: Droite (Jauges/Minimap)
-}
-
 // HUD affiche les informations de jeu
 type HUD struct {
-	world    *domain.World
-	assets   *assets.Manager
-	renderer BoardRenderer
+	world                *domain.World
+	assets               *assets.Manager
+	renderer             BoardRenderer
 	showDetails          bool
 	showInventoryDetails bool
 	showAssetsDetails    bool
@@ -46,7 +40,10 @@ type HUD struct {
 	fullFeedbackTimer    int // Timer pour le retour visuel d'inventaire plein
 
 	inventoryOffscreen *ebiten.Image // Buffer pour le clipping de l'inventaire
-	messageBuffers     [2]*ebiten.Image // Buffers pour les messages défilants
+
+	// NOUVEAU: Fenêtres de debug et difficulté
+	debugWindow   *dbg.DebugWindow
+	DiffSelection *DifficultySelection
 
 	// Gestion de la suppression et sélection
 	selectedLoots     map[int]bool // Indices sélectionnés
@@ -57,17 +54,8 @@ type HUD struct {
 	getTimerRemaining func() float64 // Temps restant du timer
 	getTimerPanic     func() bool    // true si < 3s
 	pulseFrame        int            // Compteur de frames pour l'animation de pulse
-
-	// Système de messages défilants
-	messages         []*ScrollingMessage
-	messageBoxWidth  float64
-
-	// Feedback de coût (Segment clignotant)
-	PotentialManaCost   int
-	PotentialHealthCost int
-	PotentialSanityCost int
-
-	assetPage        int // Page actuelle de l'atlas des assets
+	infoMessage       string         // Message d'item affiché à l'écran
+	infoMessageTimer  int            // Timer du message d'item
 }
 
 // NewHUD crée un nouveau HUD
@@ -79,16 +67,12 @@ func NewHUD(world *domain.World) *HUD {
 		showAssetsDetails:    false,
 		showVictory:          false,
 		fullFeedbackTimer:    0,
-		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 281),
-		messageBuffers: [2]*ebiten.Image{
-			ebiten.NewImage(int(ui.MessageBoxWLeft), int(ui.MessageBoxHLeft)),
-			ebiten.NewImage(int(ui.MessageBoxWRight), int(ui.MessageBoxHRight)),
-		},
-		selectedLoots:    make(map[int]bool),
-		selectedLootIndex: -1,
-		confirmClearAll:   false,
-		assetPage:         0,
-		messageBoxWidth:   ui.MessageBoxWLeft,
+		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 331),
+		selectedLoots:        make(map[int]bool),
+		selectedLootIndex:    -1,
+		confirmClearAll:      false,
+		debugWindow:          dbg.NewDebugWindow(world),
+		DiffSelection:        NewDifficultySelection(),
 	}
 
 	// S'abonne aux événements d'inventaire plein
@@ -99,31 +83,8 @@ func NewHUD(world *domain.World) *HUD {
 	// S'abonne aux messages d'item pour les effets de butin
 	world.EventBus.SubscribeFunc(event.ItemMessage, func(e event.Event) {
 		if msg, ok := e.Payload["message"].(string); ok {
-			h.AddMessage(msg)
-		}
-	})
-
-	// S'abonne aux dégâts reçus
-	world.EventBus.SubscribeFunc(event.PlayerDamaged, func(e event.Event) {
-		reason, _ := e.Payload["reason"].(string)
-		var msg string
-		if dmg, ok := e.Payload["damage"].(int); ok && dmg > 0 {
-			msg = fmt.Sprintf("DEGATS ! -%d HP (%s)", dmg, reason)
-		} else if mana, ok := e.Payload["mana_loss"].(int); ok && mana > 0 {
-			msg = fmt.Sprintf("INSTABILITE ! -%d Mana (%s)", mana, reason)
-		}
-		if msg != "" {
-			h.AddMessage(msg)
-		}
-	})
-
-	// S'abonne aux associations réussies
-	world.EventBus.SubscribeFunc(event.AssociationMade, func(e event.Event) {
-		success, _ := e.Payload["success"].(bool)
-		if success {
-			assocType, _ := e.Payload["type"].(string)
-			msg := fmt.Sprintf("SUCCES ! Association %s", strings.ToUpper(assocType))
-			h.AddMessage(msg)
+			h.infoMessage = msg
+			h.infoMessageTimer = 120 // 2 secondes à 60 fps
 		}
 	})
 
@@ -135,43 +96,13 @@ func (h *HUD) Update() {
 	if h.fullFeedbackTimer > 0 {
 		h.fullFeedbackTimer--
 	}
-
-	h.updateMessages()
-
-	h.pulseFrame++
-}
-
-func (h *HUD) updateMessages() {
-	speed := 2.0
-	for i := 0; i < len(h.messages); i++ {
-		m := h.messages[i]
-		m.X -= speed
-
-		// Si le message est complètement sorti à gauche
-		// On utilise un offset négatif fixe car on n'a pas la largeur exacte ici
-		if m.X < -400 {
-			m.Scrolls++
-			// On le fait disparaître après 2 passages
-			if m.Scrolls >= 2 {
-				h.messages = append(h.messages[:i], h.messages[i+1:]...)
-				i--
-				continue
-			}
-			// Sinon on le reset à droite
-			m.X = h.messageBoxWidth + 50
+	if h.infoMessageTimer > 0 {
+		h.infoMessageTimer--
+		if h.infoMessageTimer == 0 {
+			h.infoMessage = ""
 		}
 	}
-}
-
-func (h *HUD) AddMessage(text string) {
-	// Alternance simple entre box gauche et droite
-	target := len(h.messages) % 2
-	h.messages = append(h.messages, &ScrollingMessage{
-		Text:      text,
-		X:         h.messageBoxWidth, // Démarre au bord droit
-		Scrolls:   0,
-		TargetBox: target,
-	})
+	h.pulseFrame++
 }
 
 // SetTimerCallbacks injecte les accesseurs au compte à rebours temps réel.
@@ -182,6 +113,12 @@ func (h *HUD) SetTimerCallbacks(getRemaining func() float64, getPanic func() boo
 
 func (h *HUD) SetBoardRenderer(r BoardRenderer) {
 	h.renderer = r
+}
+
+// SetPotentialCosts reçoit le coût potentiel calculé par l'Input handler.
+// Implémentation minimale : on pourrait l'afficher dans le HUD plus tard.
+func (h *HUD) SetPotentialCosts(mana, health, sanity int) {
+	// Pour l'instant, on n'affiche rien. Méthode présente pour liaison fonctionnelle.
 }
 
 func (h *HUD) SetAssetsManager(am *assets.Manager) {
@@ -218,12 +155,6 @@ func (h *HUD) ClearActiveLootSelection() {
 	h.selectedLootIndex = -1
 }
 
-func (h *HUD) SetPotentialCosts(mana, health, sanity int) {
-	h.PotentialManaCost = mana
-	h.PotentialHealthCost = health
-	h.PotentialSanityCost = sanity
-}
-
 // ToggleDetails bascule l'affichage de la fenêtre de détails
 func (h *HUD) ToggleDetails() {
 	h.showDetails = !h.showDetails
@@ -249,7 +180,21 @@ func (h *HUD) ToggleAssetsDetails() {
 		h.showDetails = false
 		h.showInventoryDetails = false
 		h.showVictory = false
-		h.assetPage = 0 // Reset à la première page
+		if h.debugWindow != nil && h.world != nil {
+			h.world.Debug.Visible = false
+		}
+	}
+}
+
+func (h *HUD) ToggleDebugWindow() {
+	if h.debugWindow != nil && h.world != nil {
+		h.world.Debug.Visible = !h.world.Debug.Visible
+		if h.world.Debug.Visible {
+			h.showDetails = false
+			h.showInventoryDetails = false
+			h.showAssetsDetails = false
+			h.showVictory = false
+		}
 	}
 }
 
@@ -274,7 +219,6 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	h.renderInventory(screen)
 	h.renderGauges(screen)
 	h.renderMiniMap(screen)
-	h.renderMessages(screen)
 
 	if h.showDetails {
 		h.renderDetailWindow(screen)
@@ -291,31 +235,18 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	if h.showVictory {
 		h.renderVictoryWindow(screen)
 	}
-}
 
-func (h *HUD) renderMessages(screen *ebiten.Image) {
-	// 1. Dessiner les cadres
-	vector.StrokeRect(screen, ui.MessageBoxXLeft, ui.MessageBoxYLeft, ui.MessageBoxWLeft, ui.MessageBoxHLeft, 1, color.RGBA{80, 80, 100, 255}, true)
-	vector.StrokeRect(screen, ui.MessageBoxXRight, ui.MessageBoxYRight, ui.MessageBoxWRight, ui.MessageBoxHRight, 1, color.RGBA{80, 80, 100, 255}, true)
-
-	// 2. Nettoyer les buffers
-	h.messageBuffers[0].Fill(color.Transparent)
-	h.messageBuffers[1].Fill(color.Transparent)
-
-	// 3. Dessiner les messages dans leurs buffers respectifs (Clipping automatique)
-	for _, m := range h.messages {
-		target := h.messageBuffers[m.TargetBox]
-		text.Draw(target, m.Text, basicfont.Face7x13, int(m.X), int(ui.MessageBoxHLeft/2+5), color.RGBA{200, 255, 200, 255})
+	// NOUVEAU: Rendu des fenêtres modales
+	if h.debugWindow != nil {
+		h.debugWindow.Render(screen)
+	}
+	if h.DiffSelection != nil {
+		h.DiffSelection.Render(screen)
 	}
 
-	// 4. Afficher les buffers
-	opLeft := &ebiten.DrawImageOptions{}
-	opLeft.GeoM.Translate(ui.MessageBoxXLeft, ui.MessageBoxYLeft)
-	screen.DrawImage(h.messageBuffers[0], opLeft)
-
-	opRight := &ebiten.DrawImageOptions{}
-	opRight.GeoM.Translate(ui.MessageBoxXRight, ui.MessageBoxYRight)
-	screen.DrawImage(h.messageBuffers[1], opRight)
+	if h.infoMessageTimer > 0 && h.infoMessage != "" {
+		text.Draw(screen, h.infoMessage, basicfont.Face7x13, 24, ui.ScreenHeight-24, color.RGBA{255, 255, 230, 255})
+	}
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
@@ -333,8 +264,10 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{30, 30, 40, 255}, true)
 	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 2, color.RGBA{100, 100, 150, 255}, true)
 
-	// Liste complète des assets
-	allAssets := []struct {
+	text.Draw(screen, "ATLAS DES ASSETS (T pour fermer)", basicfont.Face7x13, x+20, y+30, color.RGBA{200, 200, 255, 255})
+
+	// Liste des assets à montrer
+	assetsToDraw := []struct {
 		name string
 		key  string
 	}{
@@ -371,39 +304,16 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		{"Sand Core", "resource_sand_core"},
 	}
 
-	// Pagination
-	itemsPerPage := 8
-	maxPages := (len(allAssets) + itemsPerPage - 1) / itemsPerPage
-	if h.assetPage >= maxPages {
-		h.assetPage = 0
-	}
-
-	startIdx := h.assetPage * itemsPerPage
-	endIdx := startIdx + itemsPerPage
-	if endIdx > len(allAssets) {
-		endIdx = len(allAssets)
-	}
-
-	assetsToDraw := allAssets[startIdx:endIdx]
-
-	title := fmt.Sprintf("ATLAS DES ASSETS - Page %d/%d (T pour fermer)", h.assetPage+1, maxPages)
-	text.Draw(screen, title, basicfont.Face7x13, x+20, y+30, color.RGBA{200, 200, 255, 255})
-
-	// Boutons de navigation
-	if maxPages > 1 {
-		text.Draw(screen, "[ PAGE SUIVANTE ]", basicfont.Face7x13, x+650, y+30, color.RGBA{150, 255, 150, 255})
-	}
-
-	colWidth := 180
-	rowHeight := 180
-	itemsPerRow := 4
+	colWidth := 150
+	rowHeight := 120
+	itemsPerRow := 5
 
 	for i, asset := range assetsToDraw {
 		row := i / itemsPerRow
 		col := i % itemsPerRow
 
-		ax := x + 50 + col*colWidth
-		ay := y + 80 + row*rowHeight
+		ax := x + 30 + col*colWidth
+		ay := y + 60 + row*rowHeight
 
 		// Cadre de l'asset
 		vector.StrokeRect(screen, float32(ax), float32(ay), 88, 88, 1, color.RGBA{60, 60, 80, 255}, true)
@@ -426,11 +336,12 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 			}
 		}
 
-		// Nom de l'asset (décalé vers le bas pour éviter le chevauchement)
-		text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+110, color.White)
+		// Nom de l'asset
+		text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+105, color.White)
 
-		// ID de l'asset (décalé encore plus bas)
-		text.Draw(screen, "["+asset.key+"]", basicfont.Face7x13, ax, ay+130, color.RGBA{150, 150, 150, 255})
+		// TODO: En pratique, il faudrait passer Application ou AssetsManager au HUD
+		// Pour l'instant on montre la structure.
+		text.Draw(screen, "["+asset.key+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
 	}
 }
 
@@ -456,19 +367,20 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	resourceCount := 0
 	creatureCount := 0
 	for _, item := range h.world.Player.Inventory.Items {
-		if item.OriginalType == entity.TypeResource {
+		switch item.OriginalType {
+		case entity.TypeResource:
 			resourceCount++
 			totalValue += 100 // Valeur arbitraire pour l'instant
-		} else if item.OriginalType == entity.TypeCreature {
+		case entity.TypeCreature:
 			creatureCount++
 			totalValue += 250
 		}
 	}
 
 	statsY := y + 150
-	text.Draw(screen, fmt.Sprintf("Ressources collectees : %d", resourceCount), basicfont.Face7x13, x+100, statsY, color.White)
-	text.Draw(screen, fmt.Sprintf("Creatures capturees : %d", creatureCount), basicfont.Face7x13, x+100, statsY+30, color.White)
-	text.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d eclats", totalValue), basicfont.Face7x13, x+100, statsY+70, color.RGBA{255, 255, 100, 255})
+	text.Draw(screen, fmt.Sprintf("Ressources collectées : %d", resourceCount), basicfont.Face7x13, x+100, statsY, color.White)
+	text.Draw(screen, fmt.Sprintf("Créatures capturées : %d", creatureCount), basicfont.Face7x13, x+100, statsY+30, color.White)
+	text.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d éclats", totalValue), basicfont.Face7x13, x+100, statsY+70, color.RGBA{255, 255, 100, 255})
 
 	// Boutons
 	btnW, btnH := 160, 40
@@ -614,7 +526,13 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	infoX := int(ui.PortraitX) + 60
 	infoY := int(ui.PortraitY) + 25
 	text.Draw(screen, fmt.Sprintf("T:%d", h.world.Turn), basicfont.Face7x13, infoX, infoY, color.White)
-	text.Draw(screen, fmt.Sprintf("D:%s", h.world.Difficulty.Level), basicfont.Face7x13, infoX+60, infoY, color.RGBA{255, 200, 100, 255})
+
+	diffLabel := fmt.Sprintf("D:%s", h.world.Difficulty.Level)
+	dx := infoX + 60
+	text.Draw(screen, diffLabel, basicfont.Face7x13, dx, infoY, color.RGBA{255, 200, 100, 255})
+
+	// Zone de clic pour changer la difficulté (Cartouche)
+	// (0,0) est PortraitX, PortraitY. On capture le clic dans HandleClick
 
 	// --- COLUMN LEFT: CONTROLS ---
 	y := int(ui.PortraitY) + 85
@@ -737,10 +655,10 @@ func (h *HUD) renderGauges(screen *ebiten.Image) {
 	}
 
 	// Health gauge
-	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255}, h.PotentialHealthCost)
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255})
 
 	// Mana gauge
-	h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255}, h.PotentialManaCost)
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255})
 
 	// Sanity gauge (avec pulse si panique)
 	var sanityX float64 = ui.GaugesX + ui.SanityGaugeRelativeX
@@ -750,7 +668,7 @@ func (h *HUD) renderGauges(screen *ebiten.Image) {
 		offset := h.computePanicOffset()
 		sanityX += offset
 	}
-	h.drawVerticalGauge(screen, sanityX, sanityY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255}, h.PotentialSanityCost)
+	h.drawVerticalGauge(screen, sanityX, sanityY, "SN", p.Stats.Sanity, p.Stats.MaxSanity, color.RGBA{R: 50, G: 255, B: 50, A: 255})
 }
 
 // computePanicOffset calcule un décalage oscillant dont l'amplitude augmente
@@ -770,12 +688,17 @@ func (h *HUD) computePanicOffset() float64 {
 	return math.Sin(float64(h.pulseFrame)*freq) * maxAmp
 }
 
-func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string, val, max int, clr color.Color, potentialCost int) {
+func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string, val, max int, clr color.Color) {
 	// Gauge Holder background
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(ui.GaugeW), float32(ui.GaugeH), color.RGBA{30, 30, 30, 255}, true)
 
-	// Scaling rule: Always use ui.GaugeH for mapping values to pixels
-	totalPx := float32(ui.GaugeH)
+	// Rule: 100 hp = 200 px recalculate if over 200 hp for always = 400 px.
+	var totalPx float32
+	if max <= 200 {
+		totalPx = float32(max) * 2
+	} else {
+		totalPx = 400
+	}
 
 	var fillHeight float32
 	if max > 0 {
@@ -783,24 +706,10 @@ func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string
 	}
 
 	// Draw background of the actual gauge
-	vector.DrawFilledRect(screen, float32(x), float32(y), float32(ui.GaugeW), totalPx, color.RGBA{50, 50, 50, 255}, true)
+	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(totalPx)), float32(ui.GaugeW), totalPx, color.RGBA{50, 50, 50, 255}, true)
 
 	// Fill from bottom
 	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(fillHeight)), float32(ui.GaugeW), fillHeight, clr, true)
-
-	// --- FEEDBACK DE COÛT (Segment clignotant) ---
-	if potentialCost > 0 && max > 0 {
-		// Le segment clignote si on est en phase "on" (ex: toutes les 30 frames)
-		if (h.pulseFrame/15)%2 == 0 {
-			costHeight := (float32(potentialCost) / float32(max)) * totalPx
-			if costHeight > fillHeight {
-				costHeight = fillHeight
-			}
-
-			sy := y + ui.GaugeH - float64(fillHeight)
-			vector.DrawFilledRect(screen, float32(x), float32(sy), float32(ui.GaugeW), costHeight, color.RGBA{255, 255, 255, 180}, true)
-		}
-	}
 
 	// Label
 	text.Draw(screen, label, basicfont.Face7x13, int(x)+25, int(y)+int(ui.GaugeH)+15, color.White)
@@ -1026,18 +935,28 @@ func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
 
 // HandleClick gère les clics sur les éléments de l'HUD
 func (h *HUD) HandleClick(x, y int) bool {
-	// Gestion de la pagination de l'atlas des assets
-	if h.showAssetsDetails {
-		winW, winH := 800, 500
-		winX := (ui.ScreenWidth - winW) / 2
-		winY := (ui.ScreenHeight - winH) / 2
-
-		// Bouton Page Suivante
-		if x >= winX+640 && x <= winX+780 && y >= winY+10 && y <= winY+50 {
-			h.assetPage++
+	// NOUVEAU: Interception par les fenêtres de debug/difficulté
+	if h.debugWindow != nil && h.world != nil && h.world.Debug.Visible {
+		if h.debugWindow.HandleClick(x, y) {
 			return true
 		}
 	}
+	if h.DiffSelection != nil && h.DiffSelection.visible {
+		if level, ok := h.DiffSelection.HandleClick(x, y); ok {
+			// On applique le changement
+			h.world.Difficulty = meta.GetSettings(level)
+
+			// Si un callback est enregistré (ex: pour démarrer la partie), on l'appelle
+			if h.DiffSelection.OnSelected != nil {
+				h.DiffSelection.OnSelected(level)
+			}
+
+			h.DiffSelection.SetVisible(false)
+			return true
+		}
+		return true // On consomme le clic pour éviter d'interagir avec le plateau sous la modale
+	}
+
 	// Clic sur l'icône Menu (M) dans le portrait
 	mxIcon := ui.PortraitX + ui.MenuIconRelativeX
 	myIcon := ui.PortraitY + ui.MenuIconRelativeY
@@ -1047,6 +966,14 @@ func (h *HUD) HandleClick(x, y int) bool {
 		// On ne peut pas appeler ReturnToMenu ici car HUD ne connaît pas app.
 		// On laisse app.go gérer via ses propres callbacks (Input.OnExitToMenu déjà lié à l'icône M)
 		// On retourne juste true pour dire que le clic a été consommé.
+		return true
+	}
+
+	// Clic sur le badge de difficulté (ajusté pour la résolution réelle)
+	if fx >= ui.PortraitX+120 && fx <= ui.PortraitX+220 && fy >= ui.PortraitY+10 && fy <= ui.PortraitY+40 {
+		if h.DiffSelection != nil {
+			h.DiffSelection.SetVisible(true)
+		}
 		return true
 	}
 
