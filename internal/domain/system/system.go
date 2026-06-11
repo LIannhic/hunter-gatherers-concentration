@@ -1,0 +1,1335 @@
+package system
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"math/rand"
+
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/component"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/creature"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/resource"
+)
+
+// =============================================================================
+// SYSTEMS ECS (LOGIQUE MÉTIER REGROUPÉE)
+// =============================================================================
+
+// --- SYSTEM: LIFECYCLE ---
+type LifecycleSystem struct{}
+
+func (s *LifecycleSystem) Priority() int { return 1 }
+
+func (s *LifecycleSystem) Update(world *World) {
+	entityIDs := world.Components.QueryByComponent("lifecycle")
+
+	for _, entityID := range entityIDs {
+		comp, ok := world.Components.Get(entityID, "lifecycle")
+		if !ok {
+			continue
+		}
+
+		lifecycle, ok := comp.(*component.Lifecycle)
+		if !ok {
+			continue
+		}
+
+		if lifecycle.Progress() {
+			world.EventBus.Publish(event.NewResourceMaturedEvent(
+				entityID,
+				lifecycle.GetCurrentStageName(),
+			))
+		}
+	}
+}
+
+// --- SYSTEM: PROPAGATION ---
+type PropagationSystem struct{}
+
+func (s *PropagationSystem) Priority() int { return 2 }
+
+func (s *PropagationSystem) Update(world *World) {
+	resources := world.Entities.GetByType(entity.TypeResource)
+
+	for _, e := range resources {
+		entityID := string(e.GetID())
+
+		comp, ok := world.Components.Get(entityID, "lifecycle")
+		if !ok {
+			continue
+		}
+
+		lifecycle := comp.(*component.Lifecycle)
+		if !lifecycle.CanPropagate {
+			continue
+		}
+
+		if lifecycle.MaxPropagations != -1 && lifecycle.PropagationsDone >= lifecycle.MaxPropagations {
+			continue
+		}
+
+		if !shouldPropagate(lifecycle) {
+			continue
+		}
+
+		grid, ok := world.Grids[e.GetGridID()]
+		if !ok {
+			continue
+		}
+
+		pos := e.GetPosition()
+		allNeighbors := grid.GetNeighbors(board.Position{X: pos.X, Y: pos.Y})
+
+		var neighbors []*board.Plot
+		for _, n := range allNeighbors {
+			if abs(n.Position.X-pos.X)+abs(n.Position.Y-pos.Y) == 1 {
+				neighbors = append(neighbors, n)
+			}
+		}
+
+		rand.Shuffle(len(neighbors), func(i, j int) { neighbors[i], neighbors[j] = neighbors[j], neighbors[i] })
+
+		maxToPropagate := lifecycle.PropagationCount
+		if maxToPropagate <= 0 {
+			maxToPropagate = 1
+		}
+
+		var validNeighbors []*board.Plot
+		for _, neighbor := range neighbors {
+			if world.HasResourceAt(e.GetGridID(), neighbor.Position) {
+				continue
+			}
+			if neighbor.Modifier.Obstructed {
+				continue
+			}
+
+			validNeighbors = append(validNeighbors, neighbor)
+			if len(validNeighbors) == maxToPropagate {
+				break
+			}
+		}
+
+		if len(validNeighbors) < maxToPropagate {
+			continue
+		}
+
+		propagatedCount := 0
+		for _, targetNeighbor := range validNeighbors {
+			spawnPos := entity.Position{
+				X: targetNeighbor.Position.X,
+				Y: targetNeighbor.Position.Y,
+			}
+
+			newRes, err := world.SpawnResource(e.GetGridID(), getResourceType(e), spawnPos)
+			if err != nil {
+				continue
+			}
+
+			if rand.Float32() < 0.99 {
+				if comp, ok := world.Components.Get(string(newRes.GetID()), "lifecycle"); ok {
+					if lc, ok := comp.(*component.Lifecycle); ok {
+						lc.CanPropagate = false
+						fmt.Printf("[PROPA] Une nouvelle %s est née stérile à %v\n", getResourceType(e), spawnPos)
+					}
+				}
+			}
+
+			if lifecycle.PropagationLevel != 0 {
+				grid.RemoveEntity(targetNeighbor.Position, string(newRes.GetID()))
+				grid.PlaceEntityAtBottom(targetNeighbor.Position, string(newRes.GetID()))
+			}
+
+			propagatedCount++
+
+			world.EventBus.Publish(event.Event{
+				Type:     event.ResourcePropagated,
+				SourceID: string(newRes.GetID()),
+				Payload: map[string]interface{}{
+					"parent_id": entityID,
+					"position":  targetNeighbor.Position,
+				},
+			})
+		}
+
+		if propagatedCount > 0 {
+			lifecycle.TurnsInStage = 0
+			lifecycle.PropagationsDone++
+		}
+	}
+}
+
+func shouldPropagate(l *component.Lifecycle) bool {
+	isLastStage := l.CurrentStage == l.MaxStages-1
+	return isLastStage && l.TurnsInStage >= l.TurnsToNext
+}
+
+func getResourceType(e entity.Entity) string {
+	if r, ok := e.(*resource.Resource); ok {
+		return r.ResourceType
+	}
+	return "unknown"
+}
+
+// --- SYSTEM: TRACK ---
+type TrackSystem struct{}
+
+func (s *TrackSystem) Priority() int { return 5 }
+
+func (s *TrackSystem) Update(world *World) {
+	tracks := world.Entities.GetByType(entity.TypeTrack)
+
+	for _, e := range tracks {
+		t, ok := e.(*entity.Track)
+		if !ok {
+			continue
+		}
+
+		t.Duration--
+		if t.Duration <= 0 {
+			world.RemoveEntity(t.GetID())
+		}
+	}
+}
+
+// --- SYSTEM: TRIGGER ---
+type TriggerSystem struct{}
+
+func (s *TriggerSystem) Priority() int { return 4 }
+
+func (s *TriggerSystem) Update(world *World) {
+	for _, gridID := range world.GridOrder {
+		grid, ok := world.GetGrid(gridID)
+		if !ok {
+			continue
+		}
+
+		for _, tile := range grid.Plots {
+			if tile.StructureID == "" {
+				continue
+			}
+
+			comp, ok := world.Components.Get(tile.StructureID, "trigger")
+			if !ok {
+				continue
+			}
+
+			trigger := comp.(*component.Trigger)
+			if s.checkCondition(trigger.Condition, tile, world, grid) {
+				s.executeAction(trigger.Action, tile, world, grid)
+				if trigger.Consumed {
+					world.Components.Remove(tile.StructureID, "trigger")
+				}
+			}
+		}
+	}
+}
+
+func (s *TriggerSystem) checkCondition(condition string, tile *board.Plot, world *World, grid *board.Grid) bool {
+	if len(tile.EntitiesID) == 0 {
+		return false
+	}
+
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	topEnt, ok := world.Entities.Get(entity.ID(topID))
+
+	switch condition {
+	case "reveal_with_creature":
+		return ok && topEnt.GetType() == entity.TypeCreature && topEnt.GetState() == entity.Revealed
+
+	case "creature_on_resource":
+		if !ok || topEnt.GetType() != entity.TypeCreature {
+			return false
+		}
+
+		neighbors := grid.GetNeighbors(tile.Position)
+		for _, n := range neighbors {
+			for _, id := range n.EntitiesID {
+				if res, ok := world.Entities.Get(entity.ID(id)); ok {
+					if res.GetType() == entity.TypeResource {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (s *TriggerSystem) executeAction(action string, tile *board.Plot, world *World, grid *board.Grid) {
+	switch action {
+	case "creature_flee":
+		if len(tile.EntitiesID) > 0 {
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
+				if c, ok := e.(*creature.Creature); ok {
+					c.Behavior.State = "fleeing"
+				}
+			}
+		}
+
+	case "reveal_adjacent":
+		neighbors := grid.GetNeighbors(tile.Position)
+		for _, n := range neighbors {
+			for _, id := range n.EntitiesID {
+				if e, ok := world.Entities.Get(entity.ID(id)); ok {
+					if e.GetState()&entity.Hidden != 0 {
+						e.SetState(entity.Revealed)
+					}
+				}
+			}
+		}
+	}
+}
+
+// --- SYSTEM: PREVIEW ---
+type PreviewSystem struct {
+	previewTimers map[string]int
+	previewed     map[string]bool
+}
+
+func NewPreviewSystem() *PreviewSystem {
+	return &PreviewSystem{
+		previewTimers: make(map[string]int),
+		previewed:     make(map[string]bool),
+	}
+}
+
+func (s *PreviewSystem) Reset() {
+	s.previewTimers = make(map[string]int)
+	s.previewed = make(map[string]bool)
+}
+
+func (s *PreviewSystem) Priority() int { return 0 }
+
+func (s *PreviewSystem) Update(world *World) {
+	for gridID, timer := range s.previewTimers {
+		if timer > 0 {
+			s.previewTimers[gridID]--
+			if s.previewTimers[gridID] == 0 {
+				s.hideGrid(world, gridID)
+			}
+		}
+	}
+}
+
+func (s *PreviewSystem) OnEnterGrid(world *World, gridID string) {
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	if s.previewed[gridID] {
+		return
+	}
+
+	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+	if isPortalZone {
+		if gridID == world.DreamPlane.StartZoneID {
+			s.previewTimers[gridID] = 2 * 60
+			s.previewed[gridID] = true
+		}
+		return
+	}
+
+	settings := world.Difficulty
+	if world.Debug.OverrideDifficulty {
+		settings = world.Debug.Difficulty
+	}
+
+	if settings.PreviewDuration <= 0 {
+		return
+	}
+
+	fmt.Printf("[PREVIEW] Première entrée sur %s (Difficulté: %s)\n", gridID, settings.Level)
+
+	for _, tile := range grid.Plots {
+		if len(tile.EntitiesID) > 0 {
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
+				if e.GetState()&entity.Hidden != 0 {
+					e.SetState(entity.Revealed)
+				}
+			}
+		}
+	}
+
+	s.previewed[gridID] = true
+	s.previewTimers[gridID] = int(settings.PreviewDuration * 60)
+}
+
+func (s *PreviewSystem) hideGrid(world *World, gridID string) {
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+	fmt.Printf("[PREVIEW] Fin du délai sur %s, masquage des tuiles.\n", gridID)
+	for _, tile := range grid.Plots {
+		if len(tile.EntitiesID) > 0 {
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if e, ok := world.Entities.Get(entity.ID(topID)); ok {
+				if e.GetType() == entity.TypeStructure {
+					if e.HasTag("start_portal") {
+						flipDir := tile.Tilt.ToFlipDirection()
+						_, _ = world.FlipTile(gridID, tile.Position, flipDir)
+						e.SetState(entity.Hidden | entity.Blocked)
+
+						world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+							e.GetPosition(), string(e.GetID()), gridID, flipDir))
+						continue
+					}
+					continue
+				}
+
+				if e.GetState()&entity.Revealed != 0 {
+					_, _ = world.FlipTile(gridID, tile.Position, tile.Tilt.ToFlipDirection())
+
+					world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+						e.GetPosition(), string(e.GetID()), gridID, tile.Tilt.ToFlipDirection()))
+				}
+			}
+		}
+	}
+}
+
+// --- SYSTEM: LOOT ---
+type LootSystem struct {
+	world *World
+}
+
+func NewLootSystem(world *World) *LootSystem {
+	ls := &LootSystem{world: world}
+	world.EventBus.SubscribeFunc(event.TileMatched, ls.onTileMatched)
+	return ls
+}
+
+func (s *LootSystem) Priority() int { return 10 }
+
+func (s *LootSystem) Update(world *World) {}
+
+func (s *LootSystem) onTileMatched(e event.Event) {
+	entID := entity.ID(e.SourceID)
+	name := "unknown"
+	var eType entity.Type = entity.TypeResource
+
+	if ent, ok := s.world.Entities.Get(entID); ok {
+		name = s.getEntityName(ent)
+		eType = ent.GetType()
+	}
+
+	if name == "unknown" || name == "" {
+		if n, exists := e.Payload["name"].(string); exists {
+			name = n
+		}
+		if t, exists := e.Payload["entity_type"].(entity.Type); exists {
+			eType = t
+		}
+	}
+
+	if name == "unknown" || name == "" || name == "trap" {
+		return
+	}
+
+	sourceID := name
+	loot := &player.LootItem{
+		BaseEntity:   entity.NewBaseEntity(entity.TypeLoot),
+		Name:         name,
+		SourceID:     sourceID,
+		OriginalType: eType,
+		IsUsable:     true,
+		IsDeletable:  true,
+	}
+
+	level, _ := e.Payload["level"].(int)
+	loot.SetCumulationLevel(level)
+	if level > 0 {
+		loot.AddTag(fmt.Sprintf("level_%d", level))
+	}
+
+	loot.AddTag(fmt.Sprintf("original_type_%d", eType))
+	loot.AddTag(name)
+
+	err := s.world.AddLootItem(loot)
+	if err != nil {
+		fmt.Printf("[LOOT] Inventaire plein ! Le loot %s est perdu.\n", name)
+		s.world.EventBus.PublishImmediate(event.NewInventoryFullEvent())
+		return
+	}
+
+	fmt.Printf("[LOOT] Acquisition : %s (ID: %s)\n", name, entID)
+	s.world.EventBus.PublishImmediate(event.NewLootAcquiredEvent(string(loot.GetID()), loot.Name, loot.OriginalType))
+}
+
+func (s *LootSystem) getEntityName(ent entity.Entity) string {
+	if r, ok := ent.(*resource.Resource); ok {
+		return r.ResourceType
+	}
+	if c, ok := ent.(*creature.Creature); ok {
+		return c.Species
+	}
+	return "unknown_loot"
+}
+
+// --- LOGIQUE DE SCANNER (ECHO HOUND) ---
+func (w *World) TriggerScannerEffect(gridID string, level int) error {
+	_, ok := w.GetGrid(gridID)
+	if !ok {
+		return fmt.Errorf("grille introuvable")
+	}
+
+	fmt.Printf("[WORLD] L'Echo Hound hurle sur la zone %s (Niveau %d) !\n", gridID, level)
+
+	scannedPositions := make([]board.Position, 0)
+	for _, e := range w.Entities.GetAllActive() {
+		if e.GetGridID() == gridID && e.GetState()&entity.Hidden != 0 {
+			pos := e.GetPosition()
+			scannedPositions = append(scannedPositions, board.Position{X: pos.X, Y: pos.Y})
+		}
+	}
+
+	duration := 2.0 * math.Pow(2.2, float64(level))
+
+	w.EventBus.PublishImmediate(event.Event{
+		Type:     event.Type("scanner_triggered"),
+		SourceID: "echo_hound",
+		Payload: map[string]interface{}{
+			"grid_id":   gridID,
+			"positions": scannedPositions,
+			"duration":  duration,
+		},
+	})
+
+	return nil
+}
+
+// --- SYSTEM: CREATURE AI ---
+type CreatureAISystem struct{}
+
+func (s *CreatureAISystem) Priority() int { return 3 }
+
+func (s *CreatureAISystem) Update(world *World) {
+	creatures := world.Entities.GetByType(entity.TypeCreature)
+	ai := world.CreatureFactory.GetAI()
+
+	for _, e := range creatures {
+		c, ok := e.(*creature.Creature)
+		if !ok {
+			continue
+		}
+
+		grid, ok := world.Grids[c.GetGridID()]
+		if !ok {
+			continue
+		}
+
+		action := ai.Decide(c, &worldAdapter{world: world, grid: grid})
+
+		switch action.Type {
+		case "move":
+			if c.MovementProfile != nil {
+				continue
+			}
+
+			oldPos := c.GetPosition()
+			newPos := entity.Position{
+				X: oldPos.X + action.Direction.X,
+				Y: oldPos.Y + action.Direction.Y,
+			}
+
+			if !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
+				continue
+			}
+
+			world.Engine.TrackTileReveal(board.Position{X: oldPos.X, Y: oldPos.Y})
+			world.Engine.TrackTileReveal(board.Position{X: newPos.X, Y: newPos.Y})
+
+			newPlot, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+			idStr := string(c.GetID())
+			_, err := grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
+			if err != nil {
+				continue
+			}
+
+			if len(newPlot.EntitiesID) > 0 {
+				topID := newPlot.EntitiesID[len(newPlot.EntitiesID)-1]
+				if oldEnt, ok := world.Entities.Get(entity.ID(topID)); ok {
+					if oldEnt.GetType() == entity.TypeTrap {
+						world.RemoveEntity(oldEnt.GetID())
+					}
+				}
+			}
+
+			newPlot.PushEntity(idStr)
+			world.Entities.UpdatePosition(c.GetID(), newPos)
+
+			world.EventBus.Publish(event.NewCreatureMovedEvent(
+				idStr, oldPos, newPos, "manifest", false, false,
+			))
+
+		case "spawn_trap":
+			trap, err := world.SpawnTrap(c.GetGridID(), c.GetPosition())
+			if err == nil {
+				if grid, ok := world.GetGrid(c.GetGridID()); ok {
+					pos := board.Position(c.GetPosition())
+					grid.RemoveEntity(pos, string(trap.GetID()))
+					grid.PlaceEntityAtBottom(pos, string(trap.GetID()))
+				}
+				fmt.Printf("[ACTION] %s a posé un piège à %v\n", c.Species, c.GetPosition())
+			}
+
+		case "flee":
+			fmt.Printf("[ACTION] %s fuit la zone car le plateau est plein !\n", c.Species)
+			world.EventBus.Publish(event.NewCreatureFledEvent(
+				string(c.GetID()), c.Species, c.GetGridID(), c.GetPosition(),
+			))
+			world.RemoveEntity(c.GetID())
+
+		case "transform":
+			targetID := action.TargetID
+			if targetID != "" {
+				if comp, ok := world.Components.Get(targetID, "lifecycle"); ok {
+					if lifecycle, ok := comp.(*component.Lifecycle); ok {
+						lifecycle.CurrentStage++
+					}
+				}
+			}
+		}
+	}
+}
+
+// --- SYSTEM: CREATURE MOVEMENT (ADVANCED) ---
+type CreatureMovementSystem struct {
+	recentReveals []board.Position
+}
+
+func NewCreatureMovementSystem() *CreatureMovementSystem {
+	return &CreatureMovementSystem{
+		recentReveals: make([]board.Position, 0),
+	}
+}
+
+func (s *CreatureMovementSystem) Priority() int { return 3 }
+
+func (s *CreatureMovementSystem) TrackReveal(pos board.Position) {
+	s.recentReveals = append(s.recentReveals, pos)
+}
+
+func (s *CreatureMovementSystem) ClearReveals() {
+	s.recentReveals = s.recentReveals[:0]
+}
+
+func (s *CreatureMovementSystem) Update(world *World) {
+	creatures := world.Entities.GetByType(entity.TypeCreature)
+
+	for _, e := range creatures {
+		c, ok := e.(*creature.Creature)
+		if !ok || c.MovementProfile == nil {
+			continue
+		}
+
+		grid, ok := world.GetGrid(c.GetGridID())
+		if !ok {
+			continue
+		}
+
+		profile := c.MovementProfile
+		if !s.shouldTrigger(profile.Trigger, c) {
+			continue
+		}
+
+		if profile.Frequency.HasMovedThisTurn(world.Turn) {
+			continue
+		}
+
+		if !profile.Frequency.CanMove() {
+			continue
+		}
+
+		moveCount := profile.Frequency.GetMoveCount()
+		moved := false
+		for i := 0; i < moveCount; i++ {
+			if !s.executeMove(c, profile, world, grid) {
+				break
+			}
+			moved = true
+		}
+
+		if moved {
+			profile.Frequency.MarkMoved(world.Turn)
+		}
+
+		if profile.Trigger.Type == creature.TriggerOnReveal {
+			switch c.Species {
+			case "stonewarden":
+				profile.Trigger.Type = creature.TriggerAuto
+				profile.Navigation.Type = creature.NavOrientation
+			case "echo_hound":
+				profile.Navigation.Target = creature.TargetResource
+			}
+		}
+
+		profile.Trigger.Reset()
+	}
+}
+
+func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger, c *creature.Creature) bool {
+	switch trigger.Type {
+	case creature.TriggerPassive:
+		return false
+	case creature.TriggerAuto:
+		return true
+	case creature.TriggerOnReveal:
+		for _, revealed := range s.recentReveals {
+			if revealed.X == c.GetPosition().X && revealed.Y == c.GetPosition().Y {
+				if !trigger.Triggered {
+					trigger.Triggered = true
+					return true
+				}
+			}
+		}
+		return false
+	case creature.TriggerOnEcho:
+		return len(s.recentReveals) > 0
+	case creature.TriggerProximity:
+		for _, revealed := range s.recentReveals {
+			dist := abs(revealed.X-c.GetPosition().X) + abs(revealed.Y-c.GetPosition().Y)
+			if dist <= trigger.Radius {
+				return true
+			}
+		}
+		return false
+	}
+	return false
+}
+
+func (s *CreatureMovementSystem) executeMove(c *creature.Creature, profile *creature.MovementProfile, world *World, grid *board.Grid) bool {
+	direction := s.getNavigationDirection(profile.Navigation, c, world, grid)
+	if direction == (entity.Position{X: 0, Y: 0}) {
+		return true
+	}
+
+	currentPos := c.GetPosition()
+	newPos := entity.Position{
+		X: currentPos.X + direction.X,
+		Y: currentPos.Y + direction.Y,
+	}
+
+	if profile.Navigation.Type != creature.NavRelative {
+		profile.Orientation = directionToOrientation(direction)
+	}
+
+	finalPos, success := s.handleCollision(profile.Collision, c, newPos, currentPos, world, grid)
+	if !success {
+		return false
+	}
+
+	return s.applyMoveMode(profile.Mode, c, currentPos, finalPos, world, grid)
+}
+
+func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationLogic, c *creature.Creature, world *World, grid *board.Grid) entity.Position {
+	switch nav.Type {
+	case creature.NavWander:
+		directions := []entity.Position{
+			{X: 0, Y: -1}, {X: 0, Y: 1},
+			{X: -1, Y: 0}, {X: 1, Y: 0},
+		}
+		if nav.WanderBias != (entity.Position{}) && rand.Float32() < 0.3 {
+			newPos := entity.Position{
+				X: c.GetPosition().X + nav.WanderBias.X,
+				Y: c.GetPosition().Y + nav.WanderBias.Y,
+			}
+			wa := &worldAdapter{world: world, grid: grid}
+			if wa.IsWalkable(c, newPos) {
+				return nav.WanderBias
+			}
+		}
+		return directions[rand.Intn(len(directions))]
+
+	case creature.NavPatrol:
+		if len(nav.PatrolRoute) == 0 {
+			return s.getNavigationDirection(creature.NavigationLogic{Type: creature.NavWander}, c, world, grid)
+		}
+		target := nav.PatrolRoute[nav.PatrolIndex]
+		current := c.GetPosition()
+		dir := entity.Position{
+			X: sign(target.X - current.X),
+			Y: sign(target.Y - current.Y),
+		}
+		if dir.X == 0 && dir.Y == 0 {
+			nextIndex := (nav.PatrolIndex + 1) % len(nav.PatrolRoute)
+			target = nav.PatrolRoute[nextIndex]
+			dir = entity.Position{
+				X: sign(target.X - current.X),
+				Y: sign(target.Y - current.Y),
+			}
+		}
+		return dir
+
+	case creature.NavRelative:
+		if len(nav.PatrolRoute) == 0 {
+			return s.getNavigationDirection(creature.NavigationLogic{Type: creature.NavWander}, c, world, grid)
+		}
+
+		baseDir := nav.PatrolRoute[nav.PatrolIndex]
+		finalDir := baseDir
+		dir := c.GetOrientation()
+		switch dir {
+		case entity.DirEast:
+			finalDir = entity.Position{X: -baseDir.Y, Y: baseDir.X}
+		case entity.DirSouth:
+			finalDir = entity.Position{X: -baseDir.X, Y: -baseDir.Y}
+		case entity.DirWest:
+			finalDir = entity.Position{X: baseDir.Y, Y: -baseDir.X}
+		}
+
+		targetPos := entity.Position{
+			X: c.GetPosition().X + finalDir.X,
+			Y: c.GetPosition().Y + finalDir.Y,
+		}
+
+		profile := c.MovementProfile
+		if profile != nil {
+			profile.Navigation.PatrolIndex = (nav.PatrolIndex + 1) % len(nav.PatrolRoute)
+		}
+
+		wa := &worldAdapter{world: world, grid: grid}
+		if !wa.IsWalkable(c, targetPos) {
+			return entity.Position{X: 0, Y: 0}
+		}
+
+		return finalDir
+
+	case creature.NavOrientation:
+		return c.MovementProfile.Orientation.ToVector()
+
+	case creature.NavAttraction:
+		current := c.GetPosition()
+
+		if nav.Target == creature.TargetEmpty {
+			emptyPlots := []board.Position{}
+			for pos, plot := range grid.Plots {
+				if len(plot.EntitiesID) == 0 {
+					emptyPlots = append(emptyPlots, pos)
+				}
+			}
+
+			if len(emptyPlots) == 0 {
+				return entity.Position{X: 0, Y: 0}
+			}
+
+			var nearest board.Position
+			minDist := 9999
+			for _, p := range emptyPlots {
+				d := abs(p.X-current.X) + abs(p.Y-current.Y)
+				if d < minDist {
+					minDist = d
+					nearest = p
+				} else if d == minDist {
+					if p.Y < nearest.Y || (p.Y == nearest.Y && p.X < nearest.X) {
+						nearest = p
+					}
+				}
+			}
+			return entity.Position{
+				X: sign(nearest.X - current.X),
+				Y: sign(nearest.Y - current.Y),
+			}
+		}
+
+		if nav.Target == creature.TargetResource && nav.TargetName != "" {
+			var nearest entity.Position
+			minDist := 9999
+			for _, ent := range world.Entities.GetAllActive() {
+				if res, ok := ent.(*resource.Resource); ok {
+					if res.ResourceType == nav.TargetName {
+						pos := res.GetPosition()
+						d := abs(pos.X-current.X) + abs(pos.Y-current.Y)
+						if d < minDist {
+							minDist = d
+							nearest = pos
+						}
+					}
+				}
+			}
+			if minDist < 9999 {
+				return entity.Position{X: sign(nearest.X - current.X), Y: sign(nearest.Y - current.Y)}
+			}
+		}
+
+		playerPos := world.playerPosition
+		return entity.Position{
+			X: sign(playerPos.X - current.X),
+			Y: sign(playerPos.Y - current.Y),
+		}
+
+	case creature.NavRepulsion:
+		playerPos := world.playerPosition
+		current := c.GetPosition()
+		return entity.Position{
+			X: sign(current.X - playerPos.X),
+			Y: sign(current.Y - playerPos.Y),
+		}
+	}
+	return entity.Position{X: 0, Y: 0}
+}
+
+func (s *CreatureMovementSystem) MoveSpeciesOneStepTowards(species string, target entity.Position, world *World) {
+	creatures := world.Entities.GetByType(entity.TypeCreature)
+	for _, e := range creatures {
+		c, ok := e.(*creature.Creature)
+		if !ok || c.Species != species {
+			continue
+		}
+		grid, ok := world.GetGrid(c.GetGridID())
+		if !ok {
+			continue
+		}
+
+		if c.MovementProfile != nil && c.MovementProfile.Frequency.HasMovedThisTurn(world.Turn) {
+			continue
+		}
+
+		currentPos := c.GetPosition()
+		dir := entity.Position{
+			X: entity.Sign(target.X - currentPos.X),
+			Y: entity.Sign(target.Y - currentPos.Y),
+		}
+		if dir == (entity.Position{X: 0, Y: 0}) {
+			continue
+		}
+
+		newPos := entity.Position{X: currentPos.X + dir.X, Y: currentPos.Y + dir.Y}
+
+		coll := creature.CollisionHandler{Type: creature.CollideStop}
+		if c.MovementProfile != nil {
+			coll = c.MovementProfile.Collision
+			if c.MovementProfile.Mode.Type == creature.ModeSwap {
+				coll.Type = creature.CollidePhase
+				coll.CanPhaseThrough = []string{"ground", "wall", "structure"}
+			}
+		}
+
+		finalPos, success := s.handleCollision(coll, c, newPos, currentPos, world, grid)
+		if !success {
+			continue
+		}
+
+		mode := creature.MovementMode{Type: creature.ModeNormal}
+		if c.MovementProfile != nil {
+			mode = c.MovementProfile.Mode
+		}
+		moved := s.applyMoveMode(mode, c, currentPos, finalPos, world, grid)
+		if moved && c.MovementProfile != nil {
+			c.MovementProfile.Frequency.MarkMoved(world.Turn)
+		}
+	}
+}
+
+func (s *CreatureMovementSystem) isWalkable(c *creature.Creature, pos entity.Position, grid *board.Grid, world *World) bool {
+	wa := &worldAdapter{world: world, grid: grid}
+	return wa.IsWalkable(c, pos)
+}
+
+func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler, c *creature.Creature, newPos, currentPos entity.Position, world *World, grid *board.Grid) (entity.Position, bool) {
+	if c.MovementProfile != nil && c.MovementProfile.Mode.Type == creature.ModeSwap {
+		if grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
+			return newPos, true
+		}
+	}
+
+	wa := &worldAdapter{world: world, grid: grid}
+	return coll.HandleCollision(wa, c, newPos)
+}
+
+func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid) bool {
+	if mode.Type == creature.ModeSwap {
+		tile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+		if err == nil && len(tile.EntitiesID) > 0 {
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			swappedEntity, ok := world.Entities.Get(entity.ID(topID))
+			if ok {
+				idStr := string(c.GetID())
+				grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
+				grid.RemoveEntity(board.Position{X: newPos.X, Y: newPos.Y}, topID)
+				grid.PlaceEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, topID)
+				grid.PlaceEntity(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
+				swappedEntity.SetPosition(oldPos)
+				c.SetPosition(newPos)
+				world.Entities.UpdatePosition(swappedEntity.GetID(), oldPos)
+				world.Entities.UpdatePosition(c.GetID(), newPos)
+
+				return true
+			}
+		}
+	}
+
+	return s.doMove(c, oldPos, newPos, world, grid)
+}
+
+func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid) bool {
+	if grid == nil || !grid.IsValid(board.Position{X: newPos.X, Y: newPos.Y}) {
+		return false
+	}
+
+	idStr := string(c.GetID())
+	grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
+
+	mode := creature.ModeNormal
+	if c.MovementProfile != nil {
+		mode = c.MovementProfile.Mode.Type
+	}
+
+	newTile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+	if err == nil && newTile != nil && len(newTile.EntitiesID) > 0 {
+		topID := newTile.EntitiesID[len(newTile.EntitiesID)-1]
+		if ent, ok := world.Entities.Get(entity.ID(topID)); ok && ent.GetType() == entity.TypeTrap {
+			if mode != creature.ModeOver {
+				world.RemoveEntity(ent.GetID())
+			}
+		}
+	}
+
+	switch mode {
+	case creature.ModeUnder:
+		grid.PlaceEntityAtBottom(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
+	default:
+		grid.PlaceEntity(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
+	}
+
+	world.Entities.UpdatePosition(c.GetID(), newPos)
+
+	isCloaked := false
+	isAudible := false
+
+	if c.MovementProfile != nil {
+		isCloaked = c.MovementProfile.Perception.Stealth == creature.StealthCloaked
+		isAudible = c.MovementProfile.Perception.Acoustic == creature.AcousticEcho
+	}
+
+	if c.MovementProfile != nil && c.MovementProfile.Perception.LeavesTracks {
+		pProfile := c.MovementProfile.Perception
+		trackEnt := entity.NewTrack(pProfile.TrackType, pProfile.TrackDuration, oldPos, newPos)
+		trackEnt.SetGridID(c.GetGridID())
+		world.Entities.Register(trackEnt)
+	}
+
+	world.EventBus.Publish(event.NewCreatureMovedEvent(
+		string(c.GetID()), oldPos, newPos, string(mode), isCloaked, isAudible,
+	))
+	return true
+}
+
+func sign(x int) int {
+	return entity.Sign(x)
+}
+
+func directionToOrientation(dir entity.Position) creature.Orientation {
+	if dir.X > 0 {
+		return creature.Orientation{Direction: creature.Right}
+	}
+	if dir.X < 0 {
+		return creature.Orientation{Direction: creature.Left}
+	}
+	if dir.Y > 0 {
+		return creature.Orientation{Direction: creature.Backward}
+	}
+	return creature.Orientation{Direction: creature.Forward}
+}
+
+// --- WORLD ADAPTER ---
+type worldAdapter struct {
+	world *World
+	grid  *board.Grid
+}
+
+func (wa *worldAdapter) GetPlayerPosition() entity.Position {
+	return wa.world.playerPosition
+}
+
+func (wa *worldAdapter) GetNearbyCreatures(pos entity.Position, radius int) []*creature.Creature {
+	var result []*creature.Creature
+	creatures := wa.world.Entities.GetByType(entity.TypeCreature)
+
+	for _, e := range creatures {
+		if e.GetGridID() != wa.grid.ID {
+			continue
+		}
+		if c, ok := e.(*creature.Creature); ok {
+			dist := abs(c.GetPosition().X-pos.X) + abs(c.GetPosition().Y-pos.Y)
+			if dist <= radius {
+				result = append(result, c)
+			}
+		}
+	}
+	return result
+}
+
+func (wa *worldAdapter) GetResources(pos entity.Position, radius int) []string {
+	var result []string
+	resources := wa.world.Entities.GetByType(entity.TypeResource)
+
+	for _, e := range resources {
+		if e.GetGridID() != wa.grid.ID {
+			continue
+		}
+		dist := abs(e.GetPosition().X-pos.X) + abs(e.GetPosition().Y-pos.Y)
+		if dist <= radius {
+			result = append(result, string(e.GetID()))
+		}
+	}
+	return result
+}
+
+func (wa *worldAdapter) GetEmptyPlots() []entity.Position {
+	var empty []entity.Position
+	for pos, plot := range wa.grid.Plots {
+		if len(plot.EntitiesID) == 0 {
+			empty = append(empty, entity.Position{X: pos.X, Y: pos.Y})
+		}
+	}
+	return empty
+}
+
+func (wa *worldAdapter) GetGridTotalPlots() int {
+	return wa.grid.Width * wa.grid.Height
+}
+
+func (wa *worldAdapter) IsTileRevealed(pos entity.Position) bool {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil || len(tile.EntitiesID) == 0 {
+		return false
+	}
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
+		return ent.GetState()&entity.Revealed != 0
+	}
+	return false
+}
+
+func (wa *worldAdapter) WasTileRecentlyRevealed(pos entity.Position) bool {
+	if wa.world.Engine == nil || wa.world.Engine.movementSystem == nil {
+		return false
+	}
+	for _, revealed := range wa.world.Engine.movementSystem.recentReveals {
+		if revealed.X == pos.X && revealed.Y == pos.Y {
+			return true
+		}
+	}
+	return false
+}
+
+func (wa *worldAdapter) FindNearestTarget(from entity.Position, targetType creature.TargetType) *entity.Position {
+	var nearest *entity.Position
+	minDist := 9999
+
+	switch targetType {
+	case creature.TargetPlayer:
+		pos := wa.world.playerPosition
+		nearest = &pos
+	case creature.TargetResource:
+		resources := wa.world.Entities.GetByType(entity.TypeResource)
+		for _, e := range resources {
+			if e.GetGridID() != wa.grid.ID {
+				continue
+			}
+			pos := e.GetPosition()
+			d := abs(pos.X-from.X) + abs(pos.Y-from.Y)
+			if d < minDist {
+				minDist = d
+				nearest = &pos
+			}
+		}
+	}
+	return nearest
+}
+
+func (wa *worldAdapter) GetTileType(pos entity.Position) string {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil {
+		return "invalid"
+	}
+	if tile.Modifier.Obstructed {
+		return "wall"
+	}
+	return "ground"
+}
+
+func (wa *worldAdapter) GetEntitiesAt(pos entity.Position) []entity.Entity {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil {
+		return nil
+	}
+	var result []entity.Entity
+	for _, id := range tile.EntitiesID {
+		if e, ok := wa.world.Entities.Get(entity.ID(id)); ok {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+func (wa *worldAdapter) IsWalkable(c *creature.Creature, pos entity.Position) bool {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil || tile.Modifier.Obstructed {
+		return false
+	}
+
+	if len(tile.EntitiesID) == 0 {
+		return true
+	}
+
+	if c.MovementProfile != nil && c.MovementProfile.Mode.Type == creature.ModeSwap {
+		return true
+	}
+
+	cSize := component.SizeMedium
+	cWeight := component.WeightMedium
+	if mob, ok := c.GetComponent("mobility").(*component.Mobility); ok {
+		cSize = mob.Size
+		cWeight = mob.Weight
+	}
+
+	canCohabitate := true
+	canPush := false
+
+	for _, id := range tile.EntitiesID {
+		if ent, ok := wa.world.Entities.Get(entity.ID(id)); ok {
+			if otherCreature, ok := ent.(*creature.Creature); ok {
+				if otherCreature.Species == c.Species {
+					return false
+				}
+
+				otherSize := component.SizeMedium
+				otherWeight := component.WeightMedium
+				if otherMob, ok := otherCreature.GetComponent("mobility").(*component.Mobility); ok {
+					otherSize = otherMob.Size
+					otherWeight = otherMob.Weight
+				}
+
+				if otherSize == cSize {
+					canCohabitate = false
+				}
+
+				if cWeight > otherWeight {
+					canPush = true
+				}
+			}
+		}
+	}
+
+	if canCohabitate || canPush {
+		return true
+	}
+
+	if c.MovementProfile != nil && c.MovementProfile.Collision.Type == creature.CollidePhase {
+		return true
+	}
+
+	if c.HasTag("climb") {
+		return true
+	}
+
+	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
+		if ent.GetType() == entity.TypeTrap {
+			return true
+		}
+	}
+
+	if c.MovementProfile != nil {
+		mode := c.MovementProfile.Mode.Type
+		if mode == creature.ModeOver || mode == creature.ModeUnder {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (wa *worldAdapter) HasActivityNearby(pos entity.Position, radius int) bool {
+	if wa.world.Engine.movementSystem == nil {
+		return false
+	}
+
+	for _, activityPos := range wa.world.Engine.movementSystem.recentReveals {
+		dist := abs(activityPos.X-pos.X) + abs(activityPos.Y-pos.Y)
+		if dist <= radius {
+			return true
+		}
+	}
+	return false
+}
+
+func (wa *worldAdapter) IsValidMove(pos entity.Position) bool {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil {
+		return false
+	}
+	if tile.Modifier.Obstructed {
+		return false
+	}
+	return true
+}
+
+func (wa *worldAdapter) GetTileState(pos entity.Position) string {
+	tile, err := wa.grid.Get(board.Position{X: pos.X, Y: pos.Y})
+	if err != nil {
+		return "invalid"
+	}
+
+	count := len(tile.EntitiesID)
+	if count == 0 {
+		return "empty"
+	}
+
+	if count == 1 {
+		return "alone"
+	}
+
+	return "occupied"
+}
+
+func (wa *worldAdapter) IsGridSaturatedWithTraps() bool {
+	for _, plot := range wa.grid.Plots {
+		hasTrap := false
+		for _, id := range plot.EntitiesID {
+			if ent, ok := wa.world.Entities.Get(entity.ID(id)); ok {
+				if ent.GetType() == entity.TypeTrap {
+					hasTrap = true
+					break
+				}
+			}
+		}
+		if !hasTrap {
+			return false
+		}
+	}
+	return true
+}
+
+var ErrGridNotFound = errors.New("grid not found")
+
+func abs(x int) int {
+	return entity.Abs(x)
+}
+
+// --- SYSTEM: ATTACK INTENT ---
+type AttackIntent struct {
+	SourcePos entity.Position
+	TargetX   float64
+	TargetY   float64
+	Intensity float64
+	IsActive  bool
+}
+
+type IntentSystem struct {
+	world *World
+}
+
+func (s *IntentSystem) UpdateIntent(intent *AttackIntent, cursorPixelX, cursorPixelY float64, tileSize, spacing float64) {
+	intent.TargetX = cursorPixelX
+	intent.TargetY = cursorPixelY
+}
