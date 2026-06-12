@@ -770,7 +770,7 @@ func (h *Handler) processSkip() {
 	}
 }
 
-// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles avec animation basée sur la pente.
+// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles (toute la pile).
 func (h *Handler) hideRevealedTiles() {
 	gridID := h.selectedGridID
 	if gridID == "" {
@@ -787,25 +787,32 @@ func (h *Handler) hideRevealedTiles() {
 		if err != nil || len(plot.EntitiesID) == 0 {
 			continue
 		}
-		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
-		if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
-			// On ne flip que si elle est déjà révélée
-			if ent.GetState()&entity.Revealed != 0 {
-				// On utilise la pente (Tilt) de la parcelle pour une fermeture "naturelle"
-				flipDir := plot.Tilt.ToFlipDirection()
-				_, _ = h.world.FlipTile(gridID, pos, flipDir, "system_hide")
 
-				// Notification immédiate pour déclencher l'animation dans le renderer
-				h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-					entity.Position(pos), topID, gridID, flipDir,
-					map[string]interface{}{"reason": "system_hide"}))
+		// On cache TOUTE la pile d'entités sur cette parcelle
+		for _, id := range plot.EntitiesID {
+			if ent, ok := h.world.Entities.Get(entity.ID(id)); ok {
+				if ent.GetState()&entity.Revealed != 0 {
+					flipDir := plot.Tilt.ToFlipDirection()
+					// On ne flip réellement (animation) que l'entité au sommet pour éviter le chaos visuel,
+					// mais on change l'état logique de toutes les entités de la pile.
+					topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+
+					if id == topID {
+						_, _ = h.world.FlipTile(gridID, pos, flipDir, "system_hide")
+						h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+							entity.Position(pos), id, gridID, flipDir,
+							map[string]interface{}{"reason": "system_hide"}))
+					} else {
+						ent.SetState(entity.Hidden)
+					}
+				}
 			}
 		}
 	}
 	h.revealedTiles = nil
 }
 
-// HideAllTilesInGrid parcourt toute la grille et passe TOUTES les entités révélées en état Hidden avec animation basée sur la pente.
+// hideAllTilesInGrid parcourt toute la grille et passe TOUTES les entités de TOUTES les piles en état Hidden.
 func (h *Handler) hideAllTilesInGrid() {
 	gridID := h.selectedGridID
 	if gridID == "" {
@@ -817,25 +824,30 @@ func (h *Handler) hideAllTilesInGrid() {
 		return
 	}
 
-	// On parcourt toutes les positions de la grille
 	for _, plot := range grid.Plots {
 		if len(plot.EntitiesID) == 0 {
 			continue
 		}
-		// On ne flip que l'entité au sommet si elle est révélée
-		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
-		if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
-			if ent.GetState()&entity.Revealed != 0 {
-				flipDir := plot.Tilt.ToFlipDirection()
-				_, _ = h.world.FlipTile(gridID, plot.Position, flipDir, "system_hide")
 
-				h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-					entity.Position(plot.Position), topID, gridID, flipDir,
-					map[string]interface{}{"reason": "system_hide"}))
+		topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+
+		for _, id := range plot.EntitiesID {
+			if ent, ok := h.world.Entities.Get(entity.ID(id)); ok {
+				if ent.GetState()&entity.Revealed != 0 {
+					flipDir := plot.Tilt.ToFlipDirection()
+
+					if id == topID {
+						_, _ = h.world.FlipTile(gridID, plot.Position, flipDir, "system_hide")
+						h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+							entity.Position(plot.Position), id, gridID, flipDir,
+							map[string]interface{}{"reason": "system_hide"}))
+					} else {
+						ent.SetState(entity.Hidden)
+					}
+				}
 			}
 		}
 	}
-	// On réinitialise les tuiles révélées puisque tout est masqué
 	h.revealedTiles = nil
 }
 

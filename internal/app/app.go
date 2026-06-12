@@ -395,14 +395,12 @@ func (app *Application) setupDebugCallbacks() {
 		for _, gID := range app.World.GridOrder {
 			if grid, ok := app.World.GetGrid(gID); ok {
 				for _, tile := range grid.Plots {
-					if len(tile.EntitiesID) == 0 {
-						continue
-					}
-					topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
-						if e.GetState()&entity.Hidden != 0 {
-							e.SetState(entity.Revealed)
-							app.Engine.TrackTileReveal(tile.Position)
+					for _, id := range tile.EntitiesID {
+						if e, ok := app.World.Entities.Get(entity.ID(id)); ok {
+							if e.GetState()&entity.Hidden != 0 {
+								e.SetState(entity.Revealed)
+								// NOTE: On ne tracke pas la révélation pour les cheats (sinon les stone wardens bougent)
+							}
 						}
 					}
 				}
@@ -418,12 +416,10 @@ func (app *Application) setupDebugCallbacks() {
 		for _, gID := range app.World.GridOrder {
 			if grid, ok := app.World.GetGrid(gID); ok {
 				for _, tile := range grid.Plots {
-					if len(tile.EntitiesID) == 0 {
-						continue
-					}
-					topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
-						e.SetState(entity.Hidden)
+					for _, id := range tile.EntitiesID {
+						if e, ok := app.World.Entities.Get(entity.ID(id)); ok {
+							e.SetState(entity.Hidden)
+						}
 					}
 				}
 			}
