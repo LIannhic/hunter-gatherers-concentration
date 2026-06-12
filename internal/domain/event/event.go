@@ -178,16 +178,22 @@ func NewAssociationMadeEvent(playerID string, assocType string, success bool) Ev
 	}
 }
 
-func NewEntityRevealedEvent(tilePos entity.Position, entityID string, gridID string, flipDir entity.FlipDirection) Event {
+func NewEntityRevealedEvent(tilePos entity.Position, entityID string, gridID string, flipDir entity.FlipDirection, payload ...map[string]interface{}) Event {
+	p := map[string]interface{}{
+		"position":       tilePos,
+		"entity_id":      entityID,
+		"grid_id":        gridID,
+		"flip_direction": flipDir,
+	}
+	if len(payload) > 0 && payload[0] != nil {
+		for k, v := range payload[0] {
+			p[k] = v
+		}
+	}
 	return Event{
 		Type:     TileRevealed,
 		SourceID: entityID,
-		Payload: map[string]interface{}{
-			"position":       tilePos,
-			"entity_id":      entityID,
-			"grid_id":        gridID,
-			"flip_direction": flipDir,
-		},
+		Payload:  p,
 		Timestamp: time.Now(),
 	}
 }

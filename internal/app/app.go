@@ -500,7 +500,10 @@ func (app *Application) setupEventSubscriptions() {
 		flipDir, ok5 := e.Payload["flip_direction"].(entity.FlipDirection)
 
 		if ok1 && ok3 && ok4 && ok5 {
-			app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y})
+			// On ne tracke la révélation pour l'IA que si c'est une action du joueur
+			if reason, ok := e.Payload["reason"].(string); ok && reason == "player_action" {
+				app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y})
+			}
 
 			var entState entity.TileState
 			var startTrans, endTrans entity.Transformation

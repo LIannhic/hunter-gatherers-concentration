@@ -374,21 +374,23 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 				if e.GetType() == entity.TypeStructure {
 					if e.HasTag("start_portal") {
 						flipDir := tile.Tilt.ToFlipDirection()
-						_, _ = world.FlipTile(gridID, tile.Position, flipDir)
+						_, _ = world.FlipTile(gridID, tile.Position, flipDir, "system_hide")
 						e.SetState(entity.Hidden | entity.Blocked)
 
 						world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-							e.GetPosition(), string(e.GetID()), gridID, flipDir))
+							e.GetPosition(), string(e.GetID()), gridID, flipDir,
+							map[string]interface{}{"reason": "system_hide"}))
 						continue
 					}
 					continue
 				}
 
 				if e.GetState()&entity.Revealed != 0 {
-					_, _ = world.FlipTile(gridID, tile.Position, tile.Tilt.ToFlipDirection())
+					_, _ = world.FlipTile(gridID, tile.Position, tile.Tilt.ToFlipDirection(), "system_hide")
 
 					world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-						e.GetPosition(), string(e.GetID()), gridID, tile.Tilt.ToFlipDirection()))
+						e.GetPosition(), string(e.GetID()), gridID, tile.Tilt.ToFlipDirection(),
+						map[string]interface{}{"reason": "system_hide"}))
 				}
 			}
 		}

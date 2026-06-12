@@ -428,6 +428,7 @@ func (h *Handler) handleMouse() error {
 					"entity_id":      fmt.Sprintf("exit_%s_%d", board.DirectionToName(dir), index),
 					"grid_id":        h.world.CurrentGridID,
 					"flip_direction": flipDir,
+					"reason":         "player_action",
 				},
 			})
 
@@ -792,11 +793,12 @@ func (h *Handler) hideRevealedTiles() {
 			if ent.GetState()&entity.Revealed != 0 {
 				// On utilise la pente (Tilt) de la parcelle pour une fermeture "naturelle"
 				flipDir := plot.Tilt.ToFlipDirection()
-				_, _ = h.world.FlipTile(gridID, pos, flipDir)
+				_, _ = h.world.FlipTile(gridID, pos, flipDir, "system_hide")
 
 				// Notification immédiate pour déclencher l'animation dans le renderer
 				h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-					entity.Position(pos), topID, gridID, flipDir))
+					entity.Position(pos), topID, gridID, flipDir,
+					map[string]interface{}{"reason": "system_hide"}))
 			}
 		}
 	}
@@ -825,10 +827,11 @@ func (h *Handler) hideAllTilesInGrid() {
 		if ent, ok := h.world.Entities.Get(entity.ID(topID)); ok {
 			if ent.GetState()&entity.Revealed != 0 {
 				flipDir := plot.Tilt.ToFlipDirection()
-				_, _ = h.world.FlipTile(gridID, plot.Position, flipDir)
+				_, _ = h.world.FlipTile(gridID, plot.Position, flipDir, "system_hide")
 
 				h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-					entity.Position(plot.Position), topID, gridID, flipDir))
+					entity.Position(plot.Position), topID, gridID, flipDir,
+					map[string]interface{}{"reason": "system_hide"}))
 			}
 		}
 	}
@@ -1598,6 +1601,7 @@ func (h *Handler) triggerSealingAnimation(gridID string, dir entity.Direction, i
 				"entity_id":      entityID,
 				"grid_id":        gridID,
 				"flip_direction": flipDir,
+				"reason":         "system_action",
 			},
 		})
 	}

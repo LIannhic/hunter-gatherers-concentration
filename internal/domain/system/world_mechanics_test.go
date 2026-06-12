@@ -52,8 +52,26 @@ func TestMatchTile(t *testing.T) {
 	// Pop d'une ressource cachée par défaut
 	r, _ := w.SpawnResource("test_grid", "dreamberry", entity.Position(pos))
 
+	// Test Flip (Toggle)
+	ent, err := w.FlipTile("test_grid", pos, entity.FlipTop, "player_action")
+	if err != nil {
+		t.Errorf("FlipTile failed: %v", err)
+	}
+	if ent.GetState()&entity.Revealed == 0 {
+		t.Error("Entity should be revealed after first flip")
+	}
+
+	// Test Reveal (Force)
+	_, err = w.RevealTile("test_grid", pos, entity.FlipTop, "player_action")
+	if err != nil {
+		t.Errorf("RevealTile failed: %v", err)
+	}
+	if ent.GetState()&entity.Revealed == 0 {
+		t.Error("Entity should still be revealed after RevealTile")
+	}
+
 	// Matcher la tuile
-	err := w.MatchTile("test_grid", pos)
+	err = w.MatchTile("test_grid", pos)
 	if err != nil {
 		t.Fatalf("MatchTile failed: %v", err)
 	}

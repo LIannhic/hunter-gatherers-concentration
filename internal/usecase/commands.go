@@ -121,7 +121,7 @@ func (c *RevealTileCommand) Execute() error {
 	}
 
 	// Révèle l'entité via le world
-	ent, err := c.World.RevealTile(c.GridID, c.Position, c.FlipDirection)
+	ent, err := c.World.RevealTile(c.GridID, c.Position, c.FlipDirection, "player_action")
 	if err != nil {
 		return err
 	}
@@ -171,6 +171,7 @@ func (c *RevealTileCommand) Execute() error {
 		string(ent.GetID()),
 		c.GridID,
 		c.FlipDirection,
+		map[string]interface{}{"reason": "player_action"},
 	))
 
 	return nil
@@ -346,13 +347,15 @@ func (c *MatchTilesCommand) Execute() error {
 	plot1, _ := grid.Get(c.Pos1)
 	plot2, _ := grid.Get(c.Pos2)
 
-	_, _ = c.World.FlipTile(c.GridID, c.Pos1, plot1.Tilt.ToFlipDirection())
-	_, _ = c.World.FlipTile(c.GridID, c.Pos2, plot2.Tilt.ToFlipDirection())
+	_, _ = c.World.FlipTile(c.GridID, c.Pos1, plot1.Tilt.ToFlipDirection(), "system_hide")
+	_, _ = c.World.FlipTile(c.GridID, c.Pos2, plot2.Tilt.ToFlipDirection(), "system_hide")
 
 	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos1), string(entity1.GetID()), c.GridID, plot1.Tilt.ToFlipDirection()))
+		entity.Position(c.Pos1), string(entity1.GetID()), c.GridID, plot1.Tilt.ToFlipDirection(),
+		map[string]interface{}{"reason": "system_hide"}))
 	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos2), string(entity2.GetID()), c.GridID, plot2.Tilt.ToFlipDirection()))
+		entity.Position(c.Pos2), string(entity2.GetID()), c.GridID, plot2.Tilt.ToFlipDirection(),
+		map[string]interface{}{"reason": "system_hide"}))
 
 	if c.OnFailure != nil {
 		c.OnFailure()
@@ -468,6 +471,7 @@ func (c *MergeTilesCommand) Execute() error {
 			string(e1.GetID()),
 			c.GridID,
 			tile1.Tilt.ToFlipDirection(),
+			map[string]interface{}{"reason": "system_hide"},
 		))
 
 		// NOUVEAU : Après une fusion, on referme TOUTES les tuiles révélées
@@ -481,9 +485,10 @@ func (c *MergeTilesCommand) Execute() error {
 				if ent, exists := c.World.Entities.Get(entity.ID(topID)); exists {
 					if ent.GetState()&entity.Revealed != 0 {
 						// On ferme avec l'animation de pente
-						_, _ = c.World.FlipTile(c.GridID, pos, plot.Tilt.ToFlipDirection())
+						_, _ = c.World.FlipTile(c.GridID, pos, plot.Tilt.ToFlipDirection(), "system_hide")
 						c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-							entity.Position(pos), string(ent.GetID()), c.GridID, plot.Tilt.ToFlipDirection()))
+							entity.Position(pos), string(ent.GetID()), c.GridID, plot.Tilt.ToFlipDirection(),
+							map[string]interface{}{"reason": "system_hide"}))
 					}
 				}
 			}
@@ -513,13 +518,15 @@ func (c *MergeTilesCommand) Execute() error {
 	// Recache les deux
 	p1, _ := grid.Get(c.Pos1)
 	p2, _ := grid.Get(c.Pos2)
-	_, _ = c.World.FlipTile(c.GridID, c.Pos1, p1.Tilt.ToFlipDirection())
-	_, _ = c.World.FlipTile(c.GridID, c.Pos2, p2.Tilt.ToFlipDirection())
+	_, _ = c.World.FlipTile(c.GridID, c.Pos1, p1.Tilt.ToFlipDirection(), "system_hide")
+	_, _ = c.World.FlipTile(c.GridID, c.Pos2, p2.Tilt.ToFlipDirection(), "system_hide")
 
 	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos1), id1, c.GridID, p1.Tilt.ToFlipDirection()))
+		entity.Position(c.Pos1), id1, c.GridID, p1.Tilt.ToFlipDirection(),
+		map[string]interface{}{"reason": "system_hide"}))
 	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos2), id2, c.GridID, p2.Tilt.ToFlipDirection()))
+		entity.Position(c.Pos2), id2, c.GridID, p2.Tilt.ToFlipDirection(),
+		map[string]interface{}{"reason": "system_hide"}))
 
 	if c.OnFailure != nil {
 		c.OnFailure()
@@ -618,13 +625,14 @@ func (c *SkipTurnCommand) Execute() error {
 
 				// Cache et anime toutes les tuiles révélées qui ne sont pas validées
 				if state&entity.Revealed != 0 && state&entity.Matched == 0 {
-					_, _ = c.World.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection())
+					_, _ = c.World.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection(), "system_hide")
 
 					c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
 						entity.Position(pos),
 						string(ent.GetID()),
 						gridID,
 						plot.Tilt.ToFlipDirection(),
+						map[string]interface{}{"reason": "system_hide"},
 					))
 				}
 			}

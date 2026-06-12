@@ -228,6 +228,11 @@ eventBus.ProcessQueue()
 
 Certains événements critiques pour le rendu (comme `TileRevealed`) utilisent `PublishImmediate` pour forcer la mise à jour du Renderer avant la fin de la frame logique. Les autres utilisent `Publish` et sont consommés lors du `ProcessQueue`.
 
+Le payload de `TileRevealed` inclut désormais un champ `reason` pour distinguer l'origine de l'action :
+- `"player_action"` : Révélation explicite par un clic ou une capacité du joueur. Déclenche les triggers d'IA (`OnReveal`).
+- `"system_hide"` : Fermeture automatique (fin de tour, échec de match). Ignoré par les triggers d'IA.
+- `"system_action"` : Autres actions automatiques (prévisualisation, scellage de zone). Ignoré par les triggers d'IA.
+
 ### Types d'événements
 
 ```go
@@ -418,16 +423,16 @@ Le moteur gère une accumulation réelle des transformations géométriques :
 ## Flux de données
 
 ```
-1. Joueur révèle une tuile
+1. Joueur révèle une tuile (Reason: "player_action")
    ↓
-2. World.RevealTile() → Événement TileRevealed (avec `grid_id` et `flip_direction`)
+2. World.RevealTile() → Événement TileRevealed (avec `grid_id`, `flip_direction` et `reason`)
    ↓
 3. L'UI / le renderer démarre l'animation de flip et met à jour l'affichage
    ↓
 4. Engine.Update() progresse d'un tour
    ↓
 5. LifecycleSystem : les ressources mûrissent
-   CreatureAISystem : les créatures se déplacent
+   CreatureAISystem : les créatures se déplacent (Vérifient `reason` pour TriggerOnReveal)
    TriggerSystem : vérifie les conditions de déclenchement
    ↓
 6. EventBus.ProcessQueue() traite les événements

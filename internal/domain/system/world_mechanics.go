@@ -10,7 +10,7 @@ import (
 )
 
 // FlipTile bascule une entité entre caché et révélé et applique la transformation géométrique
-func (w *World) FlipTile(gridID string, pos board.Position, flipDir entity.FlipDirection) (entity.Entity, error) {
+func (w *World) FlipTile(gridID string, pos board.Position, flipDir entity.FlipDirection, reason string) (entity.Entity, error) {
 	grid, ok := w.Grids[gridID]
 	if !ok {
 		return nil, ErrGridNotFound
@@ -64,13 +64,14 @@ func (w *World) FlipTile(gridID string, pos board.Position, flipDir entity.FlipD
 		topEntityID,
 		gridID,
 		flipDir,
+		map[string]interface{}{"reason": reason},
 	))
 
 	return ent, nil
 }
 
 // RevealTile force une entité à l'état Revealed sans faire de toggle inverse
-func (w *World) RevealTile(gridID string, pos board.Position, flipDir entity.FlipDirection) (entity.Entity, error) {
+func (w *World) RevealTile(gridID string, pos board.Position, flipDir entity.FlipDirection, reason string) (entity.Entity, error) {
 	grid, ok := w.Grids[gridID]
 	if !ok {
 		return nil, ErrGridNotFound
@@ -110,6 +111,7 @@ func (w *World) RevealTile(gridID string, pos board.Position, flipDir entity.Fli
 			topEntityID,
 			gridID,
 			flipDir,
+			map[string]interface{}{"reason": reason},
 		))
 	}
 
@@ -187,7 +189,7 @@ func (w *World) HideAllUnmatchedTiles() {
 			// Si la tuile est visible mais pas encore validée (Matched)
 			if state&entity.Revealed != 0 && state&entity.Matched == 0 {
 				// Modifie l'état logique (retourne la tuile)
-				_, _ = w.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection())
+				_, _ = w.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection(), "system_hide")
 
 				// Notifie immédiatement le renderer graphique pour jouer l'animation de fermeture
 				w.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
@@ -195,6 +197,7 @@ func (w *World) HideAllUnmatchedTiles() {
 					string(ent.GetID()),
 					gridID,
 					plot.Tilt.ToFlipDirection(),
+					map[string]interface{}{"reason": "system_hide"},
 				))
 			}
 		}
