@@ -482,3 +482,17 @@ go test ./internal/domain/... -v
 # Avec couverture
 go test ./internal/domain/... -cover
 ```
+
+## Compiler votre projet en WebAssembly
+
+```bash
+# 1. On renomme pour "cacher" le fichier Windows à Go
+Rename-Item ./cmd/game/rsrc.syso rsrc.syso.bak
+
+# 2. On compile pour le WebAssembly
+$env:GOOS="js"; $env:GOARCH="wasm"; go build -o hgcv0.2_basic-incursion.wasm ./cmd/game
+
+# 3. On remet le nom d'origine pour que votre version Windows fonctionne à nouveau
+Rename-Item ./cmd/game/rsrc.syso.bak rsrc.syso
+```
+
