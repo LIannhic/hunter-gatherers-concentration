@@ -555,14 +555,12 @@ func (s *CreatureAISystem) Update(world *World) {
 
 			if len(newPlot.EntitiesID) > 0 {
 				topID := newPlot.EntitiesID[len(newPlot.EntitiesID)-1]
-				if oldEnt, ok := world.Entities.Get(entity.ID(topID)); ok {
-					if oldEnt.GetType() == entity.TypeTrap {
-						world.RemoveEntity(oldEnt.GetID())
-					}
+				if _, ok := world.Entities.Get(entity.ID(topID)); ok {
+					// On ne retire plus les pièges, on les ignore simplement (empilement possible)
 				}
 			}
 
-			newPlot.PushEntity(idStr)
+			newPlot.EntitiesID = append(newPlot.EntitiesID, idStr)
 			world.Entities.UpdatePosition(c.GetID(), newPos)
 
 			world.EventBus.Publish(event.NewCreatureMovedEvent(
@@ -574,8 +572,12 @@ func (s *CreatureAISystem) Update(world *World) {
 			if err == nil {
 				if grid, ok := world.GetGrid(c.GetGridID()); ok {
 					pos := board.Position(c.GetPosition())
-					grid.RemoveEntity(pos, string(trap.GetID()))
-					grid.PlaceEntityAtBottom(pos, string(trap.GetID()))
+					id := string(trap.GetID())
+					grid.RemoveEntity(pos, id)
+					if plot, err := grid.Get(pos); err == nil {
+						// On insère le piège à l'index 0 (tout en bas de la pile)
+						plot.EntitiesID = append([]string{id}, plot.EntitiesID...)
+					}
 				}
 				fmt.Printf("[ACTION] %s a posé un piège à %v\n", c.Species, c.GetPosition())
 			}
@@ -954,8 +956,15 @@ func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *cr
 				idStr := string(c.GetID())
 				grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
 				grid.RemoveEntity(board.Position{X: newPos.X, Y: newPos.Y}, topID)
-				grid.PlaceEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, topID)
-				grid.PlaceEntity(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
+
+				// Placement direct via slice manipulation (Swap: on garde l'ordre existant mais on change les positions logiques)
+				if plotOld, err := grid.Get(board.Position{X: oldPos.X, Y: oldPos.Y}); err == nil {
+					plotOld.EntitiesID = append(plotOld.EntitiesID, topID)
+				}
+				if plotNew, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y}); err == nil {
+					plotNew.EntitiesID = append(plotNew.EntitiesID, idStr)
+				}
+
 				swappedEntity.SetPosition(oldPos)
 				c.SetPosition(newPos)
 				world.Entities.UpdatePosition(swappedEntity.GetID(), oldPos)
@@ -982,21 +991,18 @@ func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos ent
 		mode = c.MovementProfile.Mode.Type
 	}
 
-	newTile, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
-	if err == nil && newTile != nil && len(newTile.EntitiesID) > 0 {
-		topID := newTile.EntitiesID[len(newTile.EntitiesID)-1]
-		if ent, ok := world.Entities.Get(entity.ID(topID)); ok && ent.GetType() == entity.TypeTrap {
-			if mode != creature.ModeOver {
-				world.RemoveEntity(ent.GetID())
-			}
-		}
+	plot, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
+	if err != nil {
+		return false
 	}
 
-	switch mode {
-	case creature.ModeUnder:
-		grid.PlaceEntityAtBottom(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
-	default:
-		grid.PlaceEntity(board.Position{X: newPos.X, Y: newPos.Y}, idStr)
+	// On ne supprime plus les pièges, on les ignore (Z-sorting via slice manipulation)
+	if mode == creature.ModeUnder {
+		// Prepend (Au tout début du tableau pour être en dessous)
+		plot.EntitiesID = append([]string{idStr}, plot.EntitiesID...)
+	} else {
+		// Append (A la fin du tableau pour être au sommet)
+		plot.EntitiesID = append(plot.EntitiesID, idStr)
 	}
 
 	world.Entities.UpdatePosition(c.GetID(), newPos)
@@ -1177,76 +1183,56 @@ func (wa *worldAdapter) IsWalkable(c *creature.Creature, pos entity.Position) bo
 		return false
 	}
 
-	if len(tile.EntitiesID) == 0 {
-		return true
-	}
-
-	if c.MovementProfile != nil && c.MovementProfile.Mode.Type == creature.ModeSwap {
-		return true
-	}
-
+	// 1. Stats de la créature arrivante
+	cMob, _ := c.GetComponent("mobility").(*component.Mobility)
 	cSize := component.SizeMedium
 	cWeight := component.WeightMedium
-	if mob, ok := c.GetComponent("mobility").(*component.Mobility); ok {
-		cSize = mob.Size
-		cWeight = mob.Weight
+	if cMob != nil {
+		cSize = cMob.Size
+		cWeight = cMob.Weight
 	}
 
-	canCohabitate := true
-	canPush := false
-
+	creatureCount := 0
+	// 2. Vérification de la cohabitation dans la pile EntitiesID de la parcelle
 	for _, id := range tile.EntitiesID {
-		if ent, ok := wa.world.Entities.Get(entity.ID(id)); ok {
-			if otherCreature, ok := ent.(*creature.Creature); ok {
-				if otherCreature.Species == c.Species {
+		ent, ok := wa.world.Entities.Get(entity.ID(id))
+		if !ok {
+			continue
+		}
+
+		if other, ok := ent.(*creature.Creature); ok {
+			creatureCount++
+
+			// Règle 1 : "Premier arrivé, premier servi" - Pas de cohabitation même espèce
+			if other.Species == c.Species {
+				return false
+			}
+
+			// Règle 2 : "Condition stricte" - Unicité de la taille (Small, Medium, Large)
+			otherMob, _ := other.GetComponent("mobility").(*component.Mobility)
+			otherSize := component.SizeMedium
+			otherWeight := component.WeightMedium
+			if otherMob != nil {
+				otherSize = otherMob.Size
+				otherWeight = otherMob.Weight
+			}
+
+			if otherSize == cSize {
+				// Règle 3 : "Priorité au poids" - Cohabitation même taille QUE si strictement plus lourd
+				if cWeight <= otherWeight {
 					return false
-				}
-
-				otherSize := component.SizeMedium
-				otherWeight := component.WeightMedium
-				if otherMob, ok := otherCreature.GetComponent("mobility").(*component.Mobility); ok {
-					otherSize = otherMob.Size
-					otherWeight = otherMob.Weight
-				}
-
-				if otherSize == cSize {
-					canCohabitate = false
-				}
-
-				if cWeight > otherWeight {
-					canPush = true
 				}
 			}
 		}
 	}
 
-	if canCohabitate || canPush {
-		return true
+	// Règle 4 : 3 créatures MAXIMUM par parcelle
+	if creatureCount >= 3 {
+		return false
 	}
 
-	if c.MovementProfile != nil && c.MovementProfile.Collision.Type == creature.CollidePhase {
-		return true
-	}
-
-	if c.HasTag("climb") {
-		return true
-	}
-
-	topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-	if ent, ok := wa.world.Entities.Get(entity.ID(topID)); ok {
-		if ent.GetType() == entity.TypeTrap {
-			return true
-		}
-	}
-
-	if c.MovementProfile != nil {
-		mode := c.MovementProfile.Mode.Type
-		if mode == creature.ModeOver || mode == creature.ModeUnder {
-			return true
-		}
-	}
-
-	return false
+	// Les créatures ignorent les ressources et les pièges (peuvent s'empiler dans EntitiesID)
+	return true
 }
 
 func (wa *worldAdapter) HasActivityNearby(pos entity.Position, radius int) bool {
