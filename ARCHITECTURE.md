@@ -79,9 +79,11 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (Forward, Backward, Left, Right). Supporte **8 directions cardinales et ordinales** transformées par sa matrice D4.
 
 - **Board/Grid** : Gère la géométrie du plateau
-  - Chaque tuile contient une référence optionnelle à une entité
-  - Les tuiles ne portent plus d'état ; c'est l'entité qui le porte
-  - Permet la recherche rapide des entités par position
+  - Chaque tuile contient une référence optionnelle à une entité.
+  - Les tuiles ne portent plus d'état ; c'est l'entité qui le porte.
+  - Plusieurs entités peuvent être empilées sur une même parcelle (`EntitiesID []string`).
+  - Les actions de masquage (Skip, Fin de tour, F6) s'appliquent à **toute la pile** d'une parcelle.
+  - Permet la recherche rapide des entités par position.
   - **Inventory Grid** : L'inventaire est désormais une grille logicielle (`InventoryGridID`), permettant un traitement spatial uniforme (hover, highlights).
   - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles. Les transformations sont cumulatives (`apply * current`).
   - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2). Cela influence les règles de match et le rendu (échelle x1.15 par niveau si révélé).
@@ -280,27 +282,32 @@ go test ./internal/domain/... -v
 
 ## Contrôles
 
-### Jeu de base
+### Jeu de base (Actions directes)
 
 | Action | Touche |
 |--------|--------|
-| Révéler tuile | Click souris |
-| Matcher (valider paire) | M |
-| Skip (quand 2 tuiles retournées) | Espace |
-| Naviguer zones | ZQSD / Flèches |
+| Révéler tuile | Click gauche (Plateau) |
+| Matcher (valider paire) | M ou Bouton MATCH |
+| Skip (si 2 tuiles révélées) | Espace ou Bouton SKIP |
+| Fin de tour forcée | Espace (sans match) ou Bouton TURN |
+| Naviguer entre les zones | ZQSD / WASD / Flèches |
+| Rotation plateau (Visuel) | + (Horaire) / - (Anti-horaire) |
+| Reset rotation | R |
+
+### Gestion et Debug
+
+| Action | Touche |
+|--------|--------|
+| Inventaire (Usage/Détails) | Click gauche / L |
 | Statistiques zones | I |
-| Fin de tour | Espace (hors match en cours) |
-| Menu / Abandon | Échap |
+| Menu / Abandon | Échap ou \ |
 | Changer de grille | 1-9 |
 | Difficulté | F1 à F4 |
+| Console de Debug | F12 |
 | Révéler tout (Cheat) | F5 |
 | Cacher tout (Cheat) | F6 |
-| Rotation plateau | + / - |
-| Reset rotation | R |
-| Spawn entités (debug) | S |
-| Spawn toutes créatures (debug) | Shift+S |
-| Nettoyer plateau (debug) | C |
-| Retour menu | \ |
+| Spawn entités (Debug) | S / Shift+S / F9 |
+| Nettoyer plateau (Cheat) | C |
 
 ## Ajouter une fonctionnalité
 

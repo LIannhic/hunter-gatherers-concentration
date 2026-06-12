@@ -304,30 +304,49 @@ go build -o game ./cmd/game
 
 ### Contrôles
 
+#### Jeu de base (Actions directes)
+
 | Action | Touche |
 |--------|--------|
-| Révéler tuile | Click gauche |
-| Matcher (ou valider paire) | M |
-| Skip (ou passer quand 2 tuiles) | Espace |
-| Sélection Butin (Usage) | Click gauche (Inv) |
-| Utiliser Butin sélectionné | Re-click gauche (Inv) |
-| Sélection Suppression | Click droit (Inv) |
-| Désélectionner tout | Click droit (vide) |
-| Naviguer zones | ZQSD / Flèches |
-| Statistiques zones | I |
-| Liste Inventaire | L |
-| Fin de tour | Espace (hors match en cours) |
-| Menu / Abandon | Échap |
-| Changer de grille | 1-9 |
-| Difficulté | F1 à F4 |
+| Révéler tuile | Click gauche (Plateau) |
+| Sélectionner tuile révélée | Click gauche (Tuile révélée) |
+| Désélectionner / Annuler | Click droit (Plateau) ou Échap |
+| Matcher (valider paire) | M ou Bouton MATCH |
+| Skip (si 2 tuiles révélées) | Espace ou Bouton SKIP |
+| Fin de tour forcée | Espace (sans match en cours) ou Bouton TURN |
+| Naviguer entre les zones | Flèches ou ZQSD / WASD |
+| Rotation plateau (Visuel) | + (Horaire) / - (Anti-horaire) |
+| Reset rotation | R |
+
+#### Gestion et Inventaire
+
+| Action | Touche |
+|--------|--------|
+| Sélection Butin (Usage) | Click gauche (Inventaire) |
+| Utiliser Butin sélectionné | Re-click gauche (Inventaire) |
+| Sélection Suppression | Click droit (Inventaire) |
+| Désélectionner Butin | Click droit (Hors inventaire) |
+| Portail Portatif (Raccourci) | P |
+| Statistiques des zones | I |
+| Détails Inventaire | L |
+| Atlas des Assets (Debug) | T |
+
+#### Paramètres et Debug
+
+| Action | Touche |
+|--------|--------|
+| Difficulté (E, N, H, I) | F1 à F4 |
+| Fenêtre de Debug (Console) | F12 |
+| Spawn entités (Debug ouvert) | S |
+| Spawn toutes créatures | Shift + S |
+| Spawn créature aléatoire | F9 |
+| Nettoyer plateau (Cheat) | C |
 | Révéler tout (Cheat) | F5 |
 | Cacher tout (Cheat) | F6 |
-| Rotation plateau | + / - |
-| Reset rotation | R |
-| Remplir Inv (Debug) | B |
-| Spawn entités (debug) | S (Debug ouvert) |
-| Spawn toutes créatures (debug) | Shift+S |
-| Nettoyer plateau (debug) | C |
-| Fenêtre de Debug | F12 |
-| Retour menu | \ |
+| Débloquer Navigation (Cheat) | F7 |
+| Retirer état Bloqué (Cheat) | F8 |
+| Changer de grille active | 1 à 9 |
+| Retour menu / Abandon | \ ou Échap |
+| Remplir Inventaire (Debug) | B |
+| Toggle Mouvement Auto | F10 |
 Annulation de la PR #39
