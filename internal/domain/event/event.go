@@ -378,25 +378,37 @@ func NewPhaseChangedEvent(from, to GameState) Event {
 }
 
 // NewAnimationStartedEvent crée un événement signalant le début d'une animation graphique.
-func NewAnimationStartedEvent(animationType string, targetID string) Event {
-    return Event{
-       Type:     AnimationStarted,
-       SourceID: targetID,
-       Payload: map[string]interface{}{
-          "animation_type": animationType,
-       },
-       Timestamp: time.Now(),
-    }
+func NewAnimationStartedEvent(animationType string, targetID string, payload ...map[string]interface{}) Event {
+	p := map[string]interface{}{
+		"animation_type": animationType,
+	}
+	if len(payload) > 0 && payload[0] != nil {
+		for k, v := range payload[0] {
+			p[k] = v
+		}
+	}
+	return Event{
+		Type:      AnimationStarted,
+		SourceID:  targetID,
+		Payload:   p,
+		Timestamp: time.Now(),
+	}
 }
 
 // NewAnimationEndedEvent crée un événement signalant la fin d'une animation graphique.
-func NewAnimationEndedEvent(animationType string, targetID string) Event {
-    return Event{
-       Type:     AnimationEnded,
-       SourceID: targetID,
-       Payload: map[string]interface{}{
-          "animation_type": animationType,
-       },
-       Timestamp: time.Now(),
-    }
+func NewAnimationEndedEvent(animationType string, targetID string, payload ...map[string]interface{}) Event {
+	p := map[string]interface{}{
+		"animation_type": animationType,
+	}
+	if len(payload) > 0 && payload[0] != nil {
+		for k, v := range payload[0] {
+			p[k] = v
+		}
+	}
+	return Event{
+		Type:      AnimationEnded,
+		SourceID:  targetID,
+		Payload:   p,
+		Timestamp: time.Now(),
+	}
 }

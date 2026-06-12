@@ -575,8 +575,8 @@ func (s *CreatureAISystem) Update(world *World) {
 					id := string(trap.GetID())
 					grid.RemoveEntity(pos, id)
 					if plot, err := grid.Get(pos); err == nil {
-						// On insère le piège au bas de la pile
-						plot.PushEntityToBottom(id)
+						// On insère le piège à l'index 0 (tout en bas de la pile)
+						plot.EntitiesID = append([]string{id}, plot.EntitiesID...)
 					}
 				}
 				fmt.Printf("[ACTION] %s a posé un piège à %v\n", c.Species, c.GetPosition())
@@ -707,8 +707,19 @@ func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger,
 	return false
 }
 
+func sign(val int) int {
+	if val < 0 {
+		return -1
+	}
+	if val > 0 {
+		return 1
+	}
+	return 1
+}
+
 func (s *CreatureMovementSystem) executeMove(c *creature.Creature, profile *creature.MovementProfile, world *World, grid *board.Grid) bool {
-	direction := s.getNavigationDirection(profile.Navigation, c, world, grid)
+	wa := &worldAdapter{world: world, grid: grid}
+	direction := profile.Navigation.DecideDirection(wa, c)
 	if direction == (entity.Position{X: 0, Y: 0}) {
 		return true
 	}
@@ -719,16 +730,50 @@ func (s *CreatureMovementSystem) executeMove(c *creature.Creature, profile *crea
 		Y: currentPos.Y + direction.Y,
 	}
 
-	if profile.Navigation.Type != creature.NavRelative {
-		profile.Orientation = directionToOrientation(direction)
+	if !wa.IsWalkable(c, newPos) {
+		if profile.Navigation.Type == creature.NavOrientation {
+			dir := direction
+			hitH := !wa.IsWalkable(c, entity.Position{X: currentPos.X + dir.X, Y: currentPos.Y})
+			hitV := !wa.IsWalkable(c, entity.Position{X: currentPos.X, Y: currentPos.Y + dir.Y})
+
+			rotateDegrees := 90
+			if hitH && hitV {
+				rotateDegrees = 180
+			} else if hitV {
+				rotateDegrees = -90 * sign(dir.X) * sign(dir.Y)
+			} else if hitH {
+				rotateDegrees = 90 * sign(dir.X) * sign(dir.Y)
+			}
+
+			profile.Orientation.Rotate(rotateDegrees)
+			c.BaseEntity.SetOrientation(profile.Orientation.Direction)
+
+			world.Components.Add(string(c.GetID()), &component.RotationAnimation{
+				CurrentAngle:  0,
+				TargetAngle:   float64(rotateDegrees),
+				DurationTicks: 15,
+				CurrentTick:   0,
+			})
+
+			world.EventBus.PublishImmediate(event.NewAnimationStartedEvent("rotate", string(c.GetID()), map[string]interface{}{
+				"angle_degrees": rotateDegrees,
+			}))
+			return false
+		}
+
+		finalPos, success := profile.Collision.HandleCollision(wa, c, newPos)
+		if !success {
+			return false
+		}
+		newPos = finalPos
 	}
 
-	finalPos, success := s.handleCollision(profile.Collision, c, newPos, currentPos, world, grid)
-	if !success {
-		return false
+	if profile.Navigation.Type != creature.NavRelative && profile.Navigation.Type != creature.NavOrientation {
+		profile.Orientation.Direction = directionToOrientation(direction).Direction
+		c.BaseEntity.SetOrientation(profile.Orientation.Direction)
 	}
 
-	return s.applyMoveMode(profile.Mode, c, currentPos, finalPos, world, grid)
+	return s.applyMoveMode(profile.Mode, c, currentPos, newPos, world, grid)
 }
 
 func (s *CreatureMovementSystem) getNavigationDirection(nav creature.NavigationLogic, c *creature.Creature, world *World, grid *board.Grid) entity.Position {
@@ -996,11 +1041,13 @@ func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos ent
 		return false
 	}
 
-	// On ne supprime plus les pièges, on les ignore (Z-sorting via méthodes de Plot)
+	// On ne supprime plus les pièges, on les ignore (Z-sorting via slice manipulation)
 	if mode == creature.ModeUnder {
-		plot.PushEntityToBottom(idStr)
+		// Prepend (Au tout début du tableau pour être en dessous)
+		plot.EntitiesID = append([]string{idStr}, plot.EntitiesID...)
 	} else {
-		plot.PushEntity(idStr)
+		// Append (A la fin du tableau pour être au sommet)
+		plot.EntitiesID = append(plot.EntitiesID, idStr)
 	}
 
 	world.Entities.UpdatePosition(c.GetID(), newPos)
@@ -1024,10 +1071,6 @@ func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos ent
 		string(c.GetID()), oldPos, newPos, string(mode), isCloaked, isAudible,
 	))
 	return true
-}
-
-func sign(x int) int {
-	return entity.Sign(x)
 }
 
 func directionToOrientation(dir entity.Position) creature.Orientation {

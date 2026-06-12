@@ -333,6 +333,39 @@ func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
 	return FlipTop // Fallback
 }
 
+// RotateDirection fait pivoter une direction d'un certain nombre de degrés.
+// Supporte les multiples de 45°.
+func RotateDirection(d Direction, degrees int) Direction {
+	// Map des directions ordonnées circulairement (pas de 45°)
+	// N, NE, E, SE, S, SW, W, NW
+	order := []Direction{
+		DirNorth, DirNorthEast, DirEast, DirSouthEast,
+		DirSouth, DirSouthWest, DirWest, DirNorthWest,
+	}
+
+	// Trouve l'index actuel
+	currentIdx := -1
+	for i, dir := range order {
+		if dir == d {
+			currentIdx = i
+			break
+		}
+	}
+
+	if currentIdx == -1 {
+		return d
+	}
+
+	// Calcule le nombre de pas de 45°
+	steps := degrees / 45
+	newIdx := (currentIdx + steps) % len(order)
+	if newIdx < 0 {
+		newIdx += len(order)
+	}
+
+	return order[newIdx]
+}
+
 func Abs(x int) int {
 	if x < 0 {
 		return -x

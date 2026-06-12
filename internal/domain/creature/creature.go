@@ -432,6 +432,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Mode:       MovementMode{Type: ModeNormal},
 			Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
 			Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+			Orientation: Orientation{Direction: entity.DirNorthEast},
 			Collision:  CollisionHandler{Type: CollideStop},
 		})
 		c.SetThreatZone(ThreatCone)
