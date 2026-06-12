@@ -9,6 +9,11 @@ import (
 )
 
 const (
+	DirNorth = entity.DirNorth
+	DirEast  = entity.DirEast
+	DirSouth = entity.DirSouth
+	DirWest  = entity.DirWest
+
 	Forward       = entity.DirNorth
 	Backward      = entity.DirSouth
 	Right         = entity.DirEast
@@ -55,10 +60,11 @@ func (c *Creature) SetMovementProfile(m *MovementProfile) {
 }
 
 func (c *Creature) GetOrientation() entity.Direction {
+	baseDirection := c.BaseEntity.GetOrientation()
 	if c.MovementProfile != nil {
-		return c.MovementProfile.Orientation.Direction
+		baseDirection = c.MovementProfile.Orientation.Direction
 	}
-	return c.BaseEntity.GetOrientation()
+	return entity.TransformDirection(baseDirection, c.BaseEntity.GetTransformation())
 }
 
 func (c *Creature) SetOrientation(o entity.Direction) {
@@ -83,10 +89,10 @@ func (c *Creature) GetComponent(name string) interface{} {
 }
 
 // Association compliance
-func (c *Creature) GetMatchID() string       { return c.Species }
-func (c *Creature) GetLogicKey() string      { return "" }
-func (c *Creature) GetElement() string       { return "" }
-func (c *Creature) GetNarrativeTag() string  { return "" }
+func (c *Creature) GetMatchID() string      { return c.Species }
+func (c *Creature) GetLogicKey() string     { return "" }
+func (c *Creature) GetElement() string      { return "" }
+func (c *Creature) GetNarrativeTag() string { return "" }
 func (c *Creature) GetMatchTypes() []string { return []string{"identical"} }
 
 // Action représente une intention de la créature
@@ -137,7 +143,7 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 			return Action{Type: "idle"}
 		}
 
-		if len(emptyPlots) == 0 && world.IsGridSaturatedWithTraps() {
+		if world.IsGridSaturatedWithTraps() {
 			return Action{Type: "flee"}
 		}
 
@@ -152,7 +158,7 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 			var nearest entity.Position
 			minDist := 9999
 			for _, p := range emptyPlots {
-				d := abs(p.X-currentPos.X) + abs(p.Y-currentPos.Y)
+				d := entity.Abs(p.X-currentPos.X) + entity.Abs(p.Y-currentPos.Y)
 				if d < minDist {
 					minDist = d
 					nearest = p
@@ -165,10 +171,10 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 
 			dx, dy := nearest.X-currentPos.X, nearest.Y-currentPos.Y
 			var move entity.Position
-			if abs(dx) > abs(dy) {
-				move.X = sign(dx)
+			if entity.Abs(dx) > entity.Abs(dy) {
+				move.X = entity.Sign(dx)
 			} else {
-				move.Y = sign(dy)
+				move.Y = entity.Sign(dy)
 			}
 
 			if world.IsValidMove(entity.Position{X: currentPos.X + move.X, Y: currentPos.Y + move.Y}) {
@@ -188,7 +194,7 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 		for _, dir := range directions {
 			newPos := entity.Position{X: creaturePos.X + dir.X, Y: creaturePos.Y + dir.Y}
 			if world.IsValidMove(newPos) {
-				dist := abs(newPos.X-playerPos.X) + abs(newPos.Y-playerPos.Y)
+				dist := entity.Abs(newPos.X-playerPos.X) + entity.Abs(newPos.Y-playerPos.Y)
 				if dist > maxDist {
 					maxDist = dist
 					bestMove = dir
@@ -205,10 +211,10 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 		dy := playerPos.Y - creaturePos.Y
 
 		var move entity.Position
-		if abs(dx) > abs(dy) {
-			move.X = sign(dx)
+		if entity.Abs(dx) > entity.Abs(dy) {
+			move.X = entity.Sign(dx)
 		} else {
-			move.Y = sign(dy)
+			move.Y = entity.Sign(dy)
 		}
 
 		newPos := entity.Position{X: creaturePos.X + move.X, Y: creaturePos.Y + move.Y}
@@ -244,23 +250,6 @@ func randomMove(world WorldState, pos entity.Position) Action {
 	return Action{Type: "idle"}
 }
 
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
-func sign(x int) int {
-	if x < 0 {
-		return -1
-	}
-	if x > 0 {
-		return 1
-	}
-	return 0
-}
-
 // ============================================================================
 // FACTORY REFACTORISÉE (Intégration fine des règles de perception)
 // ============================================================================
@@ -285,6 +274,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMobility(component.Mobility{
 			CanMove: true,
 			Speed:   1,
+			Size:    component.SizeSmall,
+			Weight:  component.WeightLight,
 		})
 		c.SetMovementProfile(&MovementProfile{
 			Trigger:    MovementTrigger{Type: TriggerAuto},
@@ -298,7 +289,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("flying")
 		c.AddTag("passive")
 
@@ -310,6 +301,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMobility(component.Mobility{
 			CanMove: true,
 			Speed:   1,
+			Size:    component.SizeSmall,
+			Weight:  component.WeightLight,
 		})
 		c.SetMovementProfile(&MovementProfile{
 			Trigger: MovementTrigger{Type: TriggerProximity, Radius: 2},
@@ -340,6 +333,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMobility(component.Mobility{
 			CanMove: true,
 			Speed:   1,
+			Size:    component.SizeMedium,
+			Weight:  component.WeightMedium,
 		})
 		c.SetMovementProfile(&MovementProfile{
 			Trigger:    MovementTrigger{Type: TriggerProximity, Radius: 4},
@@ -354,7 +349,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideBounce},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("dangerous")
 		c.AddTag("aggressive")
 
@@ -367,21 +362,23 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMobility(component.Mobility{
 			CanMove: true,
 			Speed:   1,
+			Size:    component.SizeSmall,
+			Weight:  component.WeightLight,
 		})
 
-		// il faut faire 2 pas (translations) par côté.
-		squarePattern3x3 := []entity.Position{
-			{X: 1, Y: 0},  // 1 pas à Droite
-			{X: 0, Y: 1},  // 1 pas en Bas
-			{X: -1, Y: 0}, // 1 pas à Gauche
-			{X: 0, Y: -1}, // 1 pas en Haut
+		// Le burrower se déplace par rapport à lui-même : Droite -> Avant -> Gauche -> Arrière
+		relativePattern := []entity.Position{
+			{X: 1, Y: 0},  // Droite relative
+			{X: 0, Y: -1}, // Avant relatif
+			{X: -1, Y: 0}, // Gauche relative
+			{X: 0, Y: 1},  // Arrière relatif
 		}
 
 		c.SetMovementProfile(&MovementProfile{
 			Trigger: MovementTrigger{Type: TriggerAuto},
 			Navigation: NavigationLogic{
 				Type:        NavRelative,
-				PatrolRoute: squarePattern3x3,
+				PatrolRoute: relativePattern,
 				PatrolIndex: 0,
 			},
 			Mode: MovementMode{Type: ModeUnder},
@@ -396,7 +393,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"dirt", "soil"}},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("elusive")
 
 	case "specter":
@@ -407,6 +404,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMobility(component.Mobility{
 			CanMove: true,
 			Speed:   1,
+			Size:    component.SizeMedium,
+			Weight:  component.WeightLight,
 		})
 		// Utilise le profil global réécrit dans movement.go
 		c.SetMovementProfile(SpecterProfile())
@@ -423,6 +422,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMobility(component.Mobility{
 			CanMove: true,
 			Speed:   1,
+			Size:    component.SizeLarge,
+			Weight:  component.WeightHeavy,
 		})
 		// Se déplace une fois quand révélée, puis commence une patrouille basée sur son orientation
 		c.SetMovementProfile(&MovementProfile{
@@ -431,9 +432,10 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Mode:       MovementMode{Type: ModeNormal},
 			Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
 			Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+			Orientation: Orientation{Direction: entity.DirNorthEast},
 			Collision:  CollisionHandler{Type: CollideStop},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("static")
 
 	case "echo_hound":
@@ -444,6 +446,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMobility(component.Mobility{
 			CanMove: true,
 			Speed:   1,
+			Size:    component.SizeMedium,
+			Weight:  component.WeightMedium,
 		})
 		c.SetMovementProfile(&MovementProfile{
 			Trigger: MovementTrigger{Type: TriggerOnEcho},
@@ -461,7 +465,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("fast")
 
 	case "fleeing_sprite":
@@ -486,6 +490,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 		c.SetMobility(component.Mobility{
 			CanMove: true,
 			Speed:   1,
+			Size:    component.SizeMedium,
+			Weight:  component.WeightMedium,
 		})
 		c.SetMovementProfile(&MovementProfile{
 			Trigger:    MovementTrigger{Type: TriggerProximity, Radius: 4},
@@ -496,11 +502,13 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic:     AcousticSilent,
 				LeavesTracks: false, // Le singe mousse ne laisse pas de traces, mais des pièges
 			},
-			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Frequency: MovementFrequency{Type: FreqDelay, Delay: 1},
+			// NOTE: Le comportement du singe-mousse est validé. Son orientation Backward
+			// est intentionnelle pour son mode de déplacement "à reculons" ou sa zone de menace.
 			Orientation: Orientation{Direction: Backward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
-        c.SetThreatZone(ThreatCone)
+		c.SetThreatZone(ThreatCone)
 		c.AddTag("territorial")
 		c.AddTag("dangerous_on_reveal")
 		c.AddTag("climb")
@@ -564,7 +572,7 @@ func (c *Creature) GetLungeDirectionVector() (dx, dy float64) {
 }
 
 func (c *Creature) SetThreatZone(zone []entity.Direction) {
-    c.ThreatZone = zone
+	c.ThreatZone = zone
 }
 
 // IsPositionThreatened vérifie si une position cible est menacée par la créature

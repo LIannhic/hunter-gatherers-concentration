@@ -1,4 +1,4 @@
-package domain
+package system
 
 // TurnTimer gère le compte à rebours temps réel par tour.
 // Il simule la pression temporelle : l'inaction force une décision.

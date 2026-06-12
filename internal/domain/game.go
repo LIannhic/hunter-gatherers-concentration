@@ -14,6 +14,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/resource"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/structure"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/system"
 )
 
 // Ré-export des types principaux
@@ -31,9 +32,15 @@ type (
 	Direction     = entity.Direction
 	FlipDirection = entity.FlipDirection
 	PlotModifier  = board.PlotModifier
-	BiomeType     = board.BiomeType // Ajouté
-	Climate       = board.Climate   // Ajouté
-	Season        = board.Season    // Ajouté
+	BiomeType     = board.BiomeType
+	Climate       = board.Climate
+	Season        = board.Season
+
+	// World & Engine
+	World      = system.World
+	Engine     = system.Engine
+	TurnTimer  = system.TurnTimer
+	DebugState = system.DebugState
 
 	// Component
 	Component   = component.Component
@@ -156,4 +163,9 @@ var (
 	NewPhaseChangedEvent = event.NewPhaseChangedEvent
 
 	NewSaveData = persistence.NewSaveData
+
+	// Core World & Engine
+	NewWorld     = system.NewWorld
+	NewEngine    = system.NewEngine
+	NewTurnTimer = system.NewTurnTimer
 )

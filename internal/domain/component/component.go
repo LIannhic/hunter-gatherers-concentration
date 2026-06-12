@@ -151,9 +151,27 @@ type Mobility struct {
 	MovePattern  string // "static", "random", "hunter", "flee"
 	Speed        int    // Tuiles par tour
 	LastMoveTime time.Time
+	Size         Size
+	Weight       Weight
 }
 
 func (m Mobility) Type() string { return "mobility" }
+
+type Size int
+
+const (
+	SizeSmall Size = iota
+	SizeMedium
+	SizeLarge
+)
+
+type Weight int
+
+const (
+	WeightLight Weight = iota
+	WeightMedium
+	WeightHeavy
+)
 
 // Behavior pour IA des créatures
 type Behavior struct {
@@ -251,35 +269,48 @@ func (o *Orientation) ToVector() entity.Position {
 		return entity.Position{X: 0, Y: 1}
 	case entity.DirWest:
 		return entity.Position{X: -1, Y: 0}
+	case entity.DirNorthEast:
+		return entity.Position{X: 1, Y: -1}
+	case entity.DirSouthEast:
+		return entity.Position{X: 1, Y: 1}
+	case entity.DirSouthWest:
+		return entity.Position{X: -1, Y: 1}
+	case entity.DirNorthWest:
+		return entity.Position{X: -1, Y: -1}
 	}
 	return entity.Position{X: 0, Y: 0}
 }
 
 func (o *Orientation) Rotate(degrees int) {
-	steps := (degrees / 90) % 4
-	if steps < 0 {
-		steps += 4
-	}
-	o.Direction = entity.Direction((int(o.Direction) + steps) % 4)
+	o.Direction = entity.RotateDirection(o.Direction, degrees)
 }
 
 // MovingAnimation gère l'état d'un déplacement fluide dans le temps
 type MovingAnimation struct {
-	StartX, StartY           float64 // Position de départ (en pixels)
-	CurrentX, CurrentY       float64 // Position actuelle calculée (en pixels)
-	TargetGridX, TargetGridY int     // Case de destination (sur la grille)
-	CurrentTick              int     // Frame actuelle de l'animation
-	DurationTicks            int     // Durée totale souhaitée (ex: 15 ou 30 ticks)
+	StartX, StartY           float64
+	CurrentX, CurrentY       float64
+	TargetGridX, TargetGridY int
+	CurrentTick              int
+	DurationTicks            int
 }
 
 func (m MovingAnimation) Type() string { return "moving_animation" }
 
 // AttackingAnimation gère un décalage visuel brusque (lunge) sans changer la position logique
 type AttackingAnimation struct {
-	OffsetX, OffsetY float64 // Décalage en pixels
+	OffsetX, OffsetY float64
 	CurrentTick      int
 	DurationTicks    int
-	HitTarget        *entity.Position // Si non-nil, l'attaque a touché cette position
+	HitTarget        *entity.Position
 }
 
 func (a AttackingAnimation) Type() string { return "attacking_animation" }
+
+type RotationAnimation struct {
+	CurrentAngle  float64
+	TargetAngle   float64
+	DurationTicks int
+	CurrentTick   int
+}
+
+func (r RotationAnimation) Type() string { return "rotation_animation" }

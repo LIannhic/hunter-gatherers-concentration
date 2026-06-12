@@ -15,9 +15,8 @@ cmd/game              # Point d'entrée
         
     /domain           # Cœur métier (pur, testable)
         README.md     # Documentation des patterns
-        game.go       # Ré-export des types
-        system.go     # World, Systems, Engine (CreatureAISystem, CreatureMovementSystem)
-        timer.go      # Compte à rebours temps réel par tour (TurnTimer)
+        game.go       # Ré-export des types (Façade)
+        /system       # Logique centrale (World, Engine, ECS Systems)
         /board        # Plateau, grilles, positions (gère la géométrie)
         /entity       # Identités, Manager, États (TileState, Type)
         /component    # Données ECS (Lifecycle, Matchable...)
@@ -73,8 +72,8 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
 
 - **Entities** : Chaque entité (créature, ressource, structure, piège) possède :
   - Un identifiant unique (ID)
-  - Une position sur la grille
-  - Un état (TileState : Hidden, Revealed, Matched, Blocked)
+  - Une position sur une grille
+  - Un état (TileState : Hidden, Revealed, Matched, Blocked, Cumuled)
   - Des tags dynamiques pour le comportement ou le rendu (ex: `moss_lure`, `dangerous_on_reveal`)
   - Des composants optionnels (Lifecycle, Matchable, CreatureAI, etc.)
   - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (Forward, Backward, Left, Right). Supporte **8 directions cardinales et ordinales** transformées par sa matrice D4.
@@ -87,7 +86,10 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles. Les transformations sont cumulatives (`apply * current`).
   - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2). Cela influence les règles de match et le rendu (échelle x1.15 par niveau si révélé).
 
-- **Systems** : Mettent à jour l'état du monde
+- **Systems** : Mettent à jour l'état du monde via l'**Engine** (`engine.go`).
+  - **Engine** : Chef d'orchestre du domaine. Il sépare la logique en deux cycles :
+    - `Update()` : Cycle par tour (IA, maturation, fin de tour).
+    - `UpdateFrame(dt)` : Cycle temps réel à 60 FPS (Timers, évènements UI, prévisualisation).
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
   - **ResourceLifecycleSystem** : Gère la maturation des ressources

@@ -286,7 +286,7 @@ func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
 		mid := tileSize / 2
 		dx := localX - mid
 		dy := localY - mid
-		if abs(dx) > abs(dy) {
+		if Abs(dx) > Abs(dy) {
 			if dx < 0 {
 				horizontal = 0
 			} else {
@@ -333,11 +333,54 @@ func CalculateFlipDirection(tileSize, localX, localY int) FlipDirection {
 	return FlipTop // Fallback
 }
 
-func abs(x int) int {
+// RotateDirection fait pivoter une direction d'un certain nombre de degrés.
+// Supporte les multiples de 45°.
+func RotateDirection(d Direction, degrees int) Direction {
+	// Map des directions ordonnées circulairement (pas de 45°)
+	// N, NE, E, SE, S, SW, W, NW
+	order := []Direction{
+		DirNorth, DirNorthEast, DirEast, DirSouthEast,
+		DirSouth, DirSouthWest, DirWest, DirNorthWest,
+	}
+
+	// Trouve l'index actuel
+	currentIdx := -1
+	for i, dir := range order {
+		if dir == d {
+			currentIdx = i
+			break
+		}
+	}
+
+	if currentIdx == -1 {
+		return d
+	}
+
+	// Calcule le nombre de pas de 45°
+	steps := degrees / 45
+	newIdx := (currentIdx + steps) % len(order)
+	if newIdx < 0 {
+		newIdx += len(order)
+	}
+
+	return order[newIdx]
+}
+
+func Abs(x int) int {
 	if x < 0 {
 		return -x
 	}
 	return x
+}
+
+func Sign(x int) int {
+	if x < 0 {
+		return -1
+	}
+	if x > 0 {
+		return 1
+	}
+	return 0
 }
 
 func (t Type) String() string {

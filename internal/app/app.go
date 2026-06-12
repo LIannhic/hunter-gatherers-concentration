@@ -395,14 +395,12 @@ func (app *Application) setupDebugCallbacks() {
 		for _, gID := range app.World.GridOrder {
 			if grid, ok := app.World.GetGrid(gID); ok {
 				for _, tile := range grid.Plots {
-					if len(tile.EntitiesID) == 0 {
-						continue
-					}
-					topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
-						if e.GetState()&entity.Hidden != 0 {
-							e.SetState(entity.Revealed)
-							app.Engine.TrackTileReveal(tile.Position)
+					for _, id := range tile.EntitiesID {
+						if e, ok := app.World.Entities.Get(entity.ID(id)); ok {
+							if e.GetState()&entity.Hidden != 0 {
+								e.SetState(entity.Revealed)
+								// NOTE: On ne tracke pas la révélation pour les cheats (sinon les stone wardens bougent)
+							}
 						}
 					}
 				}
@@ -418,12 +416,10 @@ func (app *Application) setupDebugCallbacks() {
 		for _, gID := range app.World.GridOrder {
 			if grid, ok := app.World.GetGrid(gID); ok {
 				for _, tile := range grid.Plots {
-					if len(tile.EntitiesID) == 0 {
-						continue
-					}
-					topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-					if e, ok := app.World.Entities.Get(entity.ID(topID)); ok {
-						e.SetState(entity.Hidden)
+					for _, id := range tile.EntitiesID {
+						if e, ok := app.World.Entities.Get(entity.ID(id)); ok {
+							e.SetState(entity.Hidden)
+						}
 					}
 				}
 			}
@@ -500,7 +496,10 @@ func (app *Application) setupEventSubscriptions() {
 		flipDir, ok5 := e.Payload["flip_direction"].(entity.FlipDirection)
 
 		if ok1 && ok3 && ok4 && ok5 {
-			app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y})
+			// On ne tracke la révélation pour l'IA que si c'est une action du joueur
+			if reason, ok := e.Payload["reason"].(string); ok && reason == "player_action" {
+				app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y})
+			}
 
 			var entState entity.TileState
 			var startTrans, endTrans entity.Transformation
@@ -675,44 +674,23 @@ func (app *Application) updatePlaying() error {
 		// mais on laisse passer le reste pour permettre de voir les effets en temps réel.
 	}
 
-	app.Engine.UpdateFrame()
+	// Calcul du delta-temps (dt)
+	dt := 1.0 / 60.0
 
-	if app.World.TurnTimer != nil {
-		dt := 1.0 / 60.0
-
-		isPortalZone := app.World.DreamPlane != nil && (app.World.CurrentGridID == app.World.DreamPlane.StartZoneID || app.World.CurrentGridID == app.World.DreamPlane.EndZoneID)
-		if isPortalZone {
-			dt = 0
-		}
-
-		if app.Input.IsPortablePortalMode() {
-			dt /= 5.0
-		}
-
-		if len(app.World.Components.QueryByComponent("moving_animation")) > 0 {
-			dt /= 4.0
-		}
-
-		if app.World.TurnTimer.Update(dt) {
-			fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
-			app.Input.ResetTimerSkip()
-			app.World.TurnTimer.Reset()
-		}
-
-		// Update max time from debug if overridden
-		if app.World.Debug.OverrideDifficulty {
-			if app.World.TurnTimer.MaxTime != app.World.Debug.Difficulty.TurnTimerDuration {
-				app.World.TurnTimer.SetMaxTime(app.World.Debug.Difficulty.TurnTimerDuration)
-			}
-		} else {
-			if app.World.TurnTimer.MaxTime != app.World.Difficulty.TurnTimerDuration {
-				app.World.TurnTimer.SetMaxTime(app.World.Difficulty.TurnTimerDuration)
-			}
-		}
+	isPortalZone := app.World.DreamPlane != nil && (app.World.CurrentGridID == app.World.DreamPlane.StartZoneID || app.World.CurrentGridID == app.World.DreamPlane.EndZoneID)
+	if isPortalZone {
+		dt = 0
 	}
 
-	app.HUD.Update()
-	app.World.EventBus.ProcessQueue()
+	if app.Input.IsPortablePortalMode() {
+		dt /= 5.0
+	}
+
+	if len(app.World.Components.QueryByComponent("moving_animation")) > 0 {
+		dt /= 4.0
+	}
+
+	app.Engine.UpdateFrame(dt)
 
 	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")

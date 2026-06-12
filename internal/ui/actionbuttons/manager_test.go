@@ -44,8 +44,8 @@ func TestButtonActivationAtRest(t *testing.T) {
 	if !states[BtnEndTurn].Active {
 		t.Error("EndTurn should always be active")
 	}
-	if !states[BtnMenu].Active {
-		t.Error("Menu should always be active")
+	if !states[BtnMerge].Active {
+		t.Error("Merge should always be active")
 	}
 }
 
@@ -218,7 +218,7 @@ func TestAphasiaAltersLabels(t *testing.T) {
 
 	// Ensure at least one label differs from the base label at the same index
 	diff := false
-	base := [4]string{"MATCH", "SKIP", "TURN", "MENU"}
+	base := [4]string{"MATCH", "SKIP", "TURN", "MERGE"}
 	for i := 0; i < 4; i++ {
 		if states[i].Label != base[i] {
 			diff = true

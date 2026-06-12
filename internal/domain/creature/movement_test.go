@@ -63,7 +63,7 @@ func TestNavigationWander(t *testing.T) {
 	dir := nav.wander(nil, nil)
 
 	// Vérifie que la direction est valide (une seule composante non nulle)
-	absSum := abs(dir.X) + abs(dir.Y)
+	absSum := entity.Abs(dir.X) + entity.Abs(dir.Y)
 	if absSum != 1 {
 		t.Errorf("Wander should return a cardinal direction, got %v", dir)
 	}
@@ -83,6 +83,58 @@ func TestNavigationOrientation(t *testing.T) {
 
 	if dir.X != 0 || dir.Y != -1 {
 		t.Errorf("Expected north direction (0,-1), got %v", dir)
+	}
+}
+
+func TestCreatureOrientationRespectsTransformation(t *testing.T) {
+	creature := New("test", entity.Position{X: 0, Y: 0})
+	creature.SetMovementProfile(&MovementProfile{
+		Orientation: Orientation{Direction: DirNorth},
+	})
+	creature.SetTransformation(entity.TransRot90)
+
+	if creature.GetOrientation() != DirEast {
+		t.Errorf("Expected transformed orientation to be East, got %v", creature.GetOrientation())
+	}
+}
+
+type mockWorldQuery struct{}
+
+func (m *mockWorldQuery) GetPlayerPosition() entity.Position                             { return entity.Position{} }
+func (m *mockWorldQuery) GetNearbyCreatures(pos entity.Position, radius int) []*Creature { return nil }
+func (m *mockWorldQuery) GetResources(pos entity.Position, radius int) []string          { return nil }
+func (m *mockWorldQuery) IsValidMove(pos entity.Position) bool                           { return true }
+func (m *mockWorldQuery) GetTileState(pos entity.Position) string                        { return "" }
+func (m *mockWorldQuery) GetEmptyPlots() []entity.Position                               { return nil }
+func (m *mockWorldQuery) GetGridTotalPlots() int                                         { return 0 }
+func (m *mockWorldQuery) IsGridSaturatedWithTraps() bool                                 { return false }
+func (m *mockWorldQuery) HasActivityNearby(pos entity.Position, radius int) bool         { return false }
+func (m *mockWorldQuery) IsTileRevealed(pos entity.Position) bool                        { return false }
+func (m *mockWorldQuery) WasTileRecentlyRevealed(pos entity.Position) bool               { return false }
+func (m *mockWorldQuery) FindNearestTarget(from entity.Position, targetType TargetType) *entity.Position {
+	return nil
+}
+func (m *mockWorldQuery) GetTileType(pos entity.Position) string            { return "" }
+func (m *mockWorldQuery) GetEntitiesAt(pos entity.Position) []entity.Entity { return nil }
+func (m *mockWorldQuery) IsWalkable(c *Creature, pos entity.Position) bool  { return true }
+
+func TestNavigationRelativeUsesTransformedOrientation(t *testing.T) {
+	creature := New("test", entity.Position{X: 0, Y: 0})
+	creature.SetMovementProfile(&MovementProfile{
+		Orientation: Orientation{Direction: Forward},
+		Navigation: NavigationLogic{
+			Type:        NavRelative,
+			PatrolRoute: []entity.Position{{X: 0, Y: -1}},
+			PatrolIndex: 0,
+		},
+	})
+	creature.SetTransformation(entity.TransRot90)
+
+	nav := creature.MovementProfile.Navigation
+	dir := nav.relative(&mockWorldQuery{}, creature)
+
+	if dir.X != 1 || dir.Y != 0 {
+		t.Errorf("Expected relative movement to go East after tile rotation, got %v", dir)
 	}
 }
 
@@ -436,7 +488,7 @@ func TestSign(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		result := Sign(tc.input)
+		result := entity.Sign(tc.input)
 		if result != tc.expected {
 			t.Errorf("Sign(%d): expected %d, got %d", tc.input, tc.expected, result)
 		}

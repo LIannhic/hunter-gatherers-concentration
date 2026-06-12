@@ -653,7 +653,7 @@ func (b BorderPosition) GetInwardDirection() entity.Direction {
 	}
 }
 
-// IsLookingAt vérifie si le joueur regarde vers une position donnée.
+// IsLookingAt vérifie si le joueur regarde vers une position donnée (Champ de vision 180° depuis l'arête).
 func (p *Player) IsLookingAt(target entity.Position) bool {
 	dir := p.anchor.GetInwardDirection()
 	playerPos := p.Position
@@ -661,14 +661,20 @@ func (p *Player) IsLookingAt(target entity.Position) bool {
 	dx := target.X - playerPos.X
 	dy := target.Y - playerPos.Y
 
+	// La validation dépend de l'ancrage et de la direction intérieure.
+	// Le joueur regarde vers l'intérieur du plateau depuis sa bordure.
 	switch dir {
 	case entity.DirNorth:
+		// Joueur en bas, regarde vers le haut (Y diminue)
 		return dy < 0
 	case entity.DirSouth:
+		// Joueur en haut, regarde vers le bas (Y augmente)
 		return dy > 0
 	case entity.DirEast:
+		// Joueur à gauche, regarde vers la droite (X augmente)
 		return dx > 0
 	case entity.DirWest:
+		// Joueur à droite, regarde vers la gauche (X diminue)
 		return dx < 0
 	}
 	return false

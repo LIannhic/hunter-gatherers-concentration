@@ -2,6 +2,8 @@ package player
 
 import (
 	"testing"
+
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
 func TestNewPlayer(t *testing.T) {
@@ -253,5 +255,40 @@ func TestInventoryFull(t *testing.T) {
 	err = inv.AddResource("item2", 1)
 	if err == nil {
 		t.Error("Should not be able to add when inventory is full")
+	}
+}
+
+func TestIsLookingAt(t *testing.T) {
+	p := New("player1")
+	p.Position = entity.Position{X: 2, Y: 2}
+
+	// Case 1: Anchor Top (regarde vers le bas)
+	p.anchor = BorderTop // GetInwardDirection -> DirSouth
+	if !p.IsLookingAt(entity.Position{X: 2, Y: 3}) {
+		t.Error("Should be looking at target below when anchored top")
+	}
+	if p.IsLookingAt(entity.Position{X: 2, Y: 1}) {
+		t.Error("Should NOT be looking at target above when anchored top")
+	}
+
+	// Case 2: Anchor Left (regarde vers la droite)
+	p.anchor = BorderLeft // GetInwardDirection -> DirEast
+	if !p.IsLookingAt(entity.Position{X: 3, Y: 2}) {
+		t.Error("Should be looking at target on the right when anchored left")
+	}
+	if p.IsLookingAt(entity.Position{X: 1, Y: 2}) {
+		t.Error("Should NOT be looking at target on the left when anchored left")
+	}
+
+	// Case 3: Anchor Bottom (regarde vers le haut)
+	p.anchor = BorderBottom // GetInwardDirection -> DirNorth
+	if !p.IsLookingAt(entity.Position{X: 2, Y: 1}) {
+		t.Error("Should be looking at target above when anchored bottom")
+	}
+
+	// Case 4: Anchor Right (regarde vers la gauche)
+	p.anchor = BorderRight // GetInwardDirection -> DirWest
+	if !p.IsLookingAt(entity.Position{X: 1, Y: 2}) {
+		t.Error("Should be looking at target on the left when anchored right")
 	}
 }

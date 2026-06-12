@@ -168,6 +168,18 @@ func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, fl
 
 // UpdateAnimations met à jour toutes les animations de flip, survol et rebond
 func (r *BoardRenderer) UpdateAnimations(world *domain.World) {
+	// --- Mise à jour des rotations (ECS) ---
+	rotationIDs := world.Components.QueryByComponent("rotation_animation")
+	for _, id := range rotationIDs {
+		if comp, ok := world.Components.Get(id, "rotation_animation"); ok {
+			ra := comp.(*component.RotationAnimation)
+			ra.CurrentTick++
+			if ra.CurrentTick >= ra.DurationTicks {
+				world.Components.Remove(id, "rotation_animation")
+			}
+		}
+	}
+
 	for key, anim := range r.flipAnimations {
 		anim.Progress += anim.Speed
 		if anim.Progress >= 1.0 {
@@ -875,9 +887,25 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 					r.renderSingleTileIDAt(screen, sx, sy, gridID, underID, world, forceReveal, 1.0)
 				}
 			} else {
-				// Rendu normal de la tuile au sommet (état stable)
-				r.renderSingleTileIDAt(screen, sx, sy, gridID, topID, world, forceReveal, 1.0)
-			}
+                // EFFET PEEK : Si la tuile du dessus est en train de se retourner (FlipAnimation active),
+                // et qu'il y a une tuile en dessous, on dessine d'abord la tuile du dessous en forçant son reveal visuel.
+                var topIsFlipping bool
+                for _, anim := range r.flipAnimations {
+                   if anim.EntityID == topID && (gridID == "" || anim.GridID == gridID) && anim.IsActive() {
+                      topIsFlipping = true
+                      break
+                   }
+                }
+
+                if topIsFlipping && len(plot.EntitiesID) > 1 {
+                   underID := plot.EntitiesID[len(plot.EntitiesID)-2]
+                   // On passe forceReveal à true pour que le joueur puisse entrevoir la tuile inférieure pendant l'animation
+                   r.renderSingleTileIDAt(screen, sx, sy, gridID, underID, world, true, 1.0)
+                }
+
+                // Rendu normal de la tuile au sommet (qui dessinera le flip 3D par-dessus)
+                r.renderSingleTileIDAt(screen, sx, sy, gridID, topID, world, forceReveal, 1.0)
+            }
 		}
 	}
 }
@@ -912,6 +940,18 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 		aa := comp.(*component.AttackingAnimation)
 		x += aa.OffsetX
 		y += aa.OffsetY
+	}
+
+	// Gestion de l'angle de rotation (Bounce/NavOrientation)
+	var rotationAngle float64
+	if comp, ok := world.Components.Get(entityID, "rotation_animation"); ok {
+		ra := comp.(*component.RotationAnimation)
+		t := float64(ra.CurrentTick) / float64(ra.DurationTicks)
+		if t > 1 {
+			t = 1
+		}
+		// Interpolation simple de l'angle de rotation relatif (0 -> TargetAngle)
+		rotationAngle = (ra.TargetAngle - ra.CurrentAngle) * t
 	}
 
 	visualState := ent.GetState()
@@ -969,6 +1009,18 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 
 	geo := r.generateIdleGeometry(tx, ty, entityID, theme.HiddenBorder)
 	r.ApplyBoardRotation(geo.V, cx, cy)
+
+	// --- ROTATION DYNAMIQUE (BOUNCE) ---
+	if rotationAngle != 0 {
+		angleRad := rotationAngle * math.Pi / 180
+		cosA, sinA := float32(math.Cos(angleRad)), float32(math.Sin(angleRad))
+		for i := range geo.V {
+			relX := geo.V[i].DstX - cx
+			relY := geo.V[i].DstY - cy
+			geo.V[i].DstX = cx + relX*cosA - relY*sinA
+			geo.V[i].DstY = cy + relX*sinA + relY*cosA
+		}
+	}
 
 	// --- CUMUL : Mise à l'échelle et couleur (Uniquement si RÉVÉLÉ) ---
 	if (visualState&entity.Revealed != 0 || visualState&entity.Matched != 0) && ent.GetCumulationLevel() > 0 {
