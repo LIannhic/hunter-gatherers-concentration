@@ -887,9 +887,25 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 					r.renderSingleTileIDAt(screen, sx, sy, gridID, underID, world, forceReveal, 1.0)
 				}
 			} else {
-				// Rendu normal de la tuile au sommet (état stable)
-				r.renderSingleTileIDAt(screen, sx, sy, gridID, topID, world, forceReveal, 1.0)
-			}
+                // EFFET PEEK : Si la tuile du dessus est en train de se retourner (FlipAnimation active),
+                // et qu'il y a une tuile en dessous, on dessine d'abord la tuile du dessous en forçant son reveal visuel.
+                var topIsFlipping bool
+                for _, anim := range r.flipAnimations {
+                   if anim.EntityID == topID && (gridID == "" || anim.GridID == gridID) && anim.IsActive() {
+                      topIsFlipping = true
+                      break
+                   }
+                }
+
+                if topIsFlipping && len(plot.EntitiesID) > 1 {
+                   underID := plot.EntitiesID[len(plot.EntitiesID)-2]
+                   // On passe forceReveal à true pour que le joueur puisse entrevoir la tuile inférieure pendant l'animation
+                   r.renderSingleTileIDAt(screen, sx, sy, gridID, underID, world, true, 1.0)
+                }
+
+                // Rendu normal de la tuile au sommet (qui dessinera le flip 3D par-dessus)
+                r.renderSingleTileIDAt(screen, sx, sy, gridID, topID, world, forceReveal, 1.0)
+            }
 		}
 	}
 }
