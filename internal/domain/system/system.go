@@ -560,7 +560,7 @@ func (s *CreatureAISystem) Update(world *World) {
 				}
 			}
 
-			newPlot.EntitiesID = append(newPlot.EntitiesID, idStr)
+			newPlot.PushEntity(idStr)
 			world.Entities.UpdatePosition(c.GetID(), newPos)
 
 			world.EventBus.Publish(event.NewCreatureMovedEvent(
@@ -575,8 +575,8 @@ func (s *CreatureAISystem) Update(world *World) {
 					id := string(trap.GetID())
 					grid.RemoveEntity(pos, id)
 					if plot, err := grid.Get(pos); err == nil {
-						// On insère le piège à l'index 0 (tout en bas de la pile)
-						plot.EntitiesID = append([]string{id}, plot.EntitiesID...)
+						// On insère le piège au bas de la pile
+						plot.PushEntityToBottom(id)
 					}
 				}
 				fmt.Printf("[ACTION] %s a posé un piège à %v\n", c.Species, c.GetPosition())
@@ -996,13 +996,11 @@ func (s *CreatureMovementSystem) doMove(c *creature.Creature, oldPos, newPos ent
 		return false
 	}
 
-	// On ne supprime plus les pièges, on les ignore (Z-sorting via slice manipulation)
+	// On ne supprime plus les pièges, on les ignore (Z-sorting via méthodes de Plot)
 	if mode == creature.ModeUnder {
-		// Prepend (Au tout début du tableau pour être en dessous)
-		plot.EntitiesID = append([]string{idStr}, plot.EntitiesID...)
+		plot.PushEntityToBottom(idStr)
 	} else {
-		// Append (A la fin du tableau pour être au sommet)
-		plot.EntitiesID = append(plot.EntitiesID, idStr)
+		plot.PushEntity(idStr)
 	}
 
 	world.Entities.UpdatePosition(c.GetID(), newPos)
