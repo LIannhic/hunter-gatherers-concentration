@@ -109,8 +109,17 @@ Le système de progression immédiate sur le plateau repose sur le choix du joue
 - **MATCH** : Capture une paire identique de même niveau.
     - **Coût** : 1 Mana.
     - **Résultat** : Les deux tuiles sont supprimées et transformées en **Butin** (Loot).
+    - **Gain de Score** : Chaque match rapporte **10 XP** au score total.
     - **Scaling** : Un match de haut niveau produit un butin de plus grande valeur.
 - **Révélation** : Retourner une tuile cumulée (Niv.1+) consomme du Mana égal à son niveau.
+
+### Système de Score et XP
+
+La progression du joueur est quantifiée par l'expérience (XP) acquise lors de ses actions :
+- **En cours de partie** : +10 XP par association réussie.
+- **Extraction** : La valeur du butin sécurisé est convertie en XP bonus lors du franchissement du portail (100 XP par ressource, 250 XP par créature).
+- **Persistance** : Le score final (Total XP) est enregistré dans le profil du joueur, mettant à jour le "Dernier score" et le "Score Max".
+- **Level-up** : Accumuler assez d'XP augmente le niveau du personnage, améliorant sa Santé et son Mana maximum.
 
 ### Feedback Visuel et Prudence (Hover)
 

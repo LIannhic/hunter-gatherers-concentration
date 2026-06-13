@@ -191,6 +191,18 @@ func NewApplication() (*Application, error) {
 	}
 
 	app.Input.OnVictory = func() {
+		// Calcul des gains d'XP basés sur le butin
+		totalXP := 0
+		for _, item := range app.World.Player.Inventory.Items {
+			switch item.OriginalType {
+			case entity.TypeResource:
+				totalXP += 100
+			case entity.TypeCreature:
+				totalXP += 250
+			}
+		}
+		app.World.Player.GainExperience(totalXP)
+
 		app.HUD.ShowVictory()
 	}
 
@@ -489,6 +501,11 @@ func (app *Application) setupDebugCallbacks() {
 
 // setupEventSubscriptions connecte l'EventBus aux animations graphiques du Renderer.
 func (app *Application) setupEventSubscriptions() {
+	app.World.EventBus.SubscribeFunc(event.TileMatched, func(e event.Event) {
+		// On donne 10 XP pour chaque match réussi
+		app.World.Player.GainExperience(10)
+	})
+
 	app.World.EventBus.SubscribeFunc(event.TileRevealed, func(e event.Event) {
 		position, ok1 := e.Payload["position"].(entity.Position)
 		entityID, ok3 := e.Payload["entity_id"].(string)
@@ -698,7 +715,8 @@ func (app *Application) updatePlaying() error {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
 
 		diff := string(app.World.Difficulty.Level)
-		if err := app.Persistence.HandleDeath(app.World.Hub, app.World.Player, diff); err != nil {
+		duration := time.Since(app.sessionStartTime).Seconds()
+		if err := app.Persistence.HandleDeath(app.World.Hub, app.World.Player, diff, duration); err != nil {
 			fmt.Printf("[SAVE] Erreur lors de la mise à jour du compteur de décès : %v\n", err)
 		}
 		app.State = domain.StateGameOver
@@ -804,7 +822,9 @@ func (app *Application) StartGameWithSlot(slotID int) {
 	}
 
 	if save != nil {
-		save.Meta.SessionCount++
+		if err := app.Persistence.IncrementSessionCount(save.Meta.SlotID); err != nil {
+			fmt.Printf("[SAVE] Error incrementing session count: %v\n", err)
+		}
 		app.sessionStartTime = time.Now()
 
 		app.World.Hub = meta.NewHub()

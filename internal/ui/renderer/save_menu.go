@@ -47,16 +47,16 @@ func NewSaveMenu() *SaveMenu {
 		width:  1280,
 		height: 720,
 		slotRects: []Rect{
-			{X: 365, Y: 150, W: 500, H: 100},
-			{X: 365, Y: 260, W: 500, H: 100},
-			{X: 365, Y: 370, W: 500, H: 100},
+			{X: 365, Y: 130, W: 500, H: 160},
+			{X: 365, Y: 300, W: 500, H: 160},
+			{X: 365, Y: 470, W: 500, H: 160},
 		},
 		deleteRects: []Rect{
-			{X: 875, Y: 150, W: 40, H: 100},
-			{X: 875, Y: 260, W: 40, H: 100},
-			{X: 875, Y: 370, W: 40, H: 100},
+			{X: 875, Y: 130, W: 40, H: 160},
+			{X: 875, Y: 300, W: 40, H: 160},
+			{X: 875, Y: 470, W: 40, H: 160},
 		},
-		backRect: Rect{X: 235, Y: 90, W: 140, H: 60},
+		backRect: Rect{X: 235, Y: 60, W: 140, H: 60},
 	}
 	return sm
 }
@@ -128,21 +128,40 @@ func (m *SaveMenu) drawSlot(screen *ebiten.Image, id int) {
 	vector.StrokeRect(screen, float32(r.X), float32(r.Y), float32(r.W), float32(r.H), 2, borderColor, true)
 
 	if slotMeta == nil {
-		text.Draw(screen, fmt.Sprintf("SLOT %d : VIDE", id), basicfont.Face7x13, r.X+20, r.Y+55, color.Gray{150})
-		text.Draw(screen, "[ CLIQUEZ POUR NOUVEAU PROFIL ]", basicfont.Face7x13, r.X+250, r.Y+55, color.White)
+		text.Draw(screen, fmt.Sprintf("SLOT %d : VIDE", id), basicfont.Face7x13, r.X+20, r.Y+85, color.Gray{150})
+		text.Draw(screen, "[ CLIQUEZ POUR NOUVEAU PROFIL ]", basicfont.Face7x13, r.X+200, r.Y+85, color.White)
 	} else {
 		// Infos slot
-		text.Draw(screen, fmt.Sprintf("SLOT %d", id), basicfont.Face7x13, r.X+20, r.Y+30, color.RGBA{100, 150, 255, 255})
+		titleColor := color.RGBA{100, 150, 255, 255}
+		text.Draw(screen, fmt.Sprintf("SLOT %d - %s", id, slotMeta.Difficulty), basicfont.Face7x13, r.X+20, r.Y+30, titleColor)
+
+		createdStr := slotMeta.CreatedAt.Format("02/01/2006")
+		text.Draw(screen, "Cree le : "+createdStr, basicfont.Face7x13, r.X+20, r.Y+55, color.Gray{150})
+
 		dateStr := slotMeta.UpdatedAt.Format("02/01/2006 15:04")
-		text.Draw(screen, "Dernier jeu : "+dateStr, basicfont.Face7x13, r.X+20, r.Y+55, color.White)
+		text.Draw(screen, "Dernier jeu : "+dateStr, basicfont.Face7x13, r.X+20, r.Y+80, color.White)
+
+		playtimeStr := formatDuration(slotMeta.TotalPlaytime)
+		text.Draw(screen, "Temps de jeu : "+playtimeStr, basicfont.Face7x13, r.X+20, r.Y+105, color.RGBA{200, 200, 100, 255})
+
 		stats := fmt.Sprintf("Expeditions : %d | Morts : %d", slotMeta.SessionCount, slotMeta.DeathCount)
-		text.Draw(screen, stats, basicfont.Face7x13, r.X+20, r.Y+80, color.Gray{180})
+		text.Draw(screen, stats, basicfont.Face7x13, r.X+20, r.Y+130, color.Gray{180})
+
+		scoreStr := fmt.Sprintf("Score Max : %d | Dernier : %d", slotMeta.MaxScore, slotMeta.LastScore)
+		text.Draw(screen, scoreStr, basicfont.Face7x13, r.X+250, r.Y+130, color.RGBA{100, 200, 100, 255})
 
 		// Bouton Supprimer (X)
 		dr := m.deleteRects[id-1]
 		vector.DrawFilledRect(screen, float32(dr.X), float32(dr.Y), float32(dr.W), float32(dr.H), color.RGBA{80, 30, 30, 255}, true)
-		text.Draw(screen, "X", basicfont.Face7x13, dr.X+15, dr.Y+55, color.White)
+		text.Draw(screen, "X", basicfont.Face7x13, dr.X+15, dr.Y+85, color.White)
 	}
+}
+
+func formatDuration(seconds float64) string {
+	h := int(seconds) / 3600
+	m := (int(seconds) % 3600) / 60
+	s := int(seconds) % 60
+	return fmt.Sprintf("%02dh %02dm %02ds", h, m, s)
 }
 
 func (m *SaveMenu) drawConfirmation(screen *ebiten.Image) {
