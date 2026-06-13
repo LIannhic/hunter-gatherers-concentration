@@ -664,3 +664,154 @@ func (r *BoardRenderer) renderEarthquakeTile360(screen *ebiten.Image, x, y float
 		r.renderFlippingEntityTriangles(screen, g.V[:4], ent, entity.TransIdentity)
 	}
 }
+
+// drawElasticFilament dessine le rectangle blanc uni qui s'amincit sur le bon axe (X ou Y) selon la direction
+func (r *BoardRenderer) drawElasticFilament(screen *ebiten.Image, px, py, cx, cy float64, progress float64, themeName string) {
+	if progress >= 0.85 {
+		return
+	}
+
+	dx := cx - px
+	dy := cy - py
+	isVertical := math.Abs(dy) > math.Abs(dx)
+
+	whiteImg := r.assets.GetImage("white")
+	if whiteImg == nil {
+		return
+	}
+
+	alpha := float32(1.0 - (progress / 0.85))
+	var p1X, p1Y, p2X, p2Y, c1X, c1Y, c2X, c2Y float64
+
+	if isVertical {
+		// Mouvement vertical : le filament est une bande horizontale qui s'amincit en HAUTEUR (Y)
+		// L'amincissement se produit surtout en phase 2 (quand la traîne remonte)
+		thickness := r.tileSize * 0.4
+		if progress > 0.5 {
+			thickness *= (1.0 - progress) * 2.0
+		}
+
+		// On trace le rectangle entre la frontière des deux cases
+		midY := (py + cy) / 2
+		p1X, p1Y = px-r.tileSize*0.4, midY-thickness*0.5
+		p2X, p2Y = px+r.tileSize*0.4, midY-thickness*0.5
+		c1X, c1Y = px+r.tileSize*0.4, midY+thickness*0.5
+		c2X, c2Y = px-r.tileSize*0.4, midY+thickness*0.5
+	} else {
+		// Mouvement horizontal : le filament est une bande verticale qui s'amincit en LARGEUR (X)
+		thickness := r.tileSize * 0.4
+		if progress > 0.5 {
+			thickness *= (1.0 - progress) * 2.0
+		}
+
+		midX := (px + cx) / 2
+		p1X, p1Y = midX-thickness*0.5, py-r.tileSize*0.4
+		p2X, p2Y = midX+thickness*0.5, py-r.tileSize*0.4
+		c1X, c1Y = midX+thickness*0.5, py+r.tileSize*0.4
+		c2X, c2Y = midX-thickness*0.5, py+r.tileSize*0.4
+	}
+
+	vs := []ebiten.Vertex{
+		{DstX: float32(p1X), DstY: float32(p1Y), SrcX: 0, SrcY: 0, ColorR: 1, ColorG: 1, ColorB: 1, ColorA: alpha},
+		{DstX: float32(p2X), DstY: float32(p2Y), SrcX: 1, SrcY: 0, ColorR: 1, ColorG: 1, ColorB: 1, ColorA: alpha},
+		{DstX: float32(c1X), DstY: float32(c1Y), SrcX: 1, SrcY: 1, ColorR: 1, ColorG: 1, ColorB: 1, ColorA: alpha},
+		{DstX: float32(c2X), DstY: float32(c2Y), SrcX: 0, SrcY: 1, ColorR: 1, ColorG: 1, ColorB: 1, ColorA: alpha},
+	}
+	indices := []uint16{0, 1, 2, 0, 2, 3}
+	screen.DrawTriangles(vs, indices, whiteImg, nil)
+}
+
+// renderPropagatingChildTile anime les 4 angles de la tuile de manière asynchrone (Tête puis Traîne)
+func (r *BoardRenderer) renderPropagatingChildTile(screen *ebiten.Image, x, y, px, py float64, progress float64, world *domain.World, entityID string, themeName string) {
+	theme := r.assets.GetTheme(themeName)
+
+	// On génère la géométrie de départ sur la case PARENTE (px, py)
+	margin := (r.tileSize - ui.FaceSize) / 2
+	parentTileX := px - r.tileSize/2
+	parentTileY := py - r.tileSize/2
+	geo := r.generateIdleGeometry(float32(parentTileX+margin), float32(parentTileY+margin), entityID, theme.HiddenBorder)
+
+	// Calcul du vecteur total de déplacement de la tuile
+	totalDx := float32(x - parentTileX)
+	totalDy := float32(y - parentTileY)
+
+	isVertical := math.Abs(float64(totalDy)) > math.Abs(float64(totalDx))
+
+	// Définition des taux de progression pour les deux vagues (Tête et Traîne)
+	var tHead, tTail float32
+	if progress < 0.5 {
+		tHead = float32(progress * 2.0) // La tête fait 100% de son trajet entre progress 0 et 0.5
+		tTail = 0.0                     // La traîne ne bouge pas encore
+	} else {
+		tHead = 1.0
+		tTail = float32((progress - 0.5) * 2.0) // La traîne fait son trajet entre progress 0.5 et 1.0
+	}
+
+	// Indices standards des sommets générés par generateIdleGeometry :
+	// geo.V[0] = Haut-Gauche (HG), geo.V[1] = Haut-Droit (HD)
+	// geo.V[2] = Bas-Droit (BD),   geo.V[3] = Bas-Gauche (BG)
+
+	if isVertical {
+		if totalDy < 0 { // Déplacement vers le HAUT (Nord)
+			// Tête = HG (0) et HD (1)
+			geo.V[0].DstX += totalDx * tHead
+			geo.V[0].DstY += totalDy * tHead
+			geo.V[1].DstX += totalDx * tHead
+			geo.V[1].DstY += totalDy * tHead
+			// Traîne = BD (2) et BG (3)
+			geo.V[2].DstX += totalDx * tTail
+			geo.V[2].DstY += totalDy * tTail
+			geo.V[3].DstX += totalDx * tTail
+			geo.V[3].DstY += totalDy * tTail
+		} else { // Déplacement vers le BAS (Sud)
+			// Tête = BD (2) et BG (3)
+			geo.V[2].DstX += totalDx * tHead
+			geo.V[2].DstY += totalDy * tHead
+			geo.V[3].DstX += totalDx * tHead
+			geo.V[3].DstY += totalDy * tHead
+			// Traîne = HG (0) et HD (1)
+			geo.V[0].DstX += totalDx * tTail
+			geo.V[0].DstY += totalDy * tTail
+			geo.V[1].DstX += totalDx * tTail
+			geo.V[1].DstY += totalDy * tTail
+		}
+	} else {
+		if totalDx > 0 { // Déplacement vers la DROITE (Est)
+			// Tête = HD (1) et BD (2)
+			geo.V[1].DstX += totalDx * tHead
+			geo.V[1].DstY += totalDy * tHead
+			geo.V[2].DstX += totalDx * tHead
+			geo.V[2].DstY += totalDy * tHead
+			// Traîne = HG (0) et BG (3)
+			geo.V[0].DstX += totalDx * tTail
+			geo.V[0].DstY += totalDy * tTail
+			geo.V[3].DstX += totalDx * tTail
+			geo.V[3].DstY += totalDy * tTail
+		} else { // Déplacement vers la GAUCHE (Ouest)
+			// Tête = HG (0) et BG (3)
+			geo.V[0].DstX += totalDx * tHead
+			geo.V[0].DstY += totalDy * tHead
+			geo.V[3].DstX += totalDx * tHead
+			geo.V[3].DstY += totalDy * tHead
+			// Traîne = HD (1) et BD (2)
+			geo.V[1].DstX += totalDx * tTail
+			geo.V[1].DstY += totalDy * tTail
+			geo.V[2].DstX += totalDx * tTail
+			geo.V[2].DstY += totalDy * tTail
+		}
+	}
+
+	// Application de la rotation globale autour du centre actuel de la forme
+	cx := float32(parentTileX + r.tileSize/2 + float64(totalDx)*float64(progress))
+	cy := float32(parentTileY + r.tileSize/2 + float64(totalDy)*float64(progress))
+	r.ApplyBoardRotation(geo.V, cx, cy)
+
+	// Rendu en mode DOS (Caché)
+	backImg := r.assets.GetTileImage("hidden", themeName)
+	if backImg == nil {
+		backImg = r.assets.GetImage("tile_hidden")
+	}
+
+	r.drawGeometryPart(screen, geo.V, geo.I[6:12], backImg)
+	r.drawGeometryPart(screen, geo.V, geo.I[:6], backImg)
+}
