@@ -288,6 +288,7 @@ func (o *Orientation) Rotate(degrees int) {
 // MovingAnimation gère l'état d'un déplacement fluide dans le temps
 type MovingAnimation struct {
 	StartX, StartY           float64
+	FromGridX, FromGridY     int
 	CurrentX, CurrentY       float64
 	TargetGridX, TargetGridY int
 	CurrentTick              int

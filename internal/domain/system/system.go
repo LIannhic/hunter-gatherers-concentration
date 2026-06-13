@@ -149,8 +149,10 @@ func (s *PropagationSystem) Update(world *World) {
 				Type:     event.ResourcePropagated,
 				SourceID: string(newRes.GetID()),
 				Payload: map[string]interface{}{
-					"parent_id": entityID,
-					"position":  targetNeighbor.Position,
+					"parent_id":     entityID,
+					"from":          pos,
+					"to":            spawnPos,
+					"new_entity_id": string(newRes.GetID()),
 				},
 			})
 		}

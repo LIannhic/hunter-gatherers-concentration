@@ -27,6 +27,8 @@ type TranslationAnim struct {
 	ToX, ToY      float64
 	Tick          int
 	Duration      int
+	FromGridX     int
+	FromGridY     int
 	TargetGridX   int
 	TargetGridY   int
 	Layer         Layer
@@ -72,6 +74,8 @@ func (m *AnimationManager) StartTileMove(world *domain.World, gridID string, ent
 	ma := &component.MovingAnimation{
 		StartX:        fx,
 		StartY:        fy,
+		FromGridX:     fromPos.X,
+		FromGridY:     fromPos.Y,
 		CurrentX:      fx,
 		CurrentY:      fy,
 		TargetGridX:   toPos.X,
@@ -90,6 +94,8 @@ func (m *AnimationManager) StartTileMove(world *domain.World, gridID string, ent
 		ToY:           ty,
 		Tick:          0,
 		Duration:      durationTicks,
+		FromGridX:     fromPos.X,
+		FromGridY:     fromPos.Y,
 		TargetGridX:   toPos.X,
 		TargetGridY:   toPos.Y,
 		Layer:         layer,
