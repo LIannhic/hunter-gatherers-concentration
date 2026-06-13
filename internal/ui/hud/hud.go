@@ -3,6 +3,7 @@ package hud
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"sort"
@@ -26,6 +27,15 @@ import (
 // BoardRenderer minimal interface for HUD
 type BoardRenderer interface {
 	RenderInventoryLoot(target *ebiten.Image, world *domain.World, selectedIdx int, selection map[int]bool, confirmAll bool)
+}
+
+// NotificationMessage représente un message défilant
+type NotificationMessage struct {
+	Text        string
+	X           float64
+	BoxWidth    float64
+	RepeatCount int
+	Speed       float64
 }
 
 // HUD affiche les informations de jeu
@@ -54,8 +64,12 @@ type HUD struct {
 	getTimerRemaining func() float64 // Temps restant du timer
 	getTimerPanic     func() bool    // true si < 3s
 	pulseFrame        int            // Compteur de frames pour l'animation de pulse
-	infoMessage       string         // Message d'item affiché à l'écran
-	infoMessageTimer  int            // Timer du message d'item
+
+	// Système de messages défilants
+	queueLeft     []string
+	queueRight    []string
+	activeLeft    *NotificationMessage
+	activeRight   *NotificationMessage
 }
 
 // NewHUD crée un nouveau HUD
@@ -73,6 +87,8 @@ func NewHUD(world *domain.World) *HUD {
 		confirmClearAll:      false,
 		debugWindow:          dbg.NewDebugWindow(world),
 		DiffSelection:        NewDifficultySelection(),
+		queueLeft:            make([]string, 0),
+		queueRight:           make([]string, 0),
 	}
 
 	// S'abonne aux événements d'inventaire plein
@@ -83,12 +99,37 @@ func NewHUD(world *domain.World) *HUD {
 	// S'abonne aux messages d'item pour les effets de butin
 	world.EventBus.SubscribeFunc(event.ItemMessage, func(e event.Event) {
 		if msg, ok := e.Payload["message"].(string); ok {
-			h.infoMessage = msg
-			h.infoMessageTimer = 120 // 2 secondes à 60 fps
+			h.AddMessage(msg, "left")
+		}
+	})
+
+	// S'abonne aux dégâts pour afficher les confrontations
+	world.EventBus.SubscribeFunc(event.PlayerDamaged, func(e event.Event) {
+		reason, _ := e.Payload["reason"].(string)
+		damage, _ := e.Payload["damage"].(int)
+		msg := ""
+		if reason == "confrontation" {
+			msg = fmt.Sprintf("CONFRONTATION ! -%d HP", damage)
+		} else if reason == "invalid_match" {
+			msg = "MATCH INVALIDE !"
+		} else if reason == "skipped_valid_match" {
+			msg = "MATCH VALIDE IGNORE !"
+		}
+		if msg != "" {
+			h.AddMessage(msg, "right")
 		}
 	})
 
 	return h
+}
+
+// AddMessage ajoute un message à la file d'attente
+func (h *HUD) AddMessage(text string, area string) {
+	if area == "left" {
+		h.queueLeft = append(h.queueLeft, text)
+	} else {
+		h.queueRight = append(h.queueRight, text)
+	}
 }
 
 // Update met à jour l'état interne de l'HUD (animations, timers)
@@ -96,13 +137,58 @@ func (h *HUD) Update() {
 	if h.fullFeedbackTimer > 0 {
 		h.fullFeedbackTimer--
 	}
-	if h.infoMessageTimer > 0 {
-		h.infoMessageTimer--
-		if h.infoMessageTimer == 0 {
-			h.infoMessage = ""
+
+	h.updateMessageArea("left")
+	h.updateMessageArea("right")
+
+	h.pulseFrame++
+}
+
+func (h *HUD) updateMessageArea(area string) {
+	var active **NotificationMessage
+	var queue *[]string
+	var boxWidth float64
+
+	if area == "left" {
+		active = &h.activeLeft
+		queue = &h.queueLeft
+		boxWidth = ui.MessageBoxWLeft
+	} else {
+		active = &h.activeRight
+		queue = &h.queueRight
+		boxWidth = ui.MessageBoxWRight
+	}
+
+	// 1. Si aucun message actif, on en prend un dans la queue
+	if *active == nil && len(*queue) > 0 {
+		msgText := (*queue)[0]
+		*queue = (*queue)[1:]
+		*active = &NotificationMessage{
+			Text:     msgText,
+			X:        boxWidth,
+			BoxWidth: boxWidth,
+			Speed:    2.0,
 		}
 	}
-	h.pulseFrame++
+
+	// 2. Si un message est actif, on le fait défiler
+	if *active != nil {
+		m := *active
+		m.X -= m.Speed
+
+		// Calcul de la largeur du texte (approximatif pour le test, le renderer utilisera text.BoundString)
+		// On part sur 7px par caractère (basicfont.Face7x13)
+		textWidth := float64(len(m.Text) * 7)
+
+		if m.X < -textWidth {
+			m.RepeatCount++
+			if m.RepeatCount >= 2 {
+				*active = nil
+			} else {
+				m.X = m.BoxWidth
+			}
+		}
+	}
 }
 
 // SetTimerCallbacks injecte les accesseurs au compte à rebours temps réel.
@@ -244,9 +330,38 @@ func (h *HUD) Render(screen *ebiten.Image) {
 		h.DiffSelection.Render(screen)
 	}
 
-	if h.infoMessageTimer > 0 && h.infoMessage != "" {
-		text.Draw(screen, h.infoMessage, basicfont.Face7x13, 24, ui.ScreenHeight-24, color.RGBA{255, 255, 230, 255})
+	h.renderMessageArea(screen, "left")
+	h.renderMessageArea(screen, "right")
+}
+
+func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
+	var x, y, w, hBox float64
+	var active *NotificationMessage
+
+	if area == "left" {
+		x, y, w, hBox = ui.MessageBoxXLeft, ui.MessageBoxYLeft, ui.MessageBoxWLeft, ui.MessageBoxHLeft
+		active = h.activeLeft
+	} else {
+		x, y, w, hBox = ui.MessageBoxXRight, ui.MessageBoxYRight, ui.MessageBoxWRight, ui.MessageBoxHRight
+		active = h.activeRight
 	}
+
+	// 1. Fond de la boîte de message
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(w), float32(hBox), color.RGBA{20, 20, 30, 180}, true)
+	vector.StrokeRect(screen, float32(x), float32(y), float32(w), float32(hBox), 1, color.RGBA{100, 100, 150, 100}, true)
+
+	if active == nil {
+		return
+	}
+
+	// 2. Texte défilant (avec clipping)
+	// On crée une sous-image pour le clipping
+	msgImg := screen.SubImage(image.Rect(int(x), int(y), int(x+w), int(y+hBox))).(*ebiten.Image)
+
+	// Calcul de la position Y centrée
+	ty := y + hBox/2 + 5
+
+	text.Draw(msgImg, active.Text, basicfont.Face7x13, int(active.X), int(ty-y), color.RGBA{255, 255, 230, 255})
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
