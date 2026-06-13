@@ -362,7 +362,7 @@ func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
 	// Calcul de la position Y centrée
 	ty := hBox/2 + 5 // Position relative à la sous-image
 
-	text.Draw(msgImg, active.Text, basicfont.Face7x13, int(active.X), int(ty), color.RGBA{255, 255, 230, 255})
+	text.Draw(msgImg, active.Text, basicfont.Face7x13, int(x+active.X), int(y+ty), color.RGBA{255, 255, 230, 255})
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
