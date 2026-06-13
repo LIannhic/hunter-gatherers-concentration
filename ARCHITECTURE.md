@@ -94,9 +94,18 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
     - `UpdateFrame(dt)` : Cycle temps réel à 60 FPS (Timers, évènements UI, prévisualisation).
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
+  - **ResourcePropagationSystem** : Gère la multiplication des ressources sur les cases adjacentes. Émet l'événement `ResourcePropagated` enrichi des positions `from` et `to` pour l'UI.
   - **ResourceLifecycleSystem** : Gère la maturation des ressources
   - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire. Le butin hérite du niveau de cumul de la paire.
   - **TrackSystem** : Gère la décomposition temporelle des traces
+
+- **Animations Organiques** :
+  - **Propagation (Division Cellulaire)** : Lorsqu'une ressource se multiplie, une animation de type `propagate` est déclenchée. Elle simule une division organique en deux phases :
+    1. **Phase d'extension** (progress 0.0 à 0.5) : Les angles de "tête" de la nouvelle tuile s'élancent vers la destination tandis que la "traîne" reste ancrée.
+    2. **Phase de stabilisation** (progress 0.5 à 1.0) : La tête se fixe et la traîne rejoint la position cible pour restaurer la forme carrée.
+    - **Filament élastique** : Un quadrilatère blanc semi-transparent relie les deux tuiles, s'affinant sur l'axe de déplacement durant la phase 2 avant de disparaître (rupture de tension).
+    - **Brouillard de Guerre** : L'animation s'effectue exclusivement sur le **DOS** de la tuile (`tile_hidden`) pour respecter le secret du Memory en fin de tour.
+
 
 - **Interface `Hoverable`** : Unifie l'interaction de survol pour les tuiles, les sorties de navigation et les objets de l'inventaire. Centralise la logique d'autorisation (ex: blocage des tuiles scellées).
 
