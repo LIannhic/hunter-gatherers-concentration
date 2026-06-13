@@ -841,7 +841,7 @@ func (c *UseLootItemCommand) Execute() error {
 	}
 
 	if message != "" {
-		c.World.EventBus.PublishImmediate(event.NewItemMessageEvent(message))
+		c.World.EventBus.Publish(event.NewItemMessageEvent(message))
 	}
 
 	fmt.Printf("[ITEM] %s utilisé (Ability activée) depuis l'emplacement %d\n", item.Name, c.ItemIndex)
