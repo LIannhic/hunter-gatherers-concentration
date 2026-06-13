@@ -322,6 +322,9 @@ func (h *HUD) Render(screen *ebiten.Image) {
 		h.renderVictoryWindow(screen)
 	}
 
+	h.renderMessageArea(screen, "left")
+	h.renderMessageArea(screen, "right")
+
 	// NOUVEAU: Rendu des fenêtres modales
 	if h.debugWindow != nil {
 		h.debugWindow.Render(screen)
@@ -329,9 +332,6 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	if h.DiffSelection != nil {
 		h.DiffSelection.Render(screen)
 	}
-
-	h.renderMessageArea(screen, "left")
-	h.renderMessageArea(screen, "right")
 }
 
 func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
@@ -356,12 +356,13 @@ func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
 
 	// 2. Texte défilant (avec clipping)
 	// On crée une sous-image pour le clipping
-	msgImg := screen.SubImage(image.Rect(int(x), int(y), int(x+w), int(y+hBox))).(*ebiten.Image)
+	rect := image.Rect(int(x), int(y), int(x+w), int(y+hBox))
+	msgImg := screen.SubImage(rect).(*ebiten.Image)
 
 	// Calcul de la position Y centrée
-	ty := y + hBox/2 + 5
+	ty := hBox/2 + 5 // Position relative à la sous-image
 
-	text.Draw(msgImg, active.Text, basicfont.Face7x13, int(active.X), int(ty-y), color.RGBA{255, 255, 230, 255})
+	text.Draw(msgImg, active.Text, basicfont.Face7x13, int(active.X), int(ty), color.RGBA{255, 255, 230, 255})
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
