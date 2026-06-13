@@ -636,6 +636,8 @@ func (app *Application) updateMenu() error {
 
 // updatePlaying régit le cycle d'exécution du gameplay actif (Timers, inventaire, victoires).
 func (app *Application) updatePlaying() error {
+	app.HUD.Update()
+
 	if app.HUD.IsVictoryVisible() {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 			app.HUD.HideVictory()
