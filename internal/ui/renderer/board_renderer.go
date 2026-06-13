@@ -342,6 +342,31 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 			r.pendingHits[e.SourceID] = pos
 		}
 	})
+
+	// Gère l'animation de propagation organique des ressources
+	world.EventBus.SubscribeFunc(event.ResourcePropagated, func(e event.Event) {
+		from, hasFrom := e.Payload["from"].(entity.Position)
+		to, hasTo := e.Payload["to"].(entity.Position)
+		newID, hasNewID := e.Payload["new_entity_id"].(string)
+
+		if !hasFrom || !hasTo || !hasNewID {
+			return
+		}
+
+		if r.AnimManager != nil {
+			r.AnimManager.StartTileMove(
+				world,
+				world.CurrentGridID,
+				newID,
+				board.Position{X: from.X, Y: from.Y},
+				board.Position{X: to.X, Y: to.Y},
+				50,
+				LayerNormal,
+				"propagate",
+				entity.FlipRight,
+			)
+		}
+	})
 }
 
 func (r *BoardRenderer) computeFlipDirection(from, to board.Position) entity.FlipDirection {
@@ -1338,16 +1363,39 @@ func (r *BoardRenderer) renderMovingEntities(screen *ebiten.Image, world *domain
 		curY := anim.CurrentY
 
 		if r.AnimManager != nil {
-			if transAnim, ok := r.AnimManager.animes[id]; ok && transAnim.Mode == "earthquake" {
-				progress := float64(transAnim.Tick) / math.Max(1, float64(transAnim.Duration))
-				grid, _ := world.GetGrid(world.CurrentGridID)
-				themeName := "default"
-				if grid != nil {
-					themeName = string(grid.Biome)
+			if transAnim, ok := r.AnimManager.animes[id]; ok {
+				if transAnim.Mode == "earthquake" {
+					progress := float64(transAnim.Tick) / math.Max(1, float64(transAnim.Duration))
+					grid, _ := world.GetGrid(world.CurrentGridID)
+					themeName := "default"
+					if grid != nil {
+						themeName = string(grid.Biome)
+					}
+					theme := r.assets.GetTheme(themeName)
+					r.renderEarthquakeTile360(screen, curX, curY, progress, ent, themeName, theme.HiddenBorder, transAnim.FlipDirection)
+					continue
 				}
-				theme := r.assets.GetTheme(themeName)
-				r.renderEarthquakeTile360(screen, curX, curY, progress, ent, themeName, theme.HiddenBorder, transAnim.FlipDirection)
-				continue
+				if transAnim.Mode == "propagate" {
+					progress := float64(transAnim.Tick) / math.Max(1, float64(transAnim.Duration))
+					grid, _ := world.GetGrid(world.CurrentGridID)
+					themeName := "default"
+					if grid != nil {
+						themeName = string(grid.Biome)
+					}
+
+					// 1. Calcul des centres écrans d'origine (parent) et actuel (enfant)
+					fromPos := board.Position{X: transAnim.FromGridX, Y: transAnim.FromGridY}
+					pX, pY := r.GetTileCenter(fromPos, grid)
+					cX := curX + r.tileSize/2
+					cY := curY + r.tileSize/2
+
+					// 2. Dessin du filament élastique entre les deux centres
+					r.drawElasticFilament(screen, pX, pY, cX, cY, progress, themeName)
+
+					// 3. Dessin de la tuile enfant déformée (effet de traîne visqueuse)
+					r.renderPropagatingChildTile(screen, curX, curY, pX, pY, progress, world, id, themeName)
+					continue
+				}
 			}
 		}
 
