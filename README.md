@@ -119,6 +119,13 @@ L'interface assiste le joueur dans sa gestion des ressources via un système de 
 - **Anti-Triche** : Aucun feedback de coût n'est affiché au survol des tuiles cachées pour éviter de divulguer des informations sur leur nature (créature vs ressource).
 - **Rendu Sélectif** : Les tuiles cumulées n'apparaissent plus grandes et dorées que lorsqu'elles sont **Révélées**. À l'état caché, elles sont identiques aux tuiles normales.
 
+### Notifications Défilantes (HUD)
+
+Pour maintenir l'immersion tout en informant le joueur, le HUD intègre deux zones de messages dynamiques :
+- **Zone Gauche (Portrait/Inventaire)** : Confirme l'activation des capacités d'objets (ex: "Vous vous sentez évanescent").
+- **Zone Droite (Jauges/Minimap)** : Signale les événements de combat et les erreurs (ex: "CONFRONTATION ! -10 HP", "MATCH INVALIDE").
+- **Comportement** : Les messages utilisent une file d'attente pour éviter les chevauchements et défilent de droite à gauche deux fois avant de disparaître.
+
 ### Troubles cognitifs (Status Effects)
 
 Le joueur peut subir des altérations mentales qui déforment l'interface :

@@ -222,6 +222,9 @@ Séparation des responsabilités :
     - **Tapis de Jeu (Playmat)** : 700x700. Contient le plateau, les boutons et les **Effets Plein Écran** (ex: Scanner de l'Echo Hound).
 - **Input**: Capture les événements, gère la navigation entre les zones et les raccourcis clavier.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
+  - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
+    - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets.
+    - **Zone Droite**: Affiche les feedbacks de gameplay immédiats (Confrontations, erreurs de match).
 - **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
 
 - **DebugWindow** (`ui/debug/window.go`) : Console de débogage interactive (F12) permettant de modifier les statistiques, la difficulté, et de filtrer les entités spawnables.
