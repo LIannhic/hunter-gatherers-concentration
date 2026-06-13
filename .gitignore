@@ -13,3 +13,6 @@ saves/
 *.json
 !go.mod
 !go.sum
+hgcv0.2_basic-incursion.wasm
+index.html
+wasm_exec.js
