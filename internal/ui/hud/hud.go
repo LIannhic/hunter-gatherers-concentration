@@ -1090,14 +1090,6 @@ func (h *HUD) HandleClick(x, y int) bool {
 		return true
 	}
 
-	// Clic sur le badge de difficulté (ajusté pour la résolution réelle)
-	if fx >= ui.PortraitX+120 && fx <= ui.PortraitX+220 && fy >= ui.PortraitY+10 && fy <= ui.PortraitY+40 {
-		if h.DiffSelection != nil {
-			h.DiffSelection.SetVisible(true)
-		}
-		return true
-	}
-
 	if h.showDetails {
 		winW, winH := 320, 450
 		winX := (ui.ScreenWidth - winW) / 2

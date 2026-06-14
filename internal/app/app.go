@@ -60,6 +60,7 @@ type Application struct {
 	sessionStartTime time.Time
 	hasSaves         bool
 	randSource       *rand.Rand
+	tempDifficulty   meta.DifficultyLevel // Utilisé pour transmettre le choix de difficulté
 
 	// Debug
 	debug *DebugStats
@@ -605,6 +606,19 @@ func (app *Application) Update() error {
 
 // updateMenu orchestre la navigation de l'écran titre et de la sélection de sauvegarde.
 func (app *Application) updateMenu() error {
+	// Priorité à la sélection de difficulté si elle est ouverte
+	if app.HUD.DiffSelection.IsVisible() {
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+			app.HUD.DiffSelection.SetVisible(false)
+			return nil
+		}
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+			x, y := ebiten.CursorPosition()
+			app.HUD.HandleClick(x, y)
+		}
+		return nil
+	}
+
 	if app.SaveMenu.IsVisible() {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 			app.SaveMenu.SetVisible(false)
@@ -618,8 +632,23 @@ func (app *Application) updateMenu() error {
 			switch action.Type {
 			case renderer.ActionBack:
 				app.SaveMenu.SetVisible(false)
-			case renderer.ActionLoad, renderer.ActionNew:
+			case renderer.ActionLoad:
 				app.StartGameWithSlot(action.Slot)
+			case renderer.ActionNew:
+				// Pour un nouveau profil, on demande d'abord la difficulté
+				app.HUD.DiffSelection.SetVisible(true)
+				app.HUD.DiffSelection.OnSelected = func(level meta.DifficultyLevel) {
+					app.tempDifficulty = level
+					app.StartGameWithSlot(action.Slot)
+				}
+			case renderer.ActionChangeDifficulty:
+				// Changement de difficulté pour un profil existant
+				app.HUD.DiffSelection.SetVisible(true)
+				app.HUD.DiffSelection.OnSelected = func(level meta.DifficultyLevel) {
+					// On charge le profil avec la nouvelle difficulté
+					app.tempDifficulty = level
+					app.StartGameWithSlot(action.Slot)
+				}
 			case renderer.ActionDelete:
 				_ = app.Persistence.DeleteSave(action.Slot)
 				metas, _ := app.Persistence.GetSaveSummaries()
@@ -634,11 +663,15 @@ func (app *Application) updateMenu() error {
 		x, y := ebiten.CursorPosition()
 		if app.TitleScreen.IsStartButtonClicked(x, y) {
 			if app.hasSaves {
+				// Charge le dernier slot joué
 				app.StartGameWithSlot(0)
 			} else {
-				metas, _ := app.Persistence.GetSaveSummaries()
-				app.SaveMenu.UpdateMetas(metas)
-				app.SaveMenu.SetVisible(true)
+				// Premier lancement : on demande la difficulté pour le slot 1
+				app.HUD.DiffSelection.SetVisible(true)
+				app.HUD.DiffSelection.OnSelected = func(level meta.DifficultyLevel) {
+					app.tempDifficulty = level
+					app.StartGameWithSlot(1)
+				}
 			}
 		} else if app.TitleScreen.IsPlaytestButtonClicked(x, y) {
 			app.StartPlaytestGame()
@@ -830,8 +863,16 @@ func (app *Application) StartGameWithSlot(slotID int) {
 		app.World.Hub = meta.NewHub()
 		app.World.Player = player.New(save.Player.ID)
 
-		if save.Meta.Difficulty != "" {
-			app.World.Difficulty = meta.GetSettings(meta.DifficultyLevel(save.Meta.Difficulty))
+		// On applique la difficulté choisie si c'est une nouvelle partie,
+		// sinon on reprend celle de la sauvegarde
+		diffLevel := meta.DifficultyLevel(save.Meta.Difficulty)
+		if app.tempDifficulty != "" {
+			diffLevel = app.tempDifficulty
+			app.tempDifficulty = "" // Reset
+		}
+
+		if diffLevel != "" {
+			app.World.Difficulty = meta.GetSettings(diffLevel)
 		}
 
 		app.World.GenerateLayout("dream_plane_1")
@@ -857,6 +898,7 @@ func (app *Application) StartGame() {
 	oldState := app.State
 	app.State = domain.StatePlaying
 	app.SaveMenu.SetVisible(false)
+	app.HUD.DiffSelection.SetVisible(false)
 
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
 	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
@@ -947,6 +989,10 @@ func (app *Application) drawMenu(screen *ebiten.Image) {
 
 	if app.SaveMenu.IsVisible() {
 		app.SaveMenu.Render(screen)
+	}
+
+	if app.HUD.DiffSelection.IsVisible() {
+		app.HUD.DiffSelection.Render(screen)
 	}
 }
 

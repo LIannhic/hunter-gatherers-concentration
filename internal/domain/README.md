@@ -414,6 +414,14 @@ Le moteur gère une accumulation réelle des transformations géométriques :
 - **Réversibilité** : Grâce aux propriétés du groupe $D_4$, deux flips identiques s'annulent ($T^2 = I$), permettant de retrouver l'état d'origine si le joueur et le terrain agissent sur le même axe.
 - **Nomenclature Relative** : Les créatures utilisent des directions relatives (`Forward`, `Backward`, `Left`, `Right`) pour définir leurs zones de menace. Ces directions sont transformées en coordonnées absolues du plateau via la matrice D4 de l'entité.
 
+### Niveaux de Difficulté
+
+Le domaine définit quatre niveaux de difficulté influençant la génération et le rythme :
+- **Easy** : Timer généreux (10s), prévisualisation longue.
+- **Normal** : Équilibre standard (8s).
+- **Hard** : Pression accrue (5s), prévisualisation courte.
+- **Insane** : Défi ultime (4s), la prévisualisation se recache presque instantanément.
+
 ### Distinction Invisibilité vs Profondeur
 
 - `hidden: true` (Furtivité) : L'entité est réellement invisible (ex: Shadowstalker). Le rendu saute l'animation de déplacement.

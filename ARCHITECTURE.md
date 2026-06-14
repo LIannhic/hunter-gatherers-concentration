@@ -251,6 +251,8 @@ Connecte tout ensemble :
 app.NewApplication() // Crée world, assets, renderer, input...
 ```
 
+La couche `App` gère également le flux de navigation pré-jeu, notamment la **sélection de difficulté** qui est déclenchée lors du clic sur "DEMARRER" (pour les nouveaux joueurs) ou via le menu de profil.
+
 ## Patterns utilisés
 
 ### Clean Architecture
