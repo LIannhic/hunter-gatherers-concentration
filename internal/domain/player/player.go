@@ -67,8 +67,9 @@ type Stats struct {
 	MaxMana    int // Maximum de mana
 	Sanity     int // Santé mentale (utilisée dans les plans oniriques)
 	MaxSanity  int // Maximum de santé mentale
-	Experience int // Points d'expérience accumulés au niveau actuel
-	Level      int // Niveau actuel du joueur
+	Experience      int // Points d'expérience accumulés au niveau actuel
+	TotalExperience int // Points d'expérience totaux accumulés (Score)
+	Level           int // Niveau actuel du joueur
 }
 
 // LootItem représente un objet physique ou une entité capturée dans l'inventaire.
@@ -597,6 +598,7 @@ func (p *Player) RestoreSanity(amount int) {
 // GainExperience gère l'ajout d'XP et le passage de niveau.
 func (p *Player) GainExperience(xp int) {
 	p.Stats.Experience += xp
+	p.Stats.TotalExperience += xp
 	threshold := p.Stats.Level * 100
 	if p.Stats.Experience >= threshold {
 		p.LevelUp()

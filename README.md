@@ -21,7 +21,9 @@ L'expérience propose une profondeur stratégique s'appuyant sur une double bouc
 ## Mécanisme
 
 Le gameplay repose sur une gestion rigoureuse des ressources et du temps, dictée par un système en tour par tour. Chaque interaction, qu’il s’agisse de retourner une tuile ou d’utiliser un objet, consomme une unité de ressource (temps ou mana), forçant le joueur à planifier ses mouvements au sein d’une limite de tours impartis. La survie dépend de la gestion d'une barre de santé, physique ou mentale, qui s’érode au fil des erreurs ou des confrontations.
-L’aspect central de l’association de paires identiques enrichit la mécanique de mémoire classique. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
+L’aspect central de l’association de paires identiques enrichit la mécanique de mémoire classique. La difficulté est modulable via des variables structurelles, comme l'éparpillement des paires ou la visibilité de l'inventaire. Le choix de la difficulté s'effectue avant le lancement d'une expédition, soit lors de la création d'un nouveau profil, soit via un bouton dédié sur la carte de profil existante.
+
+Enfin, l'environnement est rendu vivant et menaçant par la présence de créatures aux comportements déterminés : celles-ci occupent des placements précis et effectuent des déplacements prévisibles mais contraignants, obligeant le joueur à adapter sa stratégie de mémorisation en fonction de leurs mouvements sur le plateau.
 
 ### Équilibre de la Population
 
@@ -109,8 +111,17 @@ Le système de progression immédiate sur le plateau repose sur le choix du joue
 - **MATCH** : Capture une paire identique de même niveau.
     - **Coût** : 1 Mana.
     - **Résultat** : Les deux tuiles sont supprimées et transformées en **Butin** (Loot).
+    - **Gain de Score** : Chaque match rapporte **10 XP** au score total.
     - **Scaling** : Un match de haut niveau produit un butin de plus grande valeur.
 - **Révélation** : Retourner une tuile cumulée (Niv.1+) consomme du Mana égal à son niveau.
+
+### Système de Score et XP
+
+La progression du joueur est quantifiée par l'expérience (XP) acquise lors de ses actions :
+- **En cours de partie** : +10 XP par association réussie.
+- **Extraction** : La valeur du butin sécurisé est convertie en XP bonus lors du franchissement du portail (100 XP par ressource, 250 XP par créature).
+- **Persistance** : Le score final (Total XP) est enregistré dans le profil du joueur, mettant à jour le "Dernier score" et le "Score Max".
+- **Level-up** : Accumuler assez d'XP augmente le niveau du personnage, améliorant sa Santé et son Mana maximum.
 
 ### Feedback Visuel et Prudence (Hover)
 

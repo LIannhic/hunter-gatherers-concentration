@@ -58,6 +58,16 @@ func (m *PersistenceManager) LoadLatestGame() (*persistence.SaveData, error) {
 	return m.LoadGame(slotID)
 }
 
+// IncrementSessionCount incrémente le compteur d'expéditions dès le lancement.
+func (m *PersistenceManager) IncrementSessionCount(slotID int) error {
+	save, err := m.repo.Load(slotID)
+	if err != nil {
+		return err
+	}
+	save.Meta.SessionCount++
+	return m.repo.Save(slotID, save)
+}
+
 // SaveCurrentGame met à jour les métadonnées de session sans persister l'état de l'expédition en cours.
 func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, difficulty string, sessionDuration float64) error {
 	if m.currentSlot == 0 {
@@ -73,8 +83,8 @@ func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, di
 	save.Meta.Difficulty = difficulty
 	save.Meta.TotalPlaytime += sessionDuration
 
-	// Mise à jour du score (basé sur l'XP)
-	save.Meta.LastScore = p.Stats.Experience
+	// Mise à jour du score (basé sur l'XP totale)
+	save.Meta.LastScore = p.Stats.TotalExperience
 	if save.Meta.LastScore > save.Meta.MaxScore {
 		save.Meta.MaxScore = save.Meta.LastScore
 	}
@@ -83,7 +93,7 @@ func (m *PersistenceManager) SaveCurrentGame(hub *meta.Hub, p *player.Player, di
 }
 
 // HandleDeath implémente la logique de "Fail State" persistante
-func (m *PersistenceManager) HandleDeath(hub *meta.Hub, p *player.Player, difficulty string) error {
+func (m *PersistenceManager) HandleDeath(hub *meta.Hub, p *player.Player, difficulty string, sessionDuration float64) error {
 	if m.currentSlot == 0 {
 		return fmt.Errorf("aucun slot de sauvegarde actif")
 	}
@@ -93,13 +103,19 @@ func (m *PersistenceManager) HandleDeath(hub *meta.Hub, p *player.Player, diffic
 		return err
 	}
 
-	// Met à jour uniquement les statistiques de mort et les méta-données
+	// Met à jour les statistiques de mort et les méta-données
 	save.Meta.DeathCount++
 	save.Meta.Difficulty = difficulty
+	save.Meta.TotalPlaytime += sessionDuration
+
+	// Mise à jour du score même en cas de mort
+	save.Meta.LastScore = p.Stats.TotalExperience
+	if save.Meta.LastScore > save.Meta.MaxScore {
+		save.Meta.MaxScore = save.Meta.LastScore
+	}
 
 	// On ne sauvegarde PAS l'état actuel du monde/joueur (qui est mort)
-	// mais on peut sauvegarder la progression méta acquise si souhaité.
-	// Ici, on respecte la consigne : retour à l'état précédent.
+	// mais on sauvegarde la progression méta acquise.
 
 	return m.repo.Save(m.currentSlot, save)
 }

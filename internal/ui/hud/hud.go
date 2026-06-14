@@ -496,7 +496,7 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	statsY := y + 150
 	text.Draw(screen, fmt.Sprintf("Ressources collectées : %d", resourceCount), basicfont.Face7x13, x+100, statsY, color.White)
 	text.Draw(screen, fmt.Sprintf("Créatures capturées : %d", creatureCount), basicfont.Face7x13, x+100, statsY+30, color.White)
-	text.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d éclats", totalValue), basicfont.Face7x13, x+100, statsY+70, color.RGBA{255, 255, 100, 255})
+	text.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d XP", totalValue), basicfont.Face7x13, x+100, statsY+70, color.RGBA{255, 255, 100, 255})
 
 	// Boutons
 	btnW, btnH := 160, 40
@@ -646,6 +646,11 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	diffLabel := fmt.Sprintf("D:%s", h.world.Difficulty.Level)
 	dx := infoX + 60
 	text.Draw(screen, diffLabel, basicfont.Face7x13, dx, infoY, color.RGBA{255, 200, 100, 255})
+
+	// Score (XP Totale)
+	scoreLabel := fmt.Sprintf("S:%d", h.world.Player.Stats.TotalExperience)
+	sx := dx + 85
+	text.Draw(screen, scoreLabel, basicfont.Face7x13, sx, infoY, color.RGBA{100, 255, 100, 255})
 
 	// Zone de clic pour changer la difficulté (Cartouche)
 	// (0,0) est PortraitX, PortraitY. On capture le clic dans HandleClick
@@ -1082,14 +1087,6 @@ func (h *HUD) HandleClick(x, y int) bool {
 		// On ne peut pas appeler ReturnToMenu ici car HUD ne connaît pas app.
 		// On laisse app.go gérer via ses propres callbacks (Input.OnExitToMenu déjà lié à l'icône M)
 		// On retourne juste true pour dire que le clic a été consommé.
-		return true
-	}
-
-	// Clic sur le badge de difficulté (ajusté pour la résolution réelle)
-	if fx >= ui.PortraitX+120 && fx <= ui.PortraitX+220 && fy >= ui.PortraitY+10 && fy <= ui.PortraitY+40 {
-		if h.DiffSelection != nil {
-			h.DiffSelection.SetVisible(true)
-		}
 		return true
 	}
 

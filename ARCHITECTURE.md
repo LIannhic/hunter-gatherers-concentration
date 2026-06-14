@@ -115,6 +115,10 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Phase de panique (< 3s) utilisée pour les feedbacks visuels (pulse Sanity Gauge)
   - Durée maximale synchronisée avec `meta.DifficultySettings.TurnTimerDuration`
 
+- **Suivi de Progression et Score** :
+  - `TotalExperience` : Cumul de toute l'expérience acquise durant une session (Matchs + Butin final). Utilisé comme base pour le calcul du Score dans la persistance.
+  - `Experience` : XP relative au niveau actuel, utilisée pour le système de Level-up.
+
 - **Buffs et Protection** :
   - `ImmunityTurns` : Géré dans `Player`, permet de bloquer tous les dégâts. Utilisé par l'effet du Shadowstalker.
 
@@ -246,6 +250,8 @@ Connecte tout ensemble :
 ```go
 app.NewApplication() // Crée world, assets, renderer, input...
 ```
+
+La couche `App` gère également le flux de navigation pré-jeu, notamment la **sélection de difficulté** qui est déclenchée lors du clic sur "DEMARRER" (pour les nouveaux joueurs) ou via le menu de profil.
 
 ## Patterns utilisés
 

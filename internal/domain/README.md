@@ -357,6 +357,7 @@ L'inventaire agit comme un tampon entre la session de récolte onirique et le fo
 - **Sécurité** : Certains objets (ex: Portail Portatif) possèdent le tag `IsDeletable: false` et ne peuvent pas être supprimés par le joueur.
 - **Affichage** : Utilise un système de clipping et de défilement fluide (pixel par pixel) pour suggérer la profondeur de la réserve.
 - **Support des Niveaux** : Les constructeurs d'objets (`NewXXXItem`) acceptent un paramètre de niveau pour instancier directement des butins puissants.
+- **Valorisation du Butin** : Lors de la victoire, chaque item en inventaire est converti en score (XP) : 100 XP par ressource, 250 XP par créature.
 
 ---
 
@@ -412,6 +413,14 @@ Le moteur gère une accumulation réelle des transformations géométriques :
 - **Fermeture Physique** : La fermeture d'une tuile (via la pente du terrain) est une transformation réelle qui modifie l'orientation logique face cachée.
 - **Réversibilité** : Grâce aux propriétés du groupe $D_4$, deux flips identiques s'annulent ($T^2 = I$), permettant de retrouver l'état d'origine si le joueur et le terrain agissent sur le même axe.
 - **Nomenclature Relative** : Les créatures utilisent des directions relatives (`Forward`, `Backward`, `Left`, `Right`) pour définir leurs zones de menace. Ces directions sont transformées en coordonnées absolues du plateau via la matrice D4 de l'entité.
+
+### Niveaux de Difficulté
+
+Le domaine définit quatre niveaux de difficulté influençant la génération et le rythme :
+- **Easy** : Timer généreux (10s), prévisualisation longue.
+- **Normal** : Équilibre standard (8s).
+- **Hard** : Pression accrue (5s), prévisualisation courte.
+- **Insane** : Défi ultime (4s), la prévisualisation se recache presque instantanément.
 
 ### Distinction Invisibilité vs Profondeur
 
