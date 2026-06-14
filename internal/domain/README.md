@@ -433,6 +433,8 @@ Le domaine définit quatre niveaux de difficulté influençant la génération e
 
 ```
 1. Joueur révèle une tuile (Reason: "player_action")
+   - Sur Desktop : Clic gauche (Press)
+   - Sur Mobile : Tap ou Relâchement (Release)
    ↓
 2. World.RevealTile() → Événement TileRevealed (avec `grid_id`, `flip_direction` et `reason`)
    ↓
