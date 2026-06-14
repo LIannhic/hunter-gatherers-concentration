@@ -233,7 +233,7 @@ Séparation des responsabilités :
   - **Espaces de Coordonnées** :
     - **Plateau (Board)** : 525x525. Contient les tuiles et les traces.
     - **Tapis de Jeu (Playmat)** : 700x700. Contient le plateau, les boutons et les **Effets Plein Écran** (ex: Scanner de l'Echo Hound).
-- **Input**: Capture les événements, gère la navigation entre les zones et les raccourcis clavier.
+- **Input**: Capture les événements (clavier, souris, tactile), gère la navigation entre les zones et les raccourcis clavier. Supporte les interactions mobiles (Wasm) via le défilement de l'inventaire par glissement (Drag-to-scroll) et l'appui long pour la suppression.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
     - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets.

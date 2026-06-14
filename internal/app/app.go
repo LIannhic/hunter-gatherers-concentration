@@ -147,6 +147,21 @@ func NewApplication() (*Application, error) {
 	app.Input.OnToggleAssetsDetails = app.HUD.ToggleAssetsDetails
 	app.Input.OnHoverButton = app.HUD.SetPotentialCosts
 
+	app.Input.OnLongPress = func(pos board.Position, gridID string) {
+		if gridID != board.InventoryGridID {
+			return
+		}
+		inventoryIdx := pos.Y*ui.LootSlotsPerRow + pos.X
+		if inventoryIdx >= 0 && inventoryIdx < len(app.World.Player.Inventory.Items) {
+			item := app.World.Player.Inventory.Items[inventoryIdx]
+			if item.IsDeletable {
+				fmt.Printf("[INPUT] Appui long : Suppression de %s\n", item.Name)
+				_ = app.World.RemoveLootItem(inventoryIdx)
+				app.HUD.ClearActiveLootSelection()
+			}
+		}
+	}
+
 	// Remplissage de débogage pour tester l'utilisation des objets
 	app.Input.OnFillInventory = func() {
 		fmt.Println("[DEBUG] Remplissage de l'inventaire avec divers objets.")

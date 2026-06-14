@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
@@ -61,9 +62,17 @@ type Handler struct {
 	OnForceTurn           func()                                     // KeySpace: Forcer le prochain tour
 	OnToggleAutoMove      func()                                     // F10: Toggle mouvement auto
 	OnHoverButton         func(mana, health, sanity int)             // Feedback de coût au survol
+	OnLongPress           func(pos board.Position, gridID string)    // Appui long tactile
 
 	// Gestionnaire réactif des boutons d'action
 	actionButtons *actionbuttons.Manager
+
+	// Tactile & Gestes
+	touchStartTime    time.Time
+	touchStartScreenX int
+	touchStartScreenY int
+	isDragging        bool
+	isLongPressFired  bool
 
 	// Gestion du tour de jeu memory
 	revealedTiles []board.Position // Liste des tuiles révélées ce tour
@@ -204,6 +213,14 @@ func (h *Handler) Update() error {
 	return nil
 }
 
+func (h *Handler) getInteractionPosition() (int, int) {
+	tids := ebiten.TouchIDs()
+	if len(tids) > 0 {
+		return ebiten.TouchPosition(tids[0])
+	}
+	return ebiten.CursorPosition()
+}
+
 func (h *Handler) updateButtonHover() {
 	if h.actionButtons == nil || h.OnHoverButton == nil {
 		return
@@ -262,7 +279,7 @@ func (h *Handler) updateHover() {
 	}
 
 	activeThisFrame := make(map[string]bool)
-	mx, my := ebiten.CursorPosition()
+	mx, my := h.getInteractionPosition()
 	pos, gridID, ok := h.renderer.ScreenToGrid(mx, my, h.world)
 
 	if ok {
@@ -326,7 +343,7 @@ func (h *Handler) getEntityInfo(ent entity.Entity) string {
 }
 
 func (h *Handler) handleMouse() error {
-	// Clic droit : Désélection
+	// Clic droit : Désélection (Maintenu pour Desktop)
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		if h.selectedTile != nil {
 			fmt.Printf("[SÉLECTION] Tuile en %v désélectionnée (clic droit)\n", *h.selectedTile)
@@ -335,14 +352,103 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
-	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+	// 1. Détection du début (Appui)
+	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+	var tids []ebiten.TouchID
+	tids = inpututil.AppendJustPressedTouchIDs(tids)
+	if len(tids) > 0 {
+		justPressed = true
+	}
+
+	if justPressed {
+		h.touchStartTime = time.Now()
+		h.isLongPressFired = false
+		h.isDragging = false
+		h.touchStartScreenX, h.touchStartScreenY = h.getInteractionPosition()
 		return nil
 	}
 
+	// 2. Pendant la pression (Drag, Long Press)
+	isDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) || len(ebiten.TouchIDs()) > 0
+	if isDown {
+		currX, currY := h.getInteractionPosition()
+
+		// Détection du Drag
+		dist := math.Hypot(float64(currX-h.touchStartScreenX), float64(currY-h.touchStartScreenY))
+		if dist > 10.0 { // dragThreshold
+			h.isDragging = true
+		}
+
+		if h.isDragging {
+			// Défilement de l'inventaire
+			mx, my := h.getInteractionPosition()
+			_, gridID, ok := h.renderer.ScreenToGrid(mx, my, h.world)
+			if ok && gridID == board.InventoryGridID {
+				dy := float64(h.touchStartScreenY - currY)
+				h.world.Player.Inventory.ScrollOffset += dy
+				h.touchStartScreenY = currY // Update pour le prochain delta
+
+				// Bornage du scroll
+				inv := &h.world.Player.Inventory
+				totalRows := float64((inv.MaxSize + ui.LootSlotsPerRow - 1) / ui.LootSlotsPerRow)
+				rowH := ui.LootSlotSize + ui.LootSlotPadding
+				totalHeight := totalRows * rowH
+				viewportHeight := 331.0
+				maxScroll := totalHeight - viewportHeight
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+				if inv.ScrollOffset < 0 {
+					inv.ScrollOffset = 0
+				}
+				if inv.ScrollOffset > maxScroll {
+					inv.ScrollOffset = maxScroll
+				}
+			}
+		} else if !h.isLongPressFired {
+			// Détection de l'appui long (500ms)
+			if time.Since(h.touchStartTime) > 500*time.Millisecond {
+				h.isLongPressFired = true
+				h.handleLongPress()
+			}
+		}
+		return nil
+	}
+
+	// 3. Relâchement (Action finale)
+	justReleased := inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft)
+	var rtids []ebiten.TouchID
+	rtids = inpututil.AppendJustReleasedTouchIDs(rtids)
+	if len(rtids) > 0 {
+		justReleased = true
+	}
+
+	if justReleased {
+		if !h.isDragging && !h.isLongPressFired {
+			return h.executePrimaryActionAt(h.getInteractionPosition())
+		}
+		h.isDragging = false
+	}
+
+	return nil
+}
+
+func (h *Handler) handleLongPress() {
+	x, y := h.getInteractionPosition()
+	pos, gridID, ok := h.renderer.ScreenToGrid(x, y, h.world)
+	if !ok {
+		return
+	}
+
+	if h.OnLongPress != nil {
+		h.OnLongPress(pos, gridID)
+	}
+}
+
+func (h *Handler) executePrimaryActionAt(x, y int) error {
 	// Priorité : gestion des clics sur les boutons d'action (même si isProcessing)
 	if h.actionButtons != nil {
 		states := h.actionButtons.ComputeStates()
-		x, y := ebiten.CursorPosition()
 		if btnID, ok := h.actionButtons.HitTest(x, y, states); ok {
 			h.handleActionButtonClick(btnID)
 			return nil
@@ -352,7 +458,7 @@ func (h *Handler) handleMouse() error {
 	if h.isProcessing {
 		// EXCEPTION : On autorise le clic sur un portail déjà révélé pour la victoire
 		// (sinon le verrouillage du mode memory bloque la fin de partie)
-		if pos, gridID, ok := h.getHoveredTile(); ok {
+		if pos, gridID, ok := h.renderer.ScreenToGrid(x, y, h.world); ok {
 			grid, _ := h.world.GetGrid(gridID)
 			if grid != nil {
 				if plot, err := grid.Get(pos); err == nil && len(plot.EntitiesID) > 0 {
@@ -377,7 +483,7 @@ func (h *Handler) handleMouse() error {
 	}
 
 	// Gestion des clics sur les sorties (navigation zone par zone)
-	if dir, index, ok := h.getClickedExit(); ok {
+	if dir, index, ok := h.checkExitClickFromCoords(x, y); ok {
 		// Vérifie si la sortie existe
 		if _, hasExit := h.world.DreamPlane.GetConnectedZone(h.world.CurrentGridID, dir); !hasExit {
 			return nil
@@ -409,9 +515,8 @@ func (h *Handler) handleMouse() error {
 
 		// 2. Sinon, on révèle la tuile si elle est cachée
 		if currentState&entity.Hidden != 0 {
-			mx, my := ebiten.CursorPosition()
-			px := float64(mx) - ui.PlaymatX
-			py := float64(my) - ui.PlaymatY
+			px := float64(x) - ui.PlaymatX
+			py := float64(y) - ui.PlaymatY
 			flipDir := h.calculateExitFlipDirection(px, py, dir)
 
 			// Révélation de la première moitié
@@ -461,7 +566,7 @@ func (h *Handler) handleMouse() error {
 		return nil
 	}
 
-	pos, gridID, ok := h.getHoveredTile()
+	pos, gridID, ok := h.renderer.ScreenToGrid(x, y, h.world)
 	if !ok {
 		return nil
 	}
@@ -503,7 +608,7 @@ func (h *Handler) handleMouse() error {
 		}
 
 		// Calcule la direction de flip basée sur la position du clic dans la tuile
-		flipDir := h.calculateFlipDirection(gridID)
+		flipDir := h.calculateFlipDirectionAt(x, y, gridID)
 
 		cmd := &usecase.RevealTileCommand{
 			World:         h.world,
@@ -564,7 +669,7 @@ func (h *Handler) handleMouse() error {
 			}
 
 			// Sinon (si 0 ou 2 déjà révélés, ou clic sur un autre), flip normal pour recacher
-			flipDir := h.calculateFlipDirection(gridID)
+			flipDir := h.calculateFlipDirectionAt(x, y, gridID)
 			cmd := &usecase.RevealTileCommand{
 				World:         h.world,
 				GridID:        gridID,
@@ -605,6 +710,29 @@ func (h *Handler) handleMouse() error {
 		}
 	}
 	return nil
+}
+
+func (h *Handler) checkExitClickFromCoords(x, y int) (entity.Direction, int, bool) {
+	// Coordonnées relatives au Playmat
+	px := float64(x) - ui.PlaymatX
+	py := float64(y) - ui.PlaymatY
+
+	return h.checkExitClick(px, py)
+}
+
+func (h *Handler) calculateFlipDirectionAt(x, y int, gridID string) domain.FlipDirection {
+	if h.renderer == nil {
+		return usecase.DefaultFlipDirection
+	}
+
+	// Récupère la position locale du clic dans la tuile
+	localX, localY, gID, ok := h.renderer.ScreenToLocalTile(x, y, h.world)
+	if !ok || gID != gridID {
+		return usecase.DefaultFlipDirection
+	}
+
+	tileSize := h.renderer.GetTileSize()
+	return entity.CalculateFlipDirection(tileSize, localX, localY)
 }
 
 // handleActionButtonClick traite les clics sur les boutons d'action du Playmat.
