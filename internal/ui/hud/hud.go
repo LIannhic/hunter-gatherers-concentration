@@ -122,6 +122,12 @@ func NewHUD(world *domain.World) *HUD {
 		}
 	})
 
+	// S'abonne au passage de niveau
+	world.EventBus.SubscribeFunc(event.LevelUp, func(e event.Event) {
+		level, _ := e.Payload["level"].(int)
+		h.AddMessage(fmt.Sprintf("NIVEAU %d ATTEINT !", level), "left")
+	})
+
 	return h
 }
 
@@ -356,15 +362,16 @@ func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
 		return
 	}
 
-	// 2. Texte défilant (avec clipping)
-	// On crée une sous-image pour le clipping
-	rect := image.Rect(int(x), int(y), int(x+w), int(y+hBox))
-	msgImg := screen.SubImage(rect).(*ebiten.Image)
+    // 2. Texte défilant (avec clipping)
+    // On crée une sous-image pour le clipping (le repère reste celui de 'screen')
+    rect := image.Rect(int(x), int(y), int(x+w), int(y+hBox))
+    msgImg := screen.SubImage(rect).(*ebiten.Image)
 
-	// Calcul de la position Y centrée
-	ty := hBox/2 + 5 // Position relative à la sous-image
+    // Calcul de la position Y centrée (relative à l'écran, donc on ajoute 'y')
+    ty := y + (hBox / 2) + 5
 
-	text.Draw(msgImg, active.Text, basicfont.Face7x13, int(x+active.X), int(y+ty), color.RGBA{255, 255, 230, 255})
+    // On dessine sur msgImg, mais en utilisant 'x + active.X' pour rester dans le repère
+    text.Draw(msgImg, active.Text, basicfont.Face7x13, int(x + active.X), int(ty), color.RGBA{255, 255, 230, 255})
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
@@ -860,24 +867,19 @@ func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string
 	// Gauge Holder background
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(ui.GaugeW), float32(ui.GaugeH), color.RGBA{30, 30, 30, 255}, true)
 
-	// Rule: 100 hp = 200 px recalculate if over 200 hp for always = 400 px.
-	var totalPx float32
-	if max <= 200 {
-		totalPx = float32(max) * 2
-	} else {
-		totalPx = 400
-	}
+	// Les jauges prennent désormais toute la hauteur disponible (ui.GaugeH)
+	totalPx := float32(ui.GaugeH)
 
 	var fillHeight float32
 	if max > 0 {
 		fillHeight = (float32(val) / float32(max)) * totalPx
 	}
 
-	// Draw background of the actual gauge
-	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(totalPx)), float32(ui.GaugeW), totalPx, color.RGBA{50, 50, 50, 255}, true)
+	// Draw background of the actual gauge (fond gris clair pour la partie vide)
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(ui.GaugeW), totalPx, color.RGBA{50, 50, 50, 255}, true)
 
 	// Fill from bottom
-	vector.DrawFilledRect(screen, float32(x), float32(y+ui.GaugeH-float64(fillHeight)), float32(ui.GaugeW), fillHeight, clr, true)
+	vector.DrawFilledRect(screen, float32(x), float32(y+float64(totalPx-fillHeight)), float32(ui.GaugeW), fillHeight, clr, true)
 
 	// Label
 	text.Draw(screen, label, basicfont.Face7x13, int(x)+25, int(y)+int(ui.GaugeH)+15, color.White)

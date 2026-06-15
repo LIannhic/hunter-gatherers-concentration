@@ -217,7 +217,12 @@ func NewApplication() (*Application, error) {
 				totalXP += 250
 			}
 		}
+		oldLevel := app.World.Player.Stats.Level
 		app.World.Player.GainExperience(totalXP)
+
+		if app.World.Player.Stats.Level > oldLevel {
+			app.World.EventBus.Publish(event.NewLevelUpEvent(app.World.Player.Stats.Level))
+		}
 
 		app.HUD.ShowVictory()
 	}
@@ -518,8 +523,13 @@ func (app *Application) setupDebugCallbacks() {
 // setupEventSubscriptions connecte l'EventBus aux animations graphiques du Renderer.
 func (app *Application) setupEventSubscriptions() {
 	app.World.EventBus.SubscribeFunc(event.TileMatched, func(e event.Event) {
+		oldLevel := app.World.Player.Stats.Level
 		// On donne 10 XP pour chaque match réussi
 		app.World.Player.GainExperience(10)
+
+		if app.World.Player.Stats.Level > oldLevel {
+			app.World.EventBus.Publish(event.NewLevelUpEvent(app.World.Player.Stats.Level))
+		}
 	})
 
 	app.World.EventBus.SubscribeFunc(event.TileRevealed, func(e event.Event) {

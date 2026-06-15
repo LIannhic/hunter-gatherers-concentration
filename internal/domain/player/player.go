@@ -611,8 +611,8 @@ func (p *Player) LevelUp() {
 	p.Stats.Level++
 	p.Stats.MaxHealth += 10
 	p.Stats.MaxMana += 5
-	p.Stats.Health = p.Stats.MaxHealth
-	p.Stats.Mana = p.Stats.MaxMana
+	p.Heal(10)       // Soigne du montant de l'augmentation
+	p.RestoreMana(5) // Restaure du montant de l'augmentation
 }
 
 // GetFlipDirection retourne la direction de bascule d'une tuile basée sur l'ancrage du joueur.
