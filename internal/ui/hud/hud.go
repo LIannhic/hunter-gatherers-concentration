@@ -46,6 +46,7 @@ type HUD struct {
 	showDetails          bool
 	showInventoryDetails bool
 	showAssetsDetails    bool
+	assetPage            int
 	showVictory          bool
 	fullFeedbackTimer    int // Timer pour le retour visuel d'inventaire plein
 
@@ -79,6 +80,7 @@ func NewHUD(world *domain.World) *HUD {
 		showDetails:          false,
 		showInventoryDetails: false,
 		showAssetsDetails:    false,
+		assetPage:            0,
 		showVictory:          false,
 		fullFeedbackTimer:    0,
 		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 331),
@@ -306,6 +308,9 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	h.renderGauges(screen)
 	h.renderMiniMap(screen)
 
+	h.renderMessageArea(screen, "left")
+	h.renderMessageArea(screen, "right")
+
 	if h.showDetails {
 		h.renderDetailWindow(screen)
 	}
@@ -321,9 +326,6 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	if h.showVictory {
 		h.renderVictoryWindow(screen)
 	}
-
-	h.renderMessageArea(screen, "left")
-	h.renderMessageArea(screen, "right")
 
 	// NOUVEAU: Rendu des fenêtres modales
 	if h.debugWindow != nil {
@@ -380,10 +382,13 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{30, 30, 40, 255}, true)
 	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 2, color.RGBA{100, 100, 150, 255}, true)
 
-	text.Draw(screen, "ATLAS DES ASSETS (T pour fermer)", basicfont.Face7x13, x+20, y+30, color.RGBA{200, 200, 255, 255})
+	// Bouton Fermer (Style identique à I et L)
+	closeX, closeY := x+winW-30, y+10
+	vector.DrawFilledRect(screen, float32(closeX), float32(closeY), 20, 20, color.RGBA{150, 50, 50, 255}, true)
+	text.Draw(screen, "X", basicfont.Face7x13, closeX+6, closeY+15, color.White)
 
 	// Liste des assets à montrer
-	assetsToDraw := []struct {
+	allAssets := []struct {
 		name string
 		key  string
 	}{
@@ -420,9 +425,34 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		{"Sand Core", "resource_sand_core"},
 	}
 
+	itemsPerPage := 15
+	maxPage := (len(allAssets) - 1) / itemsPerPage
+	if h.assetPage > maxPage {
+		h.assetPage = maxPage
+	}
+
+	title := fmt.Sprintf("ATLAS DES ASSETS - Page %d/%d", h.assetPage+1, maxPage+1)
+	text.Draw(screen, title, basicfont.Face7x13, x+20, y+30, color.RGBA{200, 200, 255, 255})
+
+	// Boutons de pagination
+	if h.assetPage > 0 {
+		h.drawButton(screen, float32(x+20), float32(y+winH-40), 100, 25, "PRECEDENT", color.RGBA{60, 60, 80, 255})
+	}
+	if h.assetPage < maxPage {
+		h.drawButton(screen, float32(x+winW-120), float32(y+winH-40), 100, 25, "SUIVANT", color.RGBA{60, 60, 80, 255})
+	}
+
 	colWidth := 150
-	rowHeight := 120
+	rowHeight := 140
 	itemsPerRow := 5
+
+	startIdx := h.assetPage * itemsPerPage
+	endIdx := startIdx + itemsPerPage
+	if endIdx > len(allAssets) {
+		endIdx = len(allAssets)
+	}
+
+	assetsToDraw := allAssets[startIdx:endIdx]
 
 	for i, asset := range assetsToDraw {
 		row := i / itemsPerRow
@@ -455,10 +485,27 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		// Nom de l'asset
 		text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+105, color.White)
 
-		// TODO: En pratique, il faudrait passer Application ou AssetsManager au HUD
-		// Pour l'instant on montre la structure.
-		text.Draw(screen, "["+asset.key+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
+		// Affichage de la clé nettoyée (sans préfixes, en majuscules)
+		cleanKey := asset.key
+		cleanKey = strings.TrimPrefix(cleanKey, "tile_")
+		cleanKey = strings.TrimPrefix(cleanKey, "creature_")
+		cleanKey = strings.TrimPrefix(cleanKey, "resource_")
+		cleanKey = strings.ToUpper(cleanKey)
+
+		text.Draw(screen, "["+cleanKey+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
 	}
+}
+
+func (h *HUD) drawButton(screen *ebiten.Image, x, y, w, buttonH float32, label string, bg color.RGBA) {
+	vector.DrawFilledRect(screen, x, y, w, buttonH, bg, true)
+	vector.StrokeRect(screen, x, y, w, buttonH, 1, color.RGBA{150, 150, 200, 255}, true)
+
+	// Centrage sommaire du texte
+	tw := len(label) * 7
+	tx := int(x) + (int(w)-tw)/2
+	ty := int(y) + (int(buttonH)+10)/2
+
+	text.Draw(screen, label, basicfont.Face7x13, tx, ty, color.White)
 }
 
 // renderVictoryWindow dessine l'écran de victoire
@@ -1076,6 +1123,43 @@ func (h *HUD) HandleClick(x, y int) bool {
 			return true
 		}
 		return true // On consomme le clic pour éviter d'interagir avec le plateau sous la modale
+	}
+
+	// Interception par l'Atlas des Assets
+	if h.showAssetsDetails {
+		winW, winH := 800, 500
+		wx := (ui.ScreenWidth - winW) / 2
+		wy := (ui.ScreenHeight - winH) / 2
+		fx, fy := float32(x), float32(y)
+
+		// Bouton Fermer (X)
+		if fx >= float32(wx+winW-30) && fx <= float32(wx+winW-10) && fy >= float32(wy+10) && fy <= float32(wy+30) {
+			h.showAssetsDetails = false
+			return true
+		}
+
+		// Boutons Pagination
+		allAssetsCount := 31 // Nombre total d'assets dans la liste (fixe pour l'instant)
+		itemsPerPage := 15
+		maxPage := (allAssetsCount - 1) / itemsPerPage
+
+		// Bouton Précédent
+		if h.assetPage > 0 {
+			if fx >= float32(wx+20) && fx <= float32(wx+120) && fy >= float32(wy+winH-40) && fy <= float32(wy+winH-15) {
+				h.assetPage--
+				return true
+			}
+		}
+
+		// Bouton Suivant
+		if h.assetPage < maxPage {
+			if fx >= float32(wx+winW-120) && fx <= float32(wx+winW-20) && fy >= float32(wy+winH-40) && fy <= float32(wy+winH-15) {
+				h.assetPage++
+				return true
+			}
+		}
+
+		return true // Consomme tout clic dans la fenêtre
 	}
 
 	// Clic sur l'icône Menu (M) dans le portrait

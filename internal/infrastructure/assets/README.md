@@ -117,6 +117,15 @@ Les créatures marquent le terrain via des entités de traces :
 - `portal` : Portail de zone (Départ/Fin)
 - `exit` : Indicateur de sortie de navigation
 
+## 🔍 Atlas des Assets
+
+Le jeu inclut un outil de visualisation intégré pour les développeurs, accessible via la touche **T**.
+
+- **Visualisation** : Affiche les icônes de toutes les tuiles, créatures, ressources et traces.
+- **Pagination** : Navigation fluide via des boutons **[PRECEDENT]** et **[SUIVANT]** (15 assets par page).
+- **Labels** : Affiche le nom de l'asset et sa clé technique nettoyée (ex: `LUMIFLY` au lieu de `creature_lumifly`).
+- **Style** : Interface cohérente avec les autres fenêtres modales (bouton de fermeture [X], bordures thématiques).
+
 ## 🎮 Utilisation dans le Code
 
 ```go
