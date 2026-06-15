@@ -33,6 +33,7 @@ const (
 	ItemMessage        Type = "item_message"
 	NavigationOpened   Type = "navigation_opened"
 	NavigationClosed   Type = "navigation_closed"
+	LevelUp            Type = "level_up"
 	// Animation events pour l'UI
 	AnimationStarted Type = "animation_started"
 	AnimationEnded   Type = "animation_ended"
@@ -357,6 +358,17 @@ func NewNavigationClosedEvent(gridID string) Event {
 		SourceID: "system",
 		Payload: map[string]interface{}{
 			"grid_id": gridID,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewLevelUpEvent(newLevel int) Event {
+	return Event{
+		Type:     LevelUp,
+		SourceID: "player",
+		Payload: map[string]interface{}{
+			"level": newLevel,
 		},
 		Timestamp: time.Now(),
 	}
