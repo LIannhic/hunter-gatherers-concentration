@@ -226,8 +226,13 @@ func (h *Handler) updateButtonHover() {
 		return
 	}
 
+    x, y := ebiten.CursorPosition()
+    // SÉCURITÉ MOBILE : Pas de survol si la souris n'est pas détectée
+    if x == -1 && y == -1 {
+        return
+    }
+
 	states := h.actionButtons.ComputeStates()
-	x, y := ebiten.CursorPosition()
 	btnID, ok := h.actionButtons.HitTest(x, y, states)
 
 	if !ok {
@@ -280,6 +285,13 @@ func (h *Handler) updateHover() {
 
 	activeThisFrame := make(map[string]bool)
 	mx, my := h.getInteractionPosition()
+
+	// SÉCURITÉ MOBILE : Pas de survol si aucun doigt/souris n'est actif
+    if mx == -1 && my == -1 {
+        h.renderer.DecayHoverStates(activeThisFrame)
+        return
+    }
+
 	pos, gridID, ok := h.renderer.ScreenToGrid(mx, my, h.world)
 
 	if ok {
@@ -343,94 +355,104 @@ func (h *Handler) getEntityInfo(ent entity.Entity) string {
 }
 
 func (h *Handler) handleMouse() error {
-	// Clic droit : Désélection (Maintenu pour Desktop)
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
-		if h.selectedTile != nil {
-			fmt.Printf("[SÉLECTION] Tuile en %v désélectionnée (clic droit)\n", *h.selectedTile)
-			h.ClearSelection()
-		}
-		return nil
-	}
+    // Clic droit : Désélection (Maintenu pour Desktop)
+    if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+       if h.selectedTile != nil {
+          fmt.Printf("[SÉLECTION] Tuile en %v désélectionnée (clic droit)\n", *h.selectedTile)
+          h.ClearSelection()
+       }
+       return nil
+    }
 
-	// 1. Détection du début (Appui)
-	justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-	var tids []ebiten.TouchID
-	tids = inpututil.AppendJustPressedTouchIDs(tids)
-	if len(tids) > 0 {
-		justPressed = true
-	}
+    // 1. Détection du début (Appui)
+    justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+    var tids []ebiten.TouchID
+    tids = inpututil.AppendJustPressedTouchIDs(tids)
+    if len(tids) > 0 {
+       justPressed = true
+    }
 
-	if justPressed {
-		h.touchStartTime = time.Now()
-		h.isLongPressFired = false
-		h.isDragging = false
-		h.touchStartScreenX, h.touchStartScreenY = h.getInteractionPosition()
-		return nil
-	}
+    if justPressed {
+       h.touchStartTime = time.Now()
+       h.isLongPressFired = false
+       h.isDragging = false
+       h.touchStartScreenX, h.touchStartScreenY = h.getInteractionPosition()
+       return nil
+    }
 
-	// 2. Pendant la pression (Drag, Long Press)
-	isDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) || len(ebiten.TouchIDs()) > 0
-	if isDown {
-		currX, currY := h.getInteractionPosition()
+    // 2. Pendant la pression (Drag, Long Press)
+    isDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) || len(ebiten.TouchIDs()) > 0
+    if isDown {
+       currX, currY := h.getInteractionPosition()
 
-		// Détection du Drag
-		dist := math.Hypot(float64(currX-h.touchStartScreenX), float64(currY-h.touchStartScreenY))
-		if dist > 10.0 { // dragThreshold
-			h.isDragging = true
-		}
+       // Si on est sur mobile et qu'on récupère (-1, -1) alors que c'est pressé,
+       // on ignore cette frame pour éviter de casser les calculs
+       if currX == -1 && currY == -1 {
+          return nil
+       }
 
-		if h.isDragging {
-			// Défilement de l'inventaire
-			mx, my := h.getInteractionPosition()
-			_, gridID, ok := h.renderer.ScreenToGrid(mx, my, h.world)
-			if ok && gridID == board.InventoryGridID {
-				dy := float64(h.touchStartScreenY - currY)
-				h.world.Player.Inventory.ScrollOffset += dy
-				h.touchStartScreenY = currY // Update pour le prochain delta
+       // Détection du Drag
+       dist := math.Hypot(float64(currX-h.touchStartScreenX), float64(currY-h.touchStartScreenY))
+       if dist > 15.0 { // Augmenté légèrement à 15 pour la sensibilité mobile
+          h.isDragging = true
+       }
 
-				// Bornage du scroll
-				inv := &h.world.Player.Inventory
-				totalRows := float64((inv.MaxSize + ui.LootSlotsPerRow - 1) / ui.LootSlotsPerRow)
-				rowH := ui.LootSlotSize + ui.LootSlotPadding
-				totalHeight := totalRows * rowH
-				viewportHeight := 331.0
-				maxScroll := totalHeight - viewportHeight
-				if maxScroll < 0 {
-					maxScroll = 0
-				}
-				if inv.ScrollOffset < 0 {
-					inv.ScrollOffset = 0
-				}
-				if inv.ScrollOffset > maxScroll {
-					inv.ScrollOffset = maxScroll
-				}
-			}
-		} else if !h.isLongPressFired {
-			// Détection de l'appui long (500ms)
-			if time.Since(h.touchStartTime) > 500*time.Millisecond {
-				h.isLongPressFired = true
-				h.handleLongPress()
-			}
-		}
-		return nil
-	}
+       if h.isDragging {
+          // Défilement de l'inventaire
+          mx, my := h.getInteractionPosition()
+          _, gridID, ok := h.renderer.ScreenToGrid(mx, my, h.world)
+          if ok && gridID == board.InventoryGridID {
+             dy := float64(h.touchStartScreenY - currY)
+             h.world.Player.Inventory.ScrollOffset += dy
+             h.touchStartScreenY = currY // Update pour le prochain delta
 
-	// 3. Relâchement (Action finale)
-	justReleased := inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft)
-	var rtids []ebiten.TouchID
-	rtids = inpututil.AppendJustReleasedTouchIDs(rtids)
-	if len(rtids) > 0 {
-		justReleased = true
-	}
+             // Bornage du scroll
+             inv := &h.world.Player.Inventory
+             totalRows := float64((inv.MaxSize + ui.LootSlotsPerRow - 1) / ui.LootSlotsPerRow)
+             rowH := ui.LootSlotSize + ui.LootSlotPadding
+             totalHeight := totalRows * rowH
+             viewportHeight := 331.0
+             maxScroll := totalHeight - viewportHeight
+             if maxScroll < 0 {
+                maxScroll = 0
+             }
+             if inv.ScrollOffset < 0 {
+                inv.ScrollOffset = 0
+             }
+             if inv.ScrollOffset > maxScroll {
+                inv.ScrollOffset = maxScroll
+             }
+          }
+       } else if !h.isLongPressFired {
+          // Détection de l'appui long (500ms)
+          if time.Since(h.touchStartTime) > 500*time.Millisecond {
+             h.isLongPressFired = true
+             h.handleLongPress()
+          }
+       }
+       return nil
+    }
 
-	if justReleased {
-		if !h.isDragging && !h.isLongPressFired {
-			return h.executePrimaryActionAt(h.getInteractionPosition())
-		}
-		h.isDragging = false
-	}
+    // 3. Relâchement (Action finale)
+    var rtids []ebiten.TouchID
+    rtids = inpututil.AppendJustReleasedTouchIDs(rtids)
+    justReleased := inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) || len(rtids) > 0
 
-	return nil
+    if justReleased {
+       if !h.isDragging && !h.isLongPressFired {
+          // SUR MOBILE : Au relâchement, getInteractionPosition() renvoie (-1, -1).
+          // On utilise donc touchStartScreenX/Y qui contiennent la position initiale du clic valide !
+          execX, execY := h.getInteractionPosition()
+          if execX == -1 && execY == -1 {
+             execX = h.touchStartScreenX
+             execY = h.touchStartScreenY
+          }
+          return h.executePrimaryActionAt(execX, execY)
+       }
+       h.isDragging = false
+    }
+
+    return nil
 }
 
 func (h *Handler) handleLongPress() {
@@ -446,14 +468,20 @@ func (h *Handler) handleLongPress() {
 }
 
 func (h *Handler) executePrimaryActionAt(x, y int) error {
-	// Priorité : gestion des clics sur les boutons d'action (même si isProcessing)
-	if h.actionButtons != nil {
-		states := h.actionButtons.ComputeStates()
-		if btnID, ok := h.actionButtons.HitTest(x, y, states); ok {
-			h.handleActionButtonClick(btnID)
-			return nil
-		}
-	}
+    // SÉCURITÉ MOBILE : Si les coordonnées reçues suite au relâchement du doigt sont invalides
+    if x == -1 && y == -1 {
+        x = h.touchStartScreenX
+        y = h.touchStartScreenY
+    }
+
+    // Priorité : gestion des clics sur les boutons d'action (même si isProcessing)
+    if h.actionButtons != nil {
+       states := h.actionButtons.ComputeStates()
+       if btnID, ok := h.actionButtons.HitTest(x, y, states); ok {
+          h.handleActionButtonClick(btnID)
+          return nil
+       }
+    }
 
 	if h.isProcessing {
 		// EXCEPTION : On autorise le clic sur un portail déjà révélé pour la victoire
@@ -1429,20 +1457,52 @@ func (h *Handler) tryMatchSelected() {
 }
 
 func (h *Handler) getHoveredTile() (board.Position, string, bool) {
-	if h.renderer == nil {
-		return board.Position{}, "", false
-	}
-	x, y := ebiten.CursorPosition()
-	return h.renderer.ScreenToGrid(x, y, h.world)
+    if h.renderer == nil {
+       return board.Position{}, "", false
+    }
+    // FIX MOBILE : Remplacer CursorPosition par getInteractionPosition
+    x, y := h.getInteractionPosition()
+
+    // Si aucun contact/souris, on s'arrête là
+    if x == -1 && y == -1 {
+       return board.Position{}, "", false
+    }
+    return h.renderer.ScreenToGrid(x, y, h.world)
 }
 
 func (h *Handler) getClickedExit() (entity.Direction, int, bool) {
-	x, y := ebiten.CursorPosition()
-	// Coordonnées relatives au Playmat
-	px := float64(x) - ui.PlaymatX
-	py := float64(y) - ui.PlaymatY
+    // FIX MOBILE : Remplacer CursorPosition par getInteractionPosition
+    x, y := h.getInteractionPosition()
+    if x == -1 && y == -1 {
+       return 0, 0, false
+    }
 
-	return h.checkExitClick(px, py)
+    // Coordonnées relatives au Playmat
+    px := float64(x) - ui.PlaymatX
+    py := float64(y) - ui.PlaymatY
+
+    return h.checkExitClick(px, py)
+}
+
+// calculateFlipDirection détermine la direction de flip basée sur la position du clic dans la tuile
+func (h *Handler) calculateFlipDirection(gridID string) domain.FlipDirection {
+    if h.renderer == nil {
+       return usecase.DefaultFlipDirection
+    }
+
+    // FIX MOBILE : Récupère la position tactile ou souris (getInteractionPosition)
+    cursorX, cursorY := h.getInteractionPosition()
+    if cursorX == -1 && cursorY == -1 {
+       return usecase.DefaultFlipDirection
+    }
+
+    localX, localY, gID, ok := h.renderer.ScreenToLocalTile(cursorX, cursorY, h.world)
+    if !ok || gID != gridID {
+       return usecase.DefaultFlipDirection
+    }
+
+    tileSize := h.renderer.GetTileSize()
+    return entity.CalculateFlipDirection(tileSize, localX, localY)
 }
 
 func (h *Handler) checkExitClick(px, py float64) (entity.Direction, int, bool) {
@@ -1475,23 +1535,6 @@ func (h *Handler) checkExitClick(px, py float64) (entity.Direction, int, bool) {
 		return board.West, index, true
 	}
 	return 0, 0, false
-}
-
-// calculateFlipDirection détermine la direction de flip basée sur la position du clic dans la tuile
-func (h *Handler) calculateFlipDirection(gridID string) domain.FlipDirection {
-	if h.renderer == nil {
-		return usecase.DefaultFlipDirection
-	}
-
-	// Récupère la position locale du clic dans la tuile
-	cursorX, cursorY := ebiten.CursorPosition()
-	localX, localY, gID, ok := h.renderer.ScreenToLocalTile(cursorX, cursorY, h.world)
-	if !ok || gID != gridID {
-		return usecase.DefaultFlipDirection
-	}
-
-	tileSize := h.renderer.GetTileSize()
-	return entity.CalculateFlipDirection(tileSize, localX, localY)
 }
 
 func (h *Handler) renderHighlights(screen *ebiten.Image) {

@@ -348,7 +348,9 @@ go build -o game ./cmd/game
 | Portail Portatif (Raccourci) | P |
 | Statistiques des zones | I |
 | Détails Inventaire | L |
-| Atlas des Assets (Debug) | T |
+| Atlas des Assets (Toggle) | T |
+| Pagination Atlas | Boutons [PRECEDENT] / [SUIVANT] |
+| Fermer Atlas | Bouton [X] ou T |
 
 #### Paramètres et Debug
 

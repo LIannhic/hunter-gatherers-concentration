@@ -356,6 +356,7 @@ L'inventaire agit comme un tampon entre la session de récolte onirique et le fo
 - **Multi-sélection** : Permet de sélectionner plusieurs objets pour une suppression groupée.
 - **Sécurité** : Certains objets (ex: Portail Portatif) possèdent le tag `IsDeletable: false` et ne peuvent pas être supprimés par le joueur.
 - **Affichage** : Utilise un système de clipping et de défilement fluide (pixel par pixel) pour suggérer la profondeur de la réserve.
+- **Atlas Technique** : Une fenêtre d'atlas (T) permet de vérifier visuellement le rendu de chaque entité. Elle supporte la pagination et utilise un système de boutons pour une navigation simplifiée.
 - **Support des Niveaux** : Les constructeurs d'objets (`NewXXXItem`) acceptent un paramètre de niveau pour instancier directement des butins puissants.
 - **Valorisation du Butin** : Lors de la victoire, chaque item en inventaire est converti en score (XP) : 100 XP par ressource, 250 XP par créature.
 
