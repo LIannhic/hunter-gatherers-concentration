@@ -1,6 +1,7 @@
 # Default ignored files
 .idea/
 .artifacts/
+.vscode/
 icone-hgc-16.ico
 icone-hgc-32.ico
 icone-hgc-64.ico
@@ -13,6 +14,10 @@ saves/
 *.json
 !go.mod
 !go.sum
+# Binaires
+game
+game.exe
+*.exe
 hgcv0.2_basic-incursion.wasm
 index.html
 wasm_exec.js
