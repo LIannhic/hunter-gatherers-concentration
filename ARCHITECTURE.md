@@ -76,7 +76,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Un état (TileState : Hidden, Revealed, Matched, Blocked, Cumuled)
   - Des tags dynamiques pour le comportement ou le rendu (ex: `moss_lure`, `dangerous_on_reveal`)
   - Des composants optionnels (Lifecycle, Matchable, CreatureAI, etc.)
-  - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (Forward, Backward, Left, Right). Supporte **8 directions cardinales et ordinales** transformées par sa matrice D4.
+  - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (Forward, Backward, Left, Right). Supporte **8 directions cardinales et ordinales** transformées par son orientation unifiée (intrinsèque + D4).
 
 - **Board/Grid** : Gère la géométrie du plateau
   - Chaque tuile contient une référence optionnelle à une entité.
@@ -411,7 +411,7 @@ type MovementProfile struct {
 |------|-------------|
 | `NavWander` | Errance directionnelle |
 | `NavPatrol` | Suit un itinéraire prédéfini |
-| `NavRelative` | Par rapport à sa position et son orientation |
+| `NavRelative` | Par rapport à son orientation absolue (saute si bloqué) |
 | `NavOrientation` | Selon la direction du regard |
 | `NavAttraction` | Vise une cible spécifique |
 | `NavRepulsion` | S'éloigne de la cible |

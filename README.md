@@ -213,12 +213,12 @@ Les créatures disposent d'un système de mouvement configurable avec les param�
 - **Errance** : Direction aléatoire
 - **Patrouille** : Suit un itinéraire défini
 - **Orientation** : Selon la direction du regard
+- **Relatif** : Par rapport à son orientation absolue (avance, saute si bloqué)
 - **Attraction** : Vise une cible spécifique
 - **Répulsion** : S'éloigne d'une cible
 
 #### Modes de déplacement
-- **Bento** : Déplacement visible (le joueur voit le mouvement)
-- **Shadow** : Déplacement invisible (face cachée, le joueur doit deviner)
+- **Normal** : Déplacement visible (le joueur voit le mouvement
 - **Swap** : Échange de place avec la cible
 - **Over** : Calque supérieur (vol, effets de surface)
 - **Under** : Calque inférieur (fouissage, traces profondes)

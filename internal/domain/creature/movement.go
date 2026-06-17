@@ -161,26 +161,15 @@ func (nl *NavigationLogic) relative(world WorldQuery, creature *Creature) entity
 	// 1. On récupère la direction de base définie dans notre pattern (ex: {X: 0, Y: -1} voulant dire "En avant")
 	baseDir := nl.PatrolRoute[nl.PatrolIndex]
 
+	// On passe à l'étape suivante du pattern pour le prochain tour immédiatement
+	// Cela permet de "sauter" le mouvement si on est bloqué
+	nl.PatrolIndex = (nl.PatrolIndex + 1) % len(nl.PatrolRoute)
+
 	// 2. On prend en compte l'orientation actuelle de la créature.
-	// Si la créature regarde à l'Est, son "En avant" ({X:0, Y:-1} local) doit devenir un mouvement vers l'Est spatial.
 	orient := creature.GetOrientation()
 
 	// On applique la rotation de l'orientation au vecteur baseDir
 	finalDir := applyOrientationToVector(orient, baseDir)
-
-	// 3. On calcule la case du monde visée pour tester sa validité
-	targetPos := entity.Position{
-		X: creature.GetPosition().X + finalDir.X,
-		Y: creature.GetPosition().Y + finalDir.Y,
-	}
-
-	// 4. La créature attend sagement sur place. Si l'obstacle bouge ou s'ouvre, elle reprendra son pattern exact.
-	if !world.IsValidMove(targetPos) {
-		return entity.Position{X: 0, Y: 0}
-	}
-
-	// 5. Le mouvement est valide ! On passe à l'étape suivante du pattern pour le prochain tour
-	nl.PatrolIndex = (nl.PatrolIndex + 1) % len(nl.PatrolRoute)
 
 	return finalDir
 }
@@ -204,10 +193,7 @@ func applyOrientationToVector(dir entity.Direction, localDir entity.Position) en
 }
 
 func (nl *NavigationLogic) followOrientation(creature *Creature) entity.Position {
-	if orient, ok := creature.GetComponent("orientation").(*Orientation); ok {
-		return orient.ToVector()
-	}
-	return entity.Position{X: 0, Y: -1}
+	return creature.GetOrientation().ToVector()
 }
 
 func (nl *NavigationLogic) moveToward(world WorldQuery, creature *Creature) entity.Position {

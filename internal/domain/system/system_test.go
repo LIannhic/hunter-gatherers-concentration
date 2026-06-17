@@ -105,8 +105,8 @@ func TestCreatureMovementSystem_ModeOver_FlyOverTrap(t *testing.T) {
 	w.Turn = 1
 
 	// 1. Un marcheur (ModeNormal) avance sur un piège
-	walker, _ := w.SpawnCreature("test", "stonewarden", entity.Position{X: 0, Y: 0})
-	trap1, _ := w.SpawnTrap("test", entity.Position{X: 1, Y: 0})
+	walker, _ := w.SpawnCreature("test", "stonewarden", entity.Position{X: 2, Y: 0})
+	trap1, _ := w.SpawnTrap("test", entity.Position{X: 2, Y: 1})
 
 	walker.MovementProfile.Trigger.Type = creature.TriggerAuto
 	walker.MovementProfile.Navigation.Type = creature.NavRelative
@@ -124,8 +124,8 @@ func TestCreatureMovementSystem_ModeOver_FlyOverTrap(t *testing.T) {
 
 	flyer.MovementProfile.Trigger.Type = creature.TriggerAuto
 	flyer.MovementProfile.Navigation.Type = creature.NavRelative
-	flyer.MovementProfile.Navigation.PatrolRoute = []entity.Position{{X: 1, Y: 1}}
-	flyer.SetOrientation(entity.DirEast)
+	flyer.MovementProfile.Navigation.PatrolRoute = []entity.Position{{X: 1, Y: 0}}
+	flyer.SetOrientation(entity.DirNorth)
 	flyer.MovementProfile.Frequency.TurnLastMoved = -1
 	flyer.MovementProfile.Mode.Type = creature.ModeOver
 
