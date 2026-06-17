@@ -153,50 +153,46 @@ func (h *HUD) Update() {
 }
 
 func (h *HUD) updateMessageArea(area string) {
-	var active **NotificationMessage
-	var queue *[]string
-	var boxWidth float64
+    var active **NotificationMessage
+    var queue *[]string
+    var boxWidth float64
 
-	if area == "left" {
-		active = &h.activeLeft
-		queue = &h.queueLeft
-		boxWidth = ui.MessageBoxWLeft
-	} else {
-		active = &h.activeRight
-		queue = &h.queueRight
-		boxWidth = ui.MessageBoxWRight
-	}
+    if area == "left" {
+       active = &h.activeLeft
+       queue = &h.queueLeft
+       boxWidth = ui.MessageBoxWLeft
+    } else {
+       active = &h.activeRight
+       queue = &h.queueRight
+       boxWidth = ui.MessageBoxWRight
+    }
 
-	// 1. Si aucun message actif, on en prend un dans la queue
-	if *active == nil && len(*queue) > 0 {
-		msgText := (*queue)[0]
-		*queue = (*queue)[1:]
-		*active = &NotificationMessage{
-			Text:     msgText,
-			X:        boxWidth,
-			BoxWidth: boxWidth,
-			Speed:    2.0,
-		}
-	}
+    if *active == nil && len(*queue) > 0 {
+       msgText := (*queue)[0]
+       *queue = (*queue)[1:]
+       *active = &NotificationMessage{
+          Text:     msgText,
+          X:        boxWidth,
+          BoxWidth: boxWidth,
+          Speed:    2.0,
+       }
+    }
 
-	// 2. Si un message est actif, on le fait défiler
-	if *active != nil {
-		m := *active
-		m.X -= m.Speed
+    if *active != nil {
+       m := *active
+       m.X -= m.Speed
 
-		// Calcul de la largeur du texte (approximatif pour le test, le renderer utilisera text.BoundString)
-		// On part sur 7px par caractère (basicfont.Face7x13)
-		textWidth := float64(len(m.Text) * 7)
+       textWidth := float64(len(m.Text) * 7)
 
-		if m.X < -textWidth {
-			m.RepeatCount++
-			if m.RepeatCount >= 2 {
-				*active = nil
-			} else {
-				m.X = m.BoxWidth
-			}
-		}
-	}
+       if m.X < -textWidth {
+          m.RepeatCount++
+          if m.RepeatCount >= 2 {
+             *active = nil
+          } else {
+             m.X = m.BoxWidth
+          }
+       }
+    }
 }
 
 // SetTimerCallbacks injecte les accesseurs au compte à rebours temps réel.
