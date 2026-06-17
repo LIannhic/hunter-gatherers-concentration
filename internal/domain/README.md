@@ -409,11 +409,12 @@ Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement :
 
 ### Orientation Persistante et Mathématiques D4
 
-Le moteur gère une accumulation réelle des transformations géométriques :
+Le moteur gère une unification réelle des transformations géométriques :
+- **Unification de l'Orientation** : `GetOrientation()` combine dynamiquement l'orientation "intrinsèque" de la créature (définie par son espèce) avec la transformation D4 actuelle de sa tuile. Cela garantit que les comportements d'IA (comme `NavRelative`) utilisent toujours le regard absolu sur la grille.
 - **Composition SUR l'état** : Chaque nouveau mouvement (flip) est appliqué sur l'état actuel de l'entité (`apply * current`). Cela respecte la logique physique où le joueur manipule une tuile déjà orientée.
 - **Fermeture Physique** : La fermeture d'une tuile (via la pente du terrain) est une transformation réelle qui modifie l'orientation logique face cachée.
 - **Réversibilité** : Grâce aux propriétés du groupe $D_4$, deux flips identiques s'annulent ($T^2 = I$), permettant de retrouver l'état d'origine si le joueur et le terrain agissent sur le même axe.
-- **Nomenclature Relative** : Les créatures utilisent des directions relatives (`Forward`, `Backward`, `Left`, `Right`) pour définir leurs zones de menace. Ces directions sont transformées en coordonnées absolues du plateau via la matrice D4 de l'entité.
+- **Nomenclature Relative** : Les créatures utilisent des directions relatives (`Forward`, `Backward`, `Left`, `Right`) pour définir leurs zones de menace. Ces directions sont transformées en coordonnées absolues du plateau via l'orientation unifiée de l'entité.
 
 ### Niveaux de Difficulté
 

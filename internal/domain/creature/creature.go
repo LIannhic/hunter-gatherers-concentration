@@ -62,16 +62,23 @@ func (c *Creature) SetMovementProfile(m *MovementProfile) {
 func (c *Creature) GetOrientation() entity.Direction {
 	baseDirection := c.BaseEntity.GetOrientation()
 	if c.MovementProfile != nil {
-		baseDirection = c.MovementProfile.Orientation.Direction
+		baseDirection = entity.TransformDirection(c.MovementProfile.Orientation.Direction, c.BaseEntity.GetTransformation())
 	}
-	return entity.TransformDirection(baseDirection, c.BaseEntity.GetTransformation())
+	return baseDirection
 }
 
 func (c *Creature) SetOrientation(o entity.Direction) {
-	if c.MovementProfile != nil {
-		c.MovementProfile.Orientation.Direction = o
+	if o == entity.DirNorth || o == entity.DirEast || o == entity.DirSouth || o == entity.DirWest {
+		c.BaseEntity.SetOrientation(o)
+		if c.MovementProfile != nil {
+			c.MovementProfile.Orientation.Direction = entity.DirNorth
+		}
+	} else {
+		if c.MovementProfile != nil {
+			c.MovementProfile.Orientation.Direction = o
+		}
+		c.BaseEntity.SetTransformation(entity.TransIdentity)
 	}
-	c.BaseEntity.SetOrientation(o)
 }
 
 func (c *Creature) GetComponent(name string) interface{} {
