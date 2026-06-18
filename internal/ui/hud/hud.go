@@ -70,7 +70,9 @@ type HUD struct {
 	queueLeft     []string
 	queueRight    []string
 	activeLeft    *NotificationMessage
-	activeRight   *NotificationMessage
+	activeRight          *NotificationMessage
+	toxicIntensity       float64 // Intensité de la toxicité pour le feedback visuel
+	lastToxicTurn        int     // Dernier tour où on a reçu des dégâts de poison
 }
 
 // NewHUD crée un nouveau HUD
@@ -109,6 +111,14 @@ func NewHUD(world *domain.World) *HUD {
 	world.EventBus.SubscribeFunc(event.PlayerDamaged, func(e event.Event) {
 		reason, _ := e.Payload["reason"].(string)
 		damage, _ := e.Payload["damage"].(int)
+		dmgType, _ := e.Payload["type"].(string)
+
+		if dmgType == "poison" {
+			stackCount, _ := e.Payload["stack_count"].(int)
+			h.toxicIntensity = float64(stackCount)
+			h.lastToxicTurn = h.world.Turn
+		}
+
 		msg := ""
 		if reason == "confrontation" {
 			msg = fmt.Sprintf("CONFRONTATION ! -%d HP", damage)
@@ -144,6 +154,14 @@ func (h *HUD) AddMessage(text string, area string) {
 func (h *HUD) Update() {
 	if h.fullFeedbackTimer > 0 {
 		h.fullFeedbackTimer--
+	}
+
+	// Reset de l'intensité toxique si le tour a changé sans nouveau poison
+	if h.world.Turn > h.lastToxicTurn {
+		h.toxicIntensity *= 0.9 // Décroissance douce
+		if h.toxicIntensity < 0.1 {
+			h.toxicIntensity = 0
+		}
 	}
 
 	h.updateMessageArea("left")
@@ -826,7 +844,17 @@ func (h *HUD) renderGauges(screen *ebiten.Image) {
 	}
 
 	// Health gauge
-	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, color.RGBA{R: 255, G: 50, B: 50, A: 255})
+	hpColor := color.RGBA{R: 255, G: 50, B: 50, A: 255}
+	if h.toxicIntensity > 0 {
+		// Interpolation vers le rose (255, 100, 200)
+		factor := h.toxicIntensity / 5.0 // Capé à 5 stacks pour le max feedback
+		if factor > 1.0 {
+			factor = 1.0
+		}
+		hpColor.G = uint8(50 + factor*50)
+		hpColor.B = uint8(50 + factor*150)
+	}
+	h.drawVerticalGauge(screen, ui.GaugesX+ui.HealthGaugeRelativeX, ui.GaugesY+ui.HealthGaugeRelativeY, "HP", p.Stats.Health, p.Stats.MaxHealth, hpColor)
 
 	// Mana gauge
 	h.drawVerticalGauge(screen, ui.GaugesX+ui.ManaGaugeRelativeX, ui.GaugesY+ui.ManaGaugeRelativeY, "MN", p.Stats.Mana, p.Stats.MaxMana, color.RGBA{R: 50, G: 50, B: 255, A: 255})

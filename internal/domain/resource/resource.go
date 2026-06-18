@@ -15,6 +15,7 @@ type Resource struct {
 	Value        component.Value
 	Visual       component.Visual
 	Matchable    component.Matchable
+	Hazard       component.Hazard
 }
 
 func New(rtype string, pos entity.Position) *Resource {
@@ -42,6 +43,10 @@ func (r *Resource) SetVisual(v component.Visual) {
 
 func (r *Resource) SetMatchable(m component.Matchable) {
 	r.Matchable = m
+}
+
+func (r *Resource) SetHazard(h component.Hazard) {
+	r.Hazard = h
 }
 
 func (r *Resource) GetMatchID() string       { return r.Matchable.MatchID }
@@ -122,6 +127,14 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		r.SetMatchable(component.Matchable{
 			MatchID:    "dreamberry",
 			MatchTypes: []string{"identical"},
+		})
+		r.SetHazard(component.Hazard{
+			BaseDamage:       2.0,
+			DamageType:       "poison",
+			Radius:           0,
+			IsConstant:       true,
+			DegressionFactor: 0.2,
+			ActiveStages:     []int{3}, // Stade 4 (index 3)
 		})
 
 	case "moonstone":

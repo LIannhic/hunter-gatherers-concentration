@@ -95,7 +95,8 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
   - **ResourcePropagationSystem** : Gère la multiplication des ressources sur les cases adjacentes. Émet l'événement `ResourcePropagated` enrichi des positions `from` et `to` pour l'UI.
-  - **ResourceLifecycleSystem** : Gère la maturation des ressources
+  - **ResourceLifecycleSystem** : Gère la maturation des ressources. Émet des logs détaillés sur les transitions de stade.
+  - **ToxicitySystem** : Calcule les dégâts de poison cumulés et dégressifs infligés au joueur par les ressources révélées (ex: Dreamberry stade 4).
   - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire. Le butin hérite du niveau de cumul de la paire.
   - **TrackSystem** : Gère la décomposition temporelle des traces
 
@@ -413,8 +414,13 @@ type MovementProfile struct {
 | `NavPatrol` | Suit un itinéraire prédéfini |
 | `NavRelative` | Par rapport à son orientation absolue (saute si bloqué) |
 | `NavOrientation` | Selon la direction du regard |
-| `NavAttraction` | Vise une cible spécifique |
+| `NavAttraction` | Vise une cible spécifique (Ressource par nom, Joueur, etc.) |
 | `NavRepulsion` | S'éloigne de la cible |
+
+#### Ciblage par stade (Lifecycle Filtering)
+
+Les créatures peuvent désormais filtrer leurs cibles selon leur stade de développement via la propriété `ExcludedStages` du `NavigationLogic`. 
+Exemple: Les Lumiflies ignorent les Dreamberries au stade 1 et 4.
 
 #### Modes de déplacement
 

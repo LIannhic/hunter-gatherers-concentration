@@ -286,3 +286,52 @@ func TestBounce_CornerCollision(t *testing.T) {
 		t.Errorf("Expected orientation DirNorthWest after corner bounce, got %v", c.MovementProfile.Orientation.Direction)
 	}
 }
+
+// --- TEST 11: TOXICITY SYSTEM ---
+func TestToxicitySystem(t *testing.T) {
+	w := NewWorld()
+	w.CreateGrid("test", 5, 5, board.BiomeForest)
+	w.GridOrder = []string{"test"}
+	w.CurrentGridID = "test"
+	w.PlayerID = "player_1"
+	w.playerPosition = entity.Position{X: 2, Y: 2}
+
+	sys := &ToxicitySystem{}
+
+	// 1. One stack of Dreamberry stage 4
+	r1, _ := w.SpawnResource("test", "dreamberry", entity.Position{X: 2, Y: 2})
+	r1.Lifecycle.CurrentStage = 3 // Stage 4
+	r1.SetState(entity.Revealed)
+
+	initialHealth := w.Player.Stats.Health
+	sys.Update(w)
+
+	if w.Player.Stats.Health >= initialHealth {
+		t.Errorf("Player should have taken damage from toxic Dreamberry. Health: %d", w.Player.Stats.Health)
+	}
+	dmg1 := initialHealth - w.Player.Stats.Health
+
+	// 2. Two stacks - should be degressive
+	r2, _ := w.SpawnResource("test", "dreamberry", entity.Position{X: 2, Y: 1})
+	r2.Lifecycle.CurrentStage = 3 // Stage 4
+	r2.SetState(entity.Revealed)
+
+	w.Player.Stats.Health = 100
+	sys.Update(w)
+	dmg2 := 100 - w.Player.Stats.Health
+
+	// dmg2 should be less than 2 * dmg1 if degressive
+	if float64(dmg2) >= float64(2*dmg1) {
+		t.Errorf("Damage should be degressive. 1 stack: %d, 2 stacks: %d", dmg1, dmg2)
+	}
+
+	// 3. Stage 3 - should not be toxic
+	r1.Lifecycle.CurrentStage = 2 // Stage 3
+	r2.Lifecycle.CurrentStage = 2 // Stage 3
+	w.Player.Stats.Health = 100
+	sys.Update(w)
+
+	if w.Player.Stats.Health != 100 {
+		t.Errorf("Player should not take damage from stage 3 Dreamberries. Health: %d", w.Player.Stats.Health)
+	}
+}

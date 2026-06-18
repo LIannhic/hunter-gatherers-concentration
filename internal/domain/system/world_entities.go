@@ -61,6 +61,7 @@ func (w *World) SpawnResource(gridID string, rtype string, pos entity.Position) 
 	w.Components.Add(idStr, &r.Value)
 	w.Components.Add(idStr, &r.Matchable)
 	w.Components.Add(idStr, &r.Visual)
+	w.Components.Add(idStr, &r.Hazard)
 
 	plot.PushEntity(idStr)
 
@@ -96,6 +97,7 @@ func (w *World) SpawnResourceLevel(gridID string, rtype string, pos entity.Posit
 	w.Components.Add(idStr, &r.Value)
 	w.Components.Add(idStr, &r.Matchable)
 	w.Components.Add(idStr, &r.Visual)
+	w.Components.Add(idStr, &r.Hazard)
 
 	plot.PushEntityToBottom(idStr)
 

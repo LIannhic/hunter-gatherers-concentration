@@ -150,16 +150,13 @@ func (c *RevealTileCommand) Execute() error {
 			}
 
 			// Publie un événement de dégâts pour l'UI (le renderer gérera le feedback visuel)
-			c.World.EventBus.Publish(event.Event{
-				Type:     event.PlayerDamaged,
-				SourceID: string(cre.GetID()),
-				Payload: map[string]interface{}{
-					"damage":   10,
-					"type":     "physical",
-					"reason":   "confrontation",
-					"position": playerPos, // Ajoute la position pour le renderer
-				},
-			})
+			c.World.EventBus.Publish(event.NewPlayerDamagedEvent(
+				string(cre.GetID()),
+				10,
+				"physical",
+				"confrontation",
+				map[string]interface{}{"position": playerPos},
+			))
 		}
 	}
 
@@ -316,15 +313,12 @@ func (c *MatchTilesCommand) Execute() error {
 		fmt.Printf("[COMBAT] Match invalide avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
 		c.World.Player.TakeDamage(damage, "creature_fail")
 
-		c.World.EventBus.Publish(event.Event{
-			Type:     event.PlayerDamaged,
-			SourceID: "system",
-			Payload: map[string]interface{}{
-				"damage": damage,
-				"type":   "creature_fail",
-				"reason": "invalid_match",
-			},
-		})
+		c.World.EventBus.Publish(event.NewPlayerDamagedEvent(
+			"system",
+			damage,
+			"creature_fail",
+			"invalid_match",
+		))
 	}
 
 	if resourceCount > 0 {
@@ -332,15 +326,12 @@ func (c *MatchTilesCommand) Execute() error {
 		fmt.Printf("[ALCHIMIE] Match invalide avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
 		c.World.Player.ConsumeMana(manaLoss)
 
-		c.World.EventBus.Publish(event.Event{
-			Type:     event.PlayerDamaged,
-			SourceID: "system",
-			Payload: map[string]interface{}{
-				"mana_loss": manaLoss,
-				"type":      "resource_fail",
-				"reason":    "invalid_match",
-			},
-		})
+		c.World.EventBus.Publish(event.NewPlayerDamagedEvent(
+			"system",
+			manaLoss,
+			"resource_fail",
+			"invalid_match",
+		))
 	}
 
 	// Recacher les entités avec l'animation de pente (Slope)

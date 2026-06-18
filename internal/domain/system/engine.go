@@ -36,6 +36,7 @@ func NewEngine(world *World) *Engine {
 			&CreatureAISystem{},
 			moveSys,
 			&TriggerSystem{},
+			&ToxicitySystem{},
 			&TrackSystem{},
 			lootSys,
 		},

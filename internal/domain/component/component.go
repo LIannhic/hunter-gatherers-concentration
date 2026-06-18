@@ -110,6 +110,30 @@ func (l *Lifecycle) GetCurrentStageName() string {
 	return "unknown"
 }
 
+// Hazard définit les propriétés toxiques ou dangereuses d'une entité
+type Hazard struct {
+	BaseDamage       float64
+	DamageType       string
+	Radius           int
+	IsConstant       bool
+	DegressionFactor float64
+	ActiveStages     []int // Stages où le danger est actif (-1 pour tous)
+}
+
+func (h Hazard) Type() string { return "hazard" }
+
+func (h *Hazard) IsActive(currentStage int) bool {
+	if len(h.ActiveStages) == 0 {
+		return true
+	}
+	for _, s := range h.ActiveStages {
+		if s == -1 || s == currentStage {
+			return true
+		}
+	}
+	return false
+}
+
 func (l *Lifecycle) IsMature() bool {
 	return l.CurrentStage >= l.MaxStages/2
 }

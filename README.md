@@ -57,6 +57,7 @@ Le jeu punit l'inattention et la précipitation via une matrice de décision str
 
 - **Dégâts (Créatures)** : `nombre de créatures révélées * 10` points de vie.
 - **Mana (Ressources)** : `nombre de ressources révélées * 5` points de mana.
+- **Toxicité** : Les ressources peuvent infliger des dégâts de **Poison** constants et dégressifs au joueur si elles sont révélées à certains stades (ex: Dreamberry au stade 4).
 - **Match Valide** : Les entités sont capturées/récoltées (Loot).
 - **Match Invalide** : Les tuiles se referment violemment.
 - **Skip** : Permet de refermer les tuiles sagement si aucune paire n'est identifiée.
@@ -253,7 +254,7 @@ Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il
 
 | Ressource | Biome | Effet du Butin | Description |
 |-----------|-------|----------------|-------------|
-| **Dreamberry** | Global | +5 Mana | Baie onirique violette, base de l'alchimie. |
+| **Dreamberry** | Global | +5 Mana | Baie onirique violette. Toxique au stade 4 (Poison). |
 | **Moonstone** | Global | +5 Sanité | Pierre de lune bleutée, stabilise l'esprit. |
 | **Whispering Herb** | Global | Lore | Herbe murmurante, révèle des secrets. |
 | **Crystal Shard** | Global | +5 Santé | Éclat de cristal, régénère les tissus. |
