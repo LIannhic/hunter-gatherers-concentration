@@ -201,6 +201,17 @@ func TestResourceFactory(t *testing.T) {
 	if !dreamberry.CanPropagate() {
 		t.Error("Dreamberry at stage 1 should be able to propagate")
 	}
+
+	// Test Hazard
+	if dreamberry.Hazard.BaseDamage != 2.0 {
+		t.Errorf("Expected dreamberry hazard base damage 2.0, got %f", dreamberry.Hazard.BaseDamage)
+	}
+	if !dreamberry.Hazard.IsActive(3) {
+		t.Error("Dreamberry hazard should be active at stage 3 (stage 4)")
+	}
+	if dreamberry.Hazard.IsActive(2) {
+		t.Error("Dreamberry hazard should NOT be active at stage 2")
+	}
 	
 	// Test moonstone
 	moonstone := factory.Create("moonstone", entity.Position{X: 1, Y: 1})

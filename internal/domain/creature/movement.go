@@ -94,12 +94,13 @@ const (
 )
 
 type NavigationLogic struct {
-	Type        NavigationType
-	Target      TargetType
-	PatrolRoute []entity.Position
-	PatrolIndex int
-	WanderBias  entity.Position
-	TargetName  string // Optionnel: nom/ID spécifique de la cible (ex: "dreamberry")
+	Type           NavigationType
+	Target         TargetType
+	PatrolRoute    []entity.Position
+	PatrolIndex    int
+	WanderBias     entity.Position
+	TargetName     string // Optionnel: nom/ID spécifique de la cible (ex: "dreamberry")
+	ExcludedStages []int  // Stages du cycle de vie à ignorer (indexés à partir de 0)
 }
 
 func (nl *NavigationLogic) DecideDirection(world WorldQuery, creature *Creature) entity.Position {
@@ -197,7 +198,7 @@ func (nl *NavigationLogic) followOrientation(creature *Creature) entity.Position
 }
 
 func (nl *NavigationLogic) moveToward(world WorldQuery, creature *Creature) entity.Position {
-	target := world.FindNearestTarget(creature.GetPosition(), nl.Target)
+	target := world.FindNearestTarget(creature.GetPosition(), nl.Target, nl.TargetName, nl.ExcludedStages)
 	if target == nil {
 		return nl.wander(world, creature)
 	}
@@ -205,7 +206,7 @@ func (nl *NavigationLogic) moveToward(world WorldQuery, creature *Creature) enti
 }
 
 func (nl *NavigationLogic) moveAway(world WorldQuery, creature *Creature) entity.Position {
-	target := world.FindNearestTarget(creature.GetPosition(), nl.Target)
+	target := world.FindNearestTarget(creature.GetPosition(), nl.Target, nl.TargetName, nl.ExcludedStages)
 	if target == nil {
 		return nl.wander(world, creature)
 	}
@@ -507,7 +508,7 @@ type WorldQuery interface {
 	WorldState
 	IsTileRevealed(pos entity.Position) bool
 	WasTileRecentlyRevealed(pos entity.Position) bool
-	FindNearestTarget(from entity.Position, targetType TargetType) *entity.Position
+	FindNearestTarget(from entity.Position, targetType TargetType, targetName string, excludedStages []int) *entity.Position
 	GetTileType(pos entity.Position) string
 	GetEntitiesAt(pos entity.Position) []entity.Entity
 	IsWalkable(c *Creature, pos entity.Position) bool
@@ -524,8 +525,12 @@ type ExtendedWorldState interface {
 // Profiles préconfigurés mis à jour avec la sémantique de perception
 func DefaultMovementProfile() *MovementProfile {
 	return &MovementProfile{
-		Trigger:    MovementTrigger{Type: TriggerAuto},
-		Navigation: NavigationLogic{Type: NavWander},
+		Trigger: MovementTrigger{Type: TriggerAuto},
+		Navigation: NavigationLogic{
+			Type:       NavAttraction,
+			Target:     TargetResource,
+			TargetName: "dreamberry",
+		},
 		Mode:       MovementMode{Type: ModeNormal},
 		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
 		Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},

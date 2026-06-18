@@ -111,7 +111,7 @@ func (m *mockWorldQuery) IsGridSaturatedWithTraps() bool                        
 func (m *mockWorldQuery) HasActivityNearby(pos entity.Position, radius int) bool         { return false }
 func (m *mockWorldQuery) IsTileRevealed(pos entity.Position) bool                        { return false }
 func (m *mockWorldQuery) WasTileRecentlyRevealed(pos entity.Position) bool               { return false }
-func (m *mockWorldQuery) FindNearestTarget(from entity.Position, targetType TargetType) *entity.Position {
+func (m *mockWorldQuery) FindNearestTarget(from entity.Position, targetType TargetType, targetName string, excludedStages []int) *entity.Position {
 	return nil
 }
 func (m *mockWorldQuery) GetTileType(pos entity.Position) string            { return "" }
@@ -327,8 +327,12 @@ func TestDefaultMovementProfile(t *testing.T) {
 		t.Errorf("Default trigger should be Auto, got %s", profile.Trigger.Type)
 	}
 
-	if profile.Navigation.Type != NavWander {
-		t.Errorf("Default navigation should be Wander, got %s", profile.Navigation.Type)
+	if profile.Navigation.Type != NavAttraction {
+		t.Errorf("Default navigation should be Attraction, got %s", profile.Navigation.Type)
+	}
+
+	if profile.Navigation.Target != TargetResource || profile.Navigation.TargetName != "dreamberry" {
+		t.Errorf("Default target should be dreamberry resource, got %s:%s", profile.Navigation.Target, profile.Navigation.TargetName)
 	}
 
 	if profile.Mode.Type != ModeNormal {

@@ -885,15 +885,12 @@ func (h *Handler) processSkip() {
 							fmt.Printf("[COMBAT] Skip d'un match VALIDE avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
 							h.world.Player.TakeDamage(damage, "creature_fail")
 
-							h.world.EventBus.Publish(event.Event{
-								Type:     event.PlayerDamaged,
-								SourceID: "system",
-								Payload: map[string]interface{}{
-									"damage": damage,
-									"type":   "creature_fail",
-									"reason": "skipped_valid_match",
-								},
-							})
+							h.world.EventBus.Publish(event.NewPlayerDamagedEvent(
+								"system",
+								damage,
+								"creature_fail",
+								"skipped_valid_match",
+							))
 						}
 
 						if resourceCount > 0 {
@@ -901,15 +898,12 @@ func (h *Handler) processSkip() {
 							fmt.Printf("[ALCHIMIE] Skip d'un match VALIDE avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
 							h.world.Player.ConsumeMana(manaLoss)
 
-							h.world.EventBus.Publish(event.Event{
-								Type:     event.PlayerDamaged,
-								SourceID: "system",
-								Payload: map[string]interface{}{
-									"mana_loss": manaLoss,
-									"type":      "resource_fail",
-									"reason":    "skipped_valid_match",
-								},
-							})
+							h.world.EventBus.Publish(event.NewPlayerDamagedEvent(
+								"system",
+								manaLoss,
+								"resource_fail",
+								"skipped_valid_match",
+							))
 						}
 					}
 				}

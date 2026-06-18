@@ -94,6 +94,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes
   - `LifecycleSystem` : Gère la maturation des ressources
   - `PropagationSystem` : Gère l'expansion organique des ressources
+  - `ToxicitySystem` : Gère les dégâts de poison cumulés et dégressifs infligés par les ressources toxiques (ex: Dreamberry stade 4)
   - `TriggerSystem` : Gère les structures interactives (terriers, etc.) et les dégâts de révélation (ex: Singe Mousse)
   - `PreviewSystem` : Gère la révélation temporaire des tuiles à l'entrée d'une zone
   - `LootSystem` : Gère la transformation des associations réussies en butin d'inventaire
@@ -406,6 +407,10 @@ Tout comme les créatures, l'interaction avec les ressources est soumise à une 
 Pour renforcer l'immersion, les tuiles ne se referment pas aléatoirement :
 - **Pente (Tilt)** : Elles utilisent la propriété `Tilt` de la parcelle pour une retombée "naturelle".
 - **Navigation** : Les entrées/sorties se scellent (Révélé -> Caché) de l'intérieur vers l'extérieur tant que la zone n'est pas sécurisée, et s'ouvrent à nouveau (Caché -> Révélé) une fois les objectifs atteints.
+
+- **Toxicity (Poison)** : Les ressources peuvent posséder un composant `Hazard` définissant des dégâts de zone ou locaux. Le poison est cumulatif mais dégressif (diminishing returns). Les Dreamberries sont toxiques au stade 4.
+
+- **Standardized Events** : Les dégâts au joueur sont centralisés via `NewPlayerDamagedEvent`, unifiant les retours visuels (HUD/Renderer) pour les attaques, les échecs de match et la toxicité.
 
 ### Orientation Persistante et Mathématiques D4
 

@@ -167,6 +167,34 @@ func NewResourceMaturedEvent(resourceID string, newStage string) Event {
 	}
 }
 
+func NewPlayerDamagedEvent(sourceID string, amount int, damageType string, reason string, extra ...map[string]interface{}) Event {
+	p := map[string]interface{}{
+		"amount": amount,
+		"type":   damageType,
+		"reason": reason,
+	}
+
+	// Compatibilité descendante pour le HUD et le Renderer
+	if damageType == "resource_fail" {
+		p["mana_loss"] = amount
+	} else {
+		p["damage"] = amount
+	}
+
+	if len(extra) > 0 && extra[0] != nil {
+		for k, v := range extra[0] {
+			p[k] = v
+		}
+	}
+
+	return Event{
+		Type:      PlayerDamaged,
+		SourceID:  sourceID,
+		Payload:   p,
+		Timestamp: time.Now(),
+	}
+}
+
 func NewAssociationMadeEvent(playerID string, assocType string, success bool) Event {
 	return Event{
 		Type:     AssociationMade,

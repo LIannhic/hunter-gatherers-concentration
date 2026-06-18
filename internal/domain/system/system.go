@@ -39,9 +39,16 @@ func (s *LifecycleSystem) Update(world *World) {
 		}
 
 		if lifecycle.Progress() {
+			stageName := lifecycle.GetCurrentStageName()
+			ent, _ := world.Entities.Get(entity.ID(entityID))
+			entType := "unknown"
+			if ent != nil {
+				entType = ent.GetType().String()
+			}
+			fmt.Printf("[LIFECYCLE] Entité %s (%s) a mûri au stade %d: %s\n", entityID, entType, lifecycle.CurrentStage, stageName)
 			world.EventBus.Publish(event.NewResourceMaturedEvent(
 				entityID,
-				lifecycle.GetCurrentStageName(),
+				stageName,
 			))
 		}
 	}
@@ -1026,12 +1033,16 @@ func (wa *worldAdapter) WasTileRecentlyRevealed(pos entity.Position) bool {
 	return false
 }
 
-func (wa *worldAdapter) FindNearestTarget(from entity.Position, targetType creature.TargetType) *entity.Position {
+func (wa *worldAdapter) FindNearestTarget(from entity.Position, targetType creature.TargetType, targetName string, excludedStages []int) *entity.Position {
 	var nearest *entity.Position
 	minDist := 9999
 
 	switch targetType {
 	case creature.TargetPlayer:
+		// Seule l'attraction/répulsion du joueur sur sa propre grille est possible
+		if wa.world.CurrentGridID != wa.grid.ID {
+			return nil
+		}
 		pos := wa.world.playerPosition
 		nearest = &pos
 	case creature.TargetResource:
@@ -1040,6 +1051,35 @@ func (wa *worldAdapter) FindNearestTarget(from entity.Position, targetType creat
 			if e.GetGridID() != wa.grid.ID {
 				continue
 			}
+
+			// Filtrage par nom si spécifié
+			idStr := string(e.GetID())
+			if targetName != "" {
+				if r, ok := e.(*resource.Resource); ok {
+					if r.ResourceType != targetName {
+						continue
+					}
+				}
+			}
+
+			// Filtrage par stade de cycle de vie
+			if len(excludedStages) > 0 {
+				if comp, ok := wa.world.Components.Get(idStr, "lifecycle"); ok {
+					if lc, ok := comp.(*component.Lifecycle); ok {
+						isExcluded := false
+						for _, stage := range excludedStages {
+							if lc.CurrentStage == stage {
+								isExcluded = true
+								break
+							}
+						}
+						if isExcluded {
+							continue
+						}
+					}
+				}
+			}
+
 			pos := e.GetPosition()
 			d := abs(pos.X-from.X) + abs(pos.Y-from.Y)
 			if d < minDist {
@@ -1217,4 +1257,121 @@ type IntentSystem struct {
 func (s *IntentSystem) UpdateIntent(intent *AttackIntent, cursorPixelX, cursorPixelY float64, tileSize, spacing float64) {
 	intent.TargetX = cursorPixelX
 	intent.TargetY = cursorPixelY
+}
+
+// --- SYSTEM: TOXICITY ---
+type ToxicitySystem struct{}
+
+func (s *ToxicitySystem) Priority() int { return 6 }
+
+func (s *ToxicitySystem) Update(world *World) {
+	if world.Player == nil {
+		return
+	}
+
+	totalDamage := 0.0
+	stackCount := 0
+	maxDegression := 0.0
+
+	// 1. Collecte des dangers actifs
+	for _, gridID := range world.GridOrder {
+		grid, ok := world.GetGrid(gridID)
+		if !ok {
+			continue
+		}
+
+		for _, tile := range grid.Plots {
+			if len(tile.EntitiesID) == 0 {
+				continue
+			}
+
+			// On ne considère que l'entité au sommet pour la toxicité (ou toutes ?)
+			// Le prompt dit "si le joueur révèle d'autres dreamberries", donc Revealed est requis.
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			ent, ok := world.Entities.Get(entity.ID(topID))
+			if !ok || ent.GetState()&entity.Revealed == 0 {
+				continue
+			}
+
+			comp, ok := world.Components.Get(topID, "hazard")
+			if !ok {
+				continue
+			}
+
+			hazard := comp.(*component.Hazard)
+			if !hazard.IsConstant {
+				continue
+			}
+
+			// Vérification du stade via Lifecycle
+			currentStage := 0
+			stageName := "unknown"
+			if lcComp, ok := world.Components.Get(topID, "lifecycle"); ok {
+				lc := lcComp.(*component.Lifecycle)
+				currentStage = lc.CurrentStage
+				stageName = lc.GetCurrentStageName()
+			}
+
+			if !hazard.IsActive(currentStage) {
+				continue
+			}
+
+			// 2. Calcul de l'effet local (Proximité ou Grid-wide)
+			dist := abs(tile.Position.X-world.playerPosition.X) + abs(tile.Position.Y-world.playerPosition.Y)
+			inRange := false
+			if hazard.Radius == 0 {
+				// Rayon 0 : s'applique si sur la même grille (car le joueur est sur le bord)
+				inRange = (gridID == world.CurrentGridID)
+			} else {
+				inRange = (dist <= hazard.Radius)
+			}
+
+			if inRange {
+				// Dégâts de base
+				localDmg := hazard.BaseDamage
+
+				// Dégressivité par distance (uniquement si radius > 0)
+				if hazard.Radius > 0 && dist > 0 {
+					localDmg *= 1.0 - (float64(dist) / float64(hazard.Radius+1))
+				}
+
+				fmt.Printf("[TOXICITY] Hazard détecté: %s (Type: %s, Stade: %s) à %v\n", topID, hazard.DamageType, stageName, tile.Position)
+
+				totalDamage += localDmg
+				stackCount++
+				if hazard.DegressionFactor > maxDegression {
+					maxDegression = hazard.DegressionFactor
+				}
+			}
+		}
+	}
+
+	if stackCount == 0 {
+		return
+	}
+
+	// 3. Application de la dégressivité par cumul (Diminishing returns)
+	// Formule: Total = Somme / (1 + (N-1) * Facteur)
+	finalDamage := totalDamage
+	if stackCount > 1 {
+		finalDamage = totalDamage / (1.0 + float64(stackCount-1)*maxDegression)
+	}
+
+	if finalDamage > 0 {
+		dmgInt := int(finalDamage)
+		if dmgInt == 0 && finalDamage > 0 {
+			dmgInt = 1 // Minimum 1 dégât si actif
+		}
+
+		fmt.Printf("[TOXICITY] Le joueur subit %d dégâts de poison (%d stacks actifs, dégressivité appliquée)\n", dmgInt, stackCount)
+		world.Player.TakeDamage(dmgInt, "poison")
+
+		world.EventBus.PublishImmediate(event.NewPlayerDamagedEvent(
+			"toxicity_system",
+			dmgInt,
+			"poison",
+			"toxicity",
+			map[string]interface{}{"stack_count": stackCount},
+		))
+	}
 }

@@ -285,9 +285,15 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Weight:  component.WeightLight,
 		})
 		c.SetMovementProfile(&MovementProfile{
-			Trigger:    MovementTrigger{Type: TriggerAuto},
-			Navigation: NavigationLogic{Type: NavWander, WanderBias: entity.Position{X: 0, Y: -1}},
-			Mode:       MovementMode{Type: ModeOver}, // Couche supérieure (Z-sorting haut)
+			Trigger: MovementTrigger{Type: TriggerAuto},
+			Navigation: NavigationLogic{
+				Type:           NavAttraction,
+				Target:         TargetResource,
+				TargetName:     "dreamberry",
+				ExcludedStages: []int{0, 3}, // Ignore le stade 1 (index 0) et le stade 4 (index 3)
+				WanderBias:     entity.Position{X: 0, Y: -1},
+			},
+			Mode: MovementMode{Type: ModeOver}, // Couche supérieure (Z-sorting haut)
 			Perception: PerceptionProfile{
 				Stealth:  StealthManifest, // Glissement visible à l'écran
 				Acoustic: AcousticSilent,  // Vol silencieux
