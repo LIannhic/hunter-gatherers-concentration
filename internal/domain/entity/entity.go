@@ -783,6 +783,9 @@ type Track struct {
 	Duration int      // Nombre de tours restants avant disparition
 	FromPos  Position // Case de départ (équivaut à e.Pos)
 	ToPos    Position // Case d'arrivée du monstre
+	OffsetX  float64  // Décalage X depuis le centre de la tuile (pour positionnement sur le bord)
+	OffsetY  float64  // Décalage Y depuis le centre de la tuile
+	Angle    float64  // Angle de rotation en radians (pour orienter vers le centre)
 }
 
 func NewTrack(kind string, duration int, from, to Position) *Track {

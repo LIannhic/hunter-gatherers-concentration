@@ -111,6 +111,15 @@ func (tr *TrackRenderer) RenderAttackThreats(screen *ebiten.Image, world *domain
 	whiteSprite := tr.getOrCreateSprite("intent_beam_white")
 	redSprite := tr.getOrCreateSprite("intent_beam")
 
+	// Détermine la direction du bord du joueur (de la créature vers le joueur)
+	var playerOutwardDir entity.Direction
+	hasPlayerHit := false
+	if world.Player != nil {
+		playerAnchor := world.Player.GetAnchor()
+		playerOutwardDir = playerAnchor.GetOutwardDirection()
+		hasPlayerHit = true
+	}
+
 	for _, id := range attackingIDs {
 		ent, ok := world.Entities.Get(entity.ID(id))
 		if !ok || ent.GetType() != entity.TypeCreature {
@@ -138,10 +147,21 @@ func (tr *TrackRenderer) RenderAttackThreats(screen *ebiten.Image, world *domain
 
 			op := &ebiten.DrawImageOptions{}
 
-			// Sélection du sprite : rouge si c'est la cible touchée, blanc sinon
+			// Le joueur est sur un bord de la même tuile que la créature.
+			// Le demi-cercle rouge s'affiche si la direction de menace correspond au bord du joueur.
 			sprite := whiteSprite
-			if aa.HitTarget != nil && *aa.HitTarget == targetPos {
+			if hasPlayerHit && aa.HitTarget != nil && dir == playerOutwardDir {
 				sprite = redSprite
+				// Position au bord extérieur de la tuile (pas au milieu)
+				edgeRatio := 0.5
+				if endX != startX || endY != startY {
+					dist := math.Sqrt((endX-startX)*(endX-startX) + (endY-startY)*(endY-startY))
+					if dist > 0 {
+						edgeRatio = (tr.tileSize / 2) / dist
+					}
+				}
+				midX = startX + (endX-startX)*edgeRatio
+				midY = startY + (endY-startY)*edgeRatio
 			}
 
 			if sprite == nil {
@@ -255,6 +275,12 @@ func (tr *TrackRenderer) Draw(screen *ebiten.Image, t *entity.Track, getCenter f
 		drawY = startY + (endY-startY)*0.5
 		angle = math.Atan2(endY-startY, endX-startX)
 		hasRotation = true
+	} else if t.Kind == "footprints" && (t.OffsetX != 0 || t.OffsetY != 0) {
+		// Empreintes de pas sur le bord extérieur de la tuile
+		drawX = startX + t.OffsetX
+		drawY = startY + t.OffsetY
+		angle = t.Angle
+		hasRotation = true
 	} else if t.FromPos == t.ToPos {
 		// --- INDICE STATIQUE ---
 		drawX = startX
@@ -305,6 +331,84 @@ func (tr *TrackRenderer) DrawAttackIntent(screen *ebiten.Image, intent *AttackIn
 	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
 	op.GeoM.Rotate(angle)
 	op.GeoM.Translate(midX, midY)
+
+	screen.DrawImage(sprite, op)
+}
+
+// DrawFootstepPreview dessine un aperçu semi-transparent d'une empreinte de pas
+// sur le bord de la tuile la plus proche du curseur. Fonctionne sur toutes les grilles.
+func (tr *TrackRenderer) DrawFootstepPreview(screen *ebiten.Image, cursorX, cursorY float64, world *domain.World, getTileCenter func(board.Position) (float64, float64)) {
+	if world == nil || world.CurrentGridID == "" {
+		return
+	}
+
+	grid, ok := world.GetGrid(world.CurrentGridID)
+	if !ok || grid == nil {
+		return
+	}
+
+	sprite := tr.getOrCreateSprite("footprints")
+	if sprite == nil {
+		return
+	}
+
+	// Trouve la tuile la plus proche du curseur
+	bestDist := math.MaxFloat64
+	var bestCenterX, bestCenterY float64
+	found := false
+
+	for y := 0; y < grid.Height; y++ {
+		for x := 0; x < grid.Width; x++ {
+			pos := board.Position{X: x, Y: y}
+			cx, cy := getTileCenter(pos)
+			dx := cursorX - cx
+			dy := cursorY - cy
+			d := dx*dx + dy*dy
+			if d < bestDist {
+				bestDist = d
+				bestCenterX = cx
+				bestCenterY = cy
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		return
+	}
+
+	// Ne dessine pas si le curseur est trop loin de la grille (> 1.5 tuiles)
+	if bestDist > (tr.tileSize*1.5)*(tr.tileSize*1.5) {
+		return
+	}
+
+	// Direction du centre vers le curseur
+	dirX := cursorX - bestCenterX
+	dirY := cursorY - bestCenterY
+	dist := math.Sqrt(dirX*dirX + dirY*dirY)
+
+	if dist < 1.0 {
+		dirX, dirY = 0, 1
+		dist = 1.0
+	}
+	dirX /= dist
+	dirY /= dist
+
+	// Position sur le bord extérieur
+	edgeDist := tr.tileSize/2 + 4
+	drawX := bestCenterX + dirX*edgeDist
+	drawY := bestCenterY + dirY*edgeDist
+
+	// Angle vers le centre
+	angle := math.Atan2(-dirY, -dirX)
+
+	// Dessine l'empreinte semi-transparente
+	op := &ebiten.DrawImageOptions{}
+	w, h := sprite.Bounds().Dx(), sprite.Bounds().Dy()
+	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+	op.GeoM.Rotate(angle)
+	op.GeoM.Translate(drawX, drawY)
+	op.ColorScale.ScaleAlpha(0.35)
 
 	screen.DrawImage(sprite, op)
 }

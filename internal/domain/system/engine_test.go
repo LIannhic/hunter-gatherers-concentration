@@ -19,8 +19,8 @@ func TestNewEngine(t *testing.T) {
 		t.Error("Engine should not be running initially")
 	}
 
-	if len(engine.systems) != 7 {
-		t.Errorf("Engine should have 7 systems, got %d", len(engine.systems))
+	if len(engine.systems) != 8 {
+		t.Errorf("Engine should have 8 systems, got %d", len(engine.systems))
 	}
 }
 

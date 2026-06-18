@@ -270,6 +270,7 @@ func (app *Application) setupCallbacks() {
 	// Fin de tour normale
 	app.Input.OnTurnEnd = func() {
 		fmt.Println("[ACTION] Turn ended")
+		app.Input.ClearFootsteps()
 		app.debug.Action()
 		app.Engine.Update()
 	}
@@ -414,7 +415,6 @@ func (app *Application) setupCallbacks() {
 
 // setupDebugCallbacks configure les raccourcis et commandes de triche/débogage.
 func (app *Application) setupDebugCallbacks() {
-	// F3 : Forcer le passage au prochain tour
 	app.Input.OnForceTurn = func() {
 		fmt.Println("[DEBUG] Forcing turn end")
 		app.Engine.Update()
@@ -931,6 +931,9 @@ func (app *Application) StartGame() {
 
 	app.World.EventBus.Publish(domain.NewPhaseChangedEvent(oldState, app.State))
 	fmt.Printf("[STATE] Transition: %s -> %s\n", oldState, app.State)
+
+	app.Input.ResetGameState()
+	app.HUD.ClearMessages()
 
 	app.World.Turn = 0
 	app.World.MaxTurns = app.World.Player.Stats.MaxSanity

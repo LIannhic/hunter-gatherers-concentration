@@ -263,6 +263,14 @@ func (h *HUD) ClearActiveLootSelection() {
 	h.selectedLootIndex = -1
 }
 
+// ClearMessages vide les files de messages défilants (gauche et droite).
+func (h *HUD) ClearMessages() {
+	h.queueLeft = h.queueLeft[:0]
+	h.queueRight = h.queueRight[:0]
+	h.activeLeft = nil
+	h.activeRight = nil
+}
+
 // ToggleDetails bascule l'affichage de la fenêtre de détails
 func (h *HUD) ToggleDetails() {
 	h.showDetails = !h.showDetails

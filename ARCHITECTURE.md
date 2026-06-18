@@ -191,11 +191,25 @@ pos, ok := world.findBest3x3DeploymentArea(gridID)
 
 #### Déploiement du Portail et Effet Séisme
 
-Lors du déploiement (`DeployPortablePortalAt`), la méthode `clear3x3DeploymentArea` est appelée systématiquement. Elle retire toutes les entités des 8 parcelles adjacentes pour garantir une zone de sécurité visuelle et logique.
+Lors du déploiement (`DeployPortablePortalAt`), la méthode `clear3x3DeploymentArea` est appelée systématiquement. Elle retire **toutes** les entités de la zone 3x3 (9 cases centrées sur le portail) pour garantir une zone de sécurité visuelle et logique.
+
+#### Pénalités (Rêve Brisé + Taxe Butin)
+
+Si la zone 3x3 contient **des entités** (ressources, créatures, structures) :
+- **5 dégâts** au joueur (`applyDreamBreachPenalty` - Rêve Brisé)
+- **Taxe Butin 50%** : suppression aléatoire de la moitié de l'inventaire (`applyPortablePortalLootTax`)
+
+La détection utilise `hasEntitiesIn3x3Area()` qui compte **toutes** les entités (pas seulement les structures). Le mode `forced` est activé automatiquement.
 
 #### Feedback Graphique (Vortex)
 
-Un shader spécial `vortex.kage` est déclenché par l'application (`app.go`) uniquement lorsque le portail est actif (`IsVictoryTimerActive`). Le shader utilise les coordonnées réelles du portail (via `GetTileCenter`) pour ancrer la distorsion.
+Un shader spécial `vortex.kage` est déclenché par l'application (`app.go`) lorsque le portail est actif (`IsVictoryTimerActive`). Le shader utilise les coordonnées réelles du portail (via `GetTileCenter`) pour ancrer la distorsion. Fonctionne sur **toutes les grilles** (pas seulement zones de départ/arrivée).
+
+#### Aperçu au Curseur (Prévisualisation)
+
+En mode portail portable, un cadre 3x3 suit le curseur :
+- **Vert** (zone 3x3 vide) : Déploiement sans pénalité
+- **Jaune** (entités dans la zone 3x3) : Avertissement pénalité + destruction entités + taxe butin
 
 #### Activation via Commande
 
@@ -211,9 +225,49 @@ if cmd.CanExecute() {
 ```
 
 Le système valide que :
-- Une zone 3x3 est disponible (aucune tuile obstruée ou occupée)
+- Le centre est valide (`isValid3x3DeploymentCenter` : au moins 1 case des bords)
 - Le joueur possède un portail portable en inventaire
 - La grille cible existe
+
+#### Nettoyage État (Redémarrage)
+
+`ResetGameState()` désactive `portablePortalMode` pour éviter les fuites d'état entre parties.
+
+### Correspondance Inter-Zones (Cross-Zone Matching)
+
+Le jeu supporte maintenant l'appariement de tuiles situées sur **grilles différentes** (ex: zone de départ + zone intermédiaire).
+
+#### Architecture
+
+- **Handler** : `revealedGridIDs []string` parallèle à `revealedTiles []board.Position` — stocke la grille d'origine par tuile révélée.
+- **Commande** : `MatchTilesCommand` a un champ `GridID2` (optionnel, défaut = `GridID`).
+- **Exécution** : `processMatchAttempt()` utilise `revealedGridIDs[0]` et `revealedGridIDs[1]` pour résoudre chaque tuile sur sa grille respective.
+- **Événements** : `TileRevealed` et `TileMatched` incluent `grid_id` pour le rendu.
+
+#### Skip Inter-Zones
+
+`processSkip()` utilise aussi les `revealedGridIDs` pour vérifier les paires valides manquées sur grilles différentes et appliquer les pénalités (dégâts créatures / mana ressources).
+
+### Traces de Pas (Footsteps)
+
+Système de traces visuelles laissées par les créatures lors de leurs déplacements.
+
+#### Types de Traces
+
+| Type | Calque | Position | Description |
+|------|--------|----------|-------------|
+| **Boue (Mud)** | Under | Interstice entre cases | Orientée selon direction mouvement |
+| **Herbe Brisée** | Under | Case d'origine | Marque le départ |
+| **Griffures** | Over | Case destination | Impact (calque supérieur) |
+| **Empreintes** | Normal | Sous tuiles | Simule passage au sol |
+| **Intent Beam** | Over | Entre créature et cible | Rouge = attaque, Blanc = menace |
+
+#### Gestion
+
+- **Entité `Track`** : Champs `OffsetX`, `OffsetY`, `Angle` pour positionnement précis aux bords des cases.
+- **FIFO max 2** : `footstepTrackIDs []string` dans Handler — l'ancienne est supprimée quand on dépasse 2.
+- **Nettoyage tour** : `ClearFootsteps()` appelé dans `OnTurnEnd` callback.
+- **Aperçu curseur** : `DrawFootstepPreview()` — empreinte semi-transparente au curseur, snappée au bord de case le plus proche.
 
 ### 4. UI
 
