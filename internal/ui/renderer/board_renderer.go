@@ -469,6 +469,12 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 		r.renderTracksOver(screen, world, getCenter)
 		r.renderMovementsOver(screen, world)
 
+		// Aperçu de l'empreinte de pas au curseur (semi-transparent)
+		if world.Player != nil && world.Player.IsAlive() {
+			cursorX, cursorY := ebiten.CursorPosition()
+			r.trackRenderer.DrawFootstepPreview(screen, float64(cursorX), float64(cursorY), world, getCenter)
+		}
+
 		// Le scanner glisse au-dessus de tout le monde sur le plateau
 		r.renderEffectsOver(screen, world)
 	}
@@ -1156,6 +1162,9 @@ func (r *BoardRenderer) ScreenToGrid(screenX, screenY int, world *domain.World) 
 				return board.Position{X: col, Y: row}, board.InventoryGridID, true
 			}
 		}
+
+		// Dans la zone inventaire mais pas dans les slots -> retourner grille inventaire avec position invalide
+		return board.Position{X: -1, Y: -1}, board.InventoryGridID, true
 	}
 
 	// 2. Vérification des sorties (Navigation)
@@ -1314,11 +1323,37 @@ func (r *BoardRenderer) RenderPortalPlacementPreview(screen *ebiten.Image, cente
 		spacingX, spacingY, _, _ = r.getGridSpacing(6, 6)
 	}
 
+	hasEntities := r.hasEntitiesIn3x3Area(grid, center, world)
+
 	topLeft := board.Position{X: center.X - 1, Y: center.Y - 1}
 	x, y := r.calculateTileScreenPos(topLeft, grid, isPortalZone)
 	width := 3*r.tileSize + 2*spacingX
 	height := 3*r.tileSize + 2*spacingY
-	vector.StrokeRect(screen, float32(x), float32(y), float32(width), float32(height), 4, color.RGBA{0, 200, 100, 120}, true)
+
+	previewColor := color.RGBA{80, 180, 100, 140}
+	fillColor := color.RGBA{80, 180, 100, 20}
+	if hasEntities {
+		previewColor = color.RGBA{180, 150, 30, 140}
+		fillColor = color.RGBA{180, 150, 30, 20}
+	}
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(width), float32(height), fillColor, true)
+	vector.StrokeRect(screen, float32(x), float32(y), float32(width), float32(height), 3, previewColor, true)
+}
+
+func (r *BoardRenderer) hasEntitiesIn3x3Area(grid *board.Grid, center board.Position, world *domain.World) bool {
+	for dy := 0; dy < 3; dy++ {
+		for dx := 0; dx < 3; dx++ {
+			pos := board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy}
+			plot, err := grid.Get(pos)
+			if err != nil {
+				continue
+			}
+			if len(plot.EntitiesID) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // renderMovingEntities dessine les entités qui ont un composant MovingAnimation actif

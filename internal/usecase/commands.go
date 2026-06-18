@@ -104,15 +104,10 @@ func (c *RevealTileCommand) Execute() error {
 		fmt.Printf("[ALCHIMIE] Révélation d'une tuile Niv.%d : -%d Mana\n", ent.GetCumulationLevel(), ent.GetCumulationLevel())
 	}
 
-	// Calcule la position réelle du joueur en périphérie de la tuile et son ancrage
-	offset, border := flipToPlayerState(c.FlipDirection)
-	playerPos := entity.Position{
-		X: c.Position.X + offset.X,
-		Y: c.Position.Y + offset.Y,
-	}
-
-	// Met à jour l'état du joueur
+	// Met à jour l'ancre du joueur (bord de la tuile cliquée)
+	border := flipToPlayerState(c.FlipDirection)
 	c.World.Player.SetAnchor(border)
+	playerPos := c.Position
 	c.World.SetPlayerPosition(playerPos)
 
 	// Déplace les shadowstalkers d'une case vers le joueur (comportement pré-révélation)
@@ -128,7 +123,16 @@ func (c *RevealTileCommand) Execute() error {
 
 	// Logique de Confrontation (Zone de Menace)
 	if cre, ok := ent.(*creature.Creature); ok {
-		isThreatened := cre.IsPositionThreatened(playerPos)
+		// Le joueur est sur un bord de la même tuile que la créature.
+		// On vérifie si la direction du bord du joueur correspond à une direction de menace.
+		outwardDir := border.GetOutwardDirection()
+		isThreatened := false
+		for _, threat := range cre.GetActiveThreatDirections() {
+			if threat == outwardDir {
+				isThreatened = true
+				break
+			}
+		}
 
 		fmt.Printf("[DEBUG] Reveal Créature: %s en %v | Menacé ? %v\n", cre.Species, cre.GetPosition(), isThreatened)
 
@@ -184,22 +188,30 @@ type MatchResult struct {
 }
 
 type MatchTilesCommand struct {
-	World      *domain.World
-	AssocEng   *domain.AssocEngine
-	GridID     string
+	World    *domain.World
+	AssocEng *domain.AssocEngine
+	GridID   string // GridID pour la première tuile (backward compat)
+	GridID2  string // GridID pour la seconde tuile (vide = même grid que GridID)
 	Pos1, Pos2 board.Position
-	OnSuccess  func()
-	OnFailure  func()
+	OnSuccess func()
+	OnFailure func()
 }
 
 func (c *MatchTilesCommand) CanExecute() bool {
-	grid, ok := c.World.GetGrid(c.GridID)
-	if !ok {
+	gridID1 := c.GridID
+	gridID2 := c.GridID2
+	if gridID2 == "" {
+		gridID2 = gridID1
+	}
+
+	grid1, ok1 := c.World.GetGrid(gridID1)
+	grid2, ok2 := c.World.GetGrid(gridID2)
+	if !ok1 || !ok2 {
 		return false
 	}
 
-	tile1, err1 := grid.Get(c.Pos1)
-	tile2, err2 := grid.Get(c.Pos2)
+	tile1, err1 := grid1.Get(c.Pos1)
+	tile2, err2 := grid2.Get(c.Pos2)
 	if err1 != nil || err2 != nil {
 		return false
 	}
@@ -235,9 +247,16 @@ func (c *MatchTilesCommand) Execute() error {
 		return errors.New("impossible d'appairer ces tuiles (mana insuffisant ou invalide)")
 	}
 
-	grid, _ := c.World.GetGrid(c.GridID)
-	tile1, _ := grid.Get(c.Pos1)
-	tile2, _ := grid.Get(c.Pos2)
+	gridID1 := c.GridID
+	gridID2 := c.GridID2
+	if gridID2 == "" {
+		gridID2 = gridID1
+	}
+
+	grid1, _ := c.World.GetGrid(gridID1)
+	grid2, _ := c.World.GetGrid(gridID2)
+	tile1, _ := grid1.Get(c.Pos1)
+	tile2, _ := grid2.Get(c.Pos2)
 
 	topID1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
 	topID2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
@@ -254,12 +273,16 @@ func (c *MatchTilesCommand) Execute() error {
 
 	if err == nil && result.Success {
 		// --- LOGIQUE DE MATCH FINAL (LOOT) ---
-		c.World.MatchTile(c.GridID, c.Pos1)
-		c.World.MatchTile(c.GridID, c.Pos2)
+		c.World.MatchTile(gridID1, c.Pos1)
+		c.World.MatchTile(gridID2, c.Pos2)
 
 		if entity1.GetType() == entity.TypeCreature || entity1.GetType() == entity.TypeResource {
-			grid.MatchedTargetsCount += 2
-			c.World.IsNavigationOpen(c.GridID)
+			grid1.MatchedTargetsCount += 1
+			grid2.MatchedTargetsCount += 1
+			c.World.IsNavigationOpen(gridID1)
+			if gridID2 != gridID1 {
+				c.World.IsNavigationOpen(gridID2)
+			}
 		}
 
 		name := "unknown"
@@ -274,7 +297,8 @@ func (c *MatchTilesCommand) Execute() error {
 				"position":    c.Pos1,
 				"entity_id":   string(entity1.GetID()),
 				"other_id":    string(entity2.GetID()),
-				"grid_id":     c.GridID,
+				"grid_id":     gridID1,
+				"grid_id_2":   gridID2,
 				"name":        name,
 				"entity_type": entity1.GetType(),
 				"assoc_type":  result.Type.String(),
@@ -335,17 +359,17 @@ func (c *MatchTilesCommand) Execute() error {
 	}
 
 	// Recacher les entités avec l'animation de pente (Slope)
-	plot1, _ := grid.Get(c.Pos1)
-	plot2, _ := grid.Get(c.Pos2)
+	plot1, _ := grid1.Get(c.Pos1)
+	plot2, _ := grid2.Get(c.Pos2)
 
-	_, _ = c.World.FlipTile(c.GridID, c.Pos1, plot1.Tilt.ToFlipDirection(), "system_hide")
-	_, _ = c.World.FlipTile(c.GridID, c.Pos2, plot2.Tilt.ToFlipDirection(), "system_hide")
+	_, _ = c.World.FlipTile(gridID1, c.Pos1, plot1.Tilt.ToFlipDirection(), "system_hide")
+	_, _ = c.World.FlipTile(gridID2, c.Pos2, plot2.Tilt.ToFlipDirection(), "system_hide")
 
 	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos1), string(entity1.GetID()), c.GridID, plot1.Tilt.ToFlipDirection(),
+		entity.Position(c.Pos1), string(entity1.GetID()), gridID1, plot1.Tilt.ToFlipDirection(),
 		map[string]interface{}{"reason": "system_hide"}))
 	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos2), string(entity2.GetID()), c.GridID, plot2.Tilt.ToFlipDirection(),
+		entity.Position(c.Pos2), string(entity2.GetID()), gridID2, plot2.Tilt.ToFlipDirection(),
 		map[string]interface{}{"reason": "system_hide"}))
 
 	if c.OnFailure != nil {
@@ -1013,31 +1037,25 @@ func (c *RotateGridCommand) Execute() error {
 
 // --- HELPERS ---
 
-func flipToPlayerState(f domain.FlipDirection) (entity.Position, player.BorderPosition) {
-	// Note : Les coordonnées (X, Y) du joueur sur les arêtes sont calées mathématiquement.
-	// Si on flip une tuile en (X, Y), la position "bordure" est un décalage vers l'arête correspondante.
+func flipToPlayerState(f domain.FlipDirection) player.BorderPosition {
 	switch f {
 	case domain.FlipTop:
-		// Arête Nord de la tuile (X, Y)
-		return entity.Position{X: 0, Y: -1}, player.BorderTop
+		return player.BorderTop
 	case domain.FlipTopRight:
-		return entity.Position{X: 1, Y: -1}, player.BorderTopRight
+		return player.BorderTopRight
 	case domain.FlipRight:
-		// Arête Est de la tuile (X, Y)
-		return entity.Position{X: 1, Y: 0}, player.BorderRight
+		return player.BorderRight
 	case domain.FlipBottomRight:
-		return entity.Position{X: 1, Y: 1}, player.BorderBottomRight
+		return player.BorderBottomRight
 	case domain.FlipBottom:
-		// Arête Sud de la tuile (X, Y)
-		return entity.Position{X: 0, Y: 1}, player.BorderBottom
+		return player.BorderBottom
 	case domain.FlipBottomLeft:
-		return entity.Position{X: -1, Y: 1}, player.BorderBottomLeft
+		return player.BorderBottomLeft
 	case domain.FlipLeft:
-		// Arête Ouest de la tuile (X, Y)
-		return entity.Position{X: -1, Y: 0}, player.BorderLeft
+		return player.BorderLeft
 	case domain.FlipTopLeft:
-		return entity.Position{X: -1, Y: -1}, player.BorderTopLeft
+		return player.BorderTopLeft
 	default:
-		return entity.Position{X: 0, Y: 0}, player.BorderTop
+		return player.BorderTop
 	}
 }

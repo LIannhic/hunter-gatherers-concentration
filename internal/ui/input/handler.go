@@ -28,6 +28,7 @@ type Renderer interface {
 	RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World)
 	NotifyHover(entityID string, dir entity.FlipDirection)
 	DecayHoverStates(activeThisFrame map[string]bool)
+	GetTileCenter(pos board.Position, grid *board.Grid) (float64, float64)
 }
 
 type Handler struct {
@@ -75,8 +76,10 @@ type Handler struct {
 	isLongPressFired  bool
 
 	// Gestion du tour de jeu memory
-	revealedTiles []board.Position // Liste des tuiles révélées ce tour
-	isProcessing  bool             // Évite les clics pendant l'animation / verrouille la grille quand 2 tuiles sont retournées
+	revealedTiles    []board.Position // Liste des tuiles révélées ce tour
+	revealedGridIDs  []string         // GridID associé à chaque tuile révélée (pour cross-zone)
+	isProcessing     bool             // Évite les clics pendant l'animation / verrouille la grille quand 2 tuiles sont retournées
+	footstepTrackIDs []string         // FIFO des empreintes de pas (max 2 visibles)
 
 	isTransitioning bool // Bloque les entrées pendant le changement de zone
 	transitionTimer int  // Frames restantes pour le blocage
@@ -248,7 +251,7 @@ func (h *Handler) updateButtonHover() {
 		if grid != nil {
 			tile1, _ := grid.Get(h.revealedTiles[0])
 			tile2, _ := grid.Get(h.revealedTiles[1])
-			if len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
+			if tile1 != nil && tile2 != nil && len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
 				id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
 				id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
 				e1, _ := h.world.Entities.Get(entity.ID(id1))
@@ -474,14 +477,25 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
         y = h.touchStartScreenY
     }
 
-    // Priorité : gestion des clics sur les boutons d'action (même si isProcessing)
-    if h.actionButtons != nil {
-       states := h.actionButtons.ComputeStates()
-       if btnID, ok := h.actionButtons.HitTest(x, y, states); ok {
-          h.handleActionButtonClick(btnID)
-          return nil
-       }
-    }
+// Priorité : gestion des clics sur les boutons d'action (même si isProcessing)
+	if h.actionButtons != nil {
+	   states := h.actionButtons.ComputeStates()
+	   if btnID, ok := h.actionButtons.HitTest(x, y, states); ok {
+		  h.handleActionButtonClick(btnID)
+		  return nil
+	   }
+	}
+
+	// Priorité : mode portail portable (même si isProcessing)
+	if h.portablePortalMode && h.OnUsePortablePortal != nil {
+		if pos, gridID, ok := h.renderer.ScreenToGrid(x, y, h.world); ok {
+			grid, _ := h.world.GetGrid(gridID)
+			if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
+				h.OnUsePortablePortal(gridID, pos)
+				return nil
+			}
+		}
+	}
 
 	if h.isProcessing {
 		// EXCEPTION : On autorise le clic sur un portail déjà révélé pour la victoire
@@ -599,16 +613,6 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 		return nil
 	}
 
-	if h.portablePortalMode && h.OnUsePortablePortal != nil {
-		grid, _ := h.world.GetGrid(gridID)
-		if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
-			h.OnUsePortablePortal(gridID, pos)
-			return nil
-		}
-		fmt.Println("[ACTION] Zone de déploiement invalide pour le portail portable")
-		return nil
-	}
-
 	grid, _ := h.world.GetGrid(gridID)
 	plot, err := grid.Get(pos)
 	if err != nil || len(plot.EntitiesID) == 0 {
@@ -649,10 +653,14 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 			num := len(h.revealedTiles) + 1
 			fmt.Printf("[SÉLECTION] Choix #%d : Tuile révélée en %v sur %s -> %s\n", num, pos, gridID, info)
 			h.revealedTiles = append(h.revealedTiles, pos)
+			h.revealedGridIDs = append(h.revealedGridIDs, gridID)
 			// Action volontaire : reset du compte à rebours temps réel
 			if h.world.TurnTimer != nil {
 				h.world.TurnTimer.Reset()
 			}
+
+			// Crée une empreinte de pas sur le bord extérieur de la tuile
+			h.spawnFootstepTrack(x, y, pos, gridID)
 		}
 
 		// On met à jour le gridID pour la résolution du match
@@ -683,6 +691,7 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 					Position: pos,
 					OnSuccess: func() {
 						h.revealedTiles = nil
+						h.revealedGridIDs = nil
 						h.isProcessing = false
 						h.ClearSelection()
 						if h.OnTurnEnd != nil {
@@ -709,6 +718,9 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 				for i, p := range h.revealedTiles {
 					if p == pos {
 						h.revealedTiles = append(h.revealedTiles[:i], h.revealedTiles[i+1:]...)
+						if i < len(h.revealedGridIDs) {
+							h.revealedGridIDs = append(h.revealedGridIDs[:i], h.revealedGridIDs[i+1:]...)
+						}
 						break
 					}
 				}
@@ -829,15 +841,20 @@ func (h *Handler) processSkip() {
 	if len(h.revealedTiles) == 2 {
 		pos1 := h.revealedTiles[0]
 		pos2 := h.revealedTiles[1]
-		gridID := h.selectedGridID
-		if gridID == "" {
-			gridID = h.world.CurrentGridID
+		gridID1 := h.revealedGridIDs[0]
+		gridID2 := h.revealedGridIDs[1]
+		if gridID1 == "" {
+			gridID1 = h.world.CurrentGridID
+		}
+		if gridID2 == "" {
+			gridID2 = h.world.CurrentGridID
 		}
 
-		grid, ok := h.world.GetGrid(gridID)
-		if ok {
-			tile1, _ := grid.Get(pos1)
-			tile2, _ := grid.Get(pos2)
+		grid1, _ := h.world.GetGrid(gridID1)
+		grid2, _ := h.world.GetGrid(gridID2)
+		if grid1 != nil && grid2 != nil {
+			tile1, _ := grid1.Get(pos1)
+			tile2, _ := grid2.Get(pos2)
 
 			if len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
 				id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
@@ -929,6 +946,7 @@ func (h *Handler) hideRevealedTiles() {
 	grid, ok := h.world.GetGrid(gridID)
 	if !ok {
 		h.revealedTiles = nil
+						h.revealedGridIDs = nil
 		return
 	}
 
@@ -960,6 +978,7 @@ func (h *Handler) hideRevealedTiles() {
 		}
 	}
 	h.revealedTiles = nil
+						h.revealedGridIDs = nil
 }
 
 // hideAllTilesInGrid parcourt toute la grille et passe TOUTES les entités de TOUTES les piles en état Hidden.
@@ -971,6 +990,7 @@ func (h *Handler) hideAllTilesInGrid() {
 	grid, ok := h.world.GetGrid(gridID)
 	if !ok {
 		h.revealedTiles = nil
+						h.revealedGridIDs = nil
 		return
 	}
 
@@ -999,6 +1019,7 @@ func (h *Handler) hideAllTilesInGrid() {
 		}
 	}
 	h.revealedTiles = nil
+						h.revealedGridIDs = nil
 }
 
 // processMergeAttempt tente de fusionner les 2 tuiles révélées
@@ -1027,6 +1048,7 @@ func (h *Handler) processMergeAttempt() {
 			// Après fusion, la commande UseCase a déjà refermé les tuiles logiquement.
 			// On vide la mémoire tampon de l'input handler.
 			h.revealedTiles = nil
+						h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
 
@@ -1037,6 +1059,7 @@ func (h *Handler) processMergeAttempt() {
 		OnFailure: func() {
 			fmt.Printf("[MERGE] ❌ Échec !\n")
 			h.revealedTiles = nil
+						h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
 			if h.OnTurnEnd != nil {
@@ -1048,6 +1071,7 @@ func (h *Handler) processMergeAttempt() {
 	if err := cmd.Execute(); err != nil {
 		fmt.Printf("[MERGE] %v\n", err)
 		h.revealedTiles = nil
+						h.revealedGridIDs = nil
 		h.isProcessing = false
 	}
 }
@@ -1062,25 +1086,32 @@ func (h *Handler) processMatchAttempt() {
 	pos1 := h.revealedTiles[0]
 	pos2 := h.revealedTiles[1]
 
-	// SÉCURITÉ : Vérifie si le gridID est valide
-	gridID := h.selectedGridID
-	if gridID == "" {
-		gridID = h.world.CurrentGridID
+	// Grid IDs par tuile (supporte le cross-zone matching)
+	gridID1 := h.revealedGridIDs[0]
+	gridID2 := h.revealedGridIDs[1]
+	if gridID1 == "" {
+		gridID1 = h.world.CurrentGridID
+	}
+	if gridID2 == "" {
+		gridID2 = h.world.CurrentGridID
 	}
 
-	grid, ok := h.world.GetGrid(gridID)
-	if !ok {
-		fmt.Printf("[MATCH] Erreur : Grid %s non trouvé\n", gridID)
+	grid1, ok1 := h.world.GetGrid(gridID1)
+	grid2, ok2 := h.world.GetGrid(gridID2)
+	if !ok1 || !ok2 {
+		fmt.Printf("[MATCH] Erreur : Grid %s ou %s non trouvé\n", gridID1, gridID2)
 		h.revealedTiles = nil
+		h.revealedGridIDs = nil
 		h.isProcessing = false
 		return
 	}
 
-	tile1, _ := grid.Get(pos1)
-	tile2, _ := grid.Get(pos2)
+	tile1, _ := grid1.Get(pos1)
+	tile2, _ := grid2.Get(pos2)
 
 	if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
 		h.revealedTiles = nil
+		h.revealedGridIDs = nil
 		h.isProcessing = false
 		return
 	}
@@ -1092,6 +1123,7 @@ func (h *Handler) processMatchAttempt() {
 
 	if e1 == nil || e2 == nil {
 		h.revealedTiles = nil
+		h.revealedGridIDs = nil
 		h.isProcessing = false
 		return
 	}
@@ -1108,6 +1140,7 @@ func (h *Handler) processMatchAttempt() {
 			h.OnVictory()
 		}
 		h.revealedTiles = nil
+						h.revealedGridIDs = nil
 		h.isProcessing = false
 		h.ClearSelection()
 		return
@@ -1118,12 +1151,14 @@ func (h *Handler) processMatchAttempt() {
 	cmd := &usecase.MatchTilesCommand{
 		World:    h.world,
 		AssocEng: h.assocEngine,
-		GridID:   gridID,
+		GridID:   gridID1,
+		GridID2:  gridID2,
 		Pos1:     pos1,
 		Pos2:     pos2,
 		OnSuccess: func() {
 			fmt.Printf("[MATCH] ✅ Succès ! Paire de %s trouvée.\n", h.getEntityInfo(e1))
 			h.revealedTiles = nil
+			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
 			if h.OnTurnEnd != nil {
@@ -1133,6 +1168,7 @@ func (h *Handler) processMatchAttempt() {
 		OnFailure: func() {
 			fmt.Printf("[MATCH] ❌ Échec ! %s et %s ne correspondent pas.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
 			h.revealedTiles = nil
+			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
 			if h.OnTurnEnd != nil {
@@ -1144,6 +1180,7 @@ func (h *Handler) processMatchAttempt() {
 	if err := cmd.Execute(); err != nil {
 		fmt.Printf("[MATCH] %v\n", err)
 		h.revealedTiles = nil
+						h.revealedGridIDs = nil
 		h.isProcessing = false
 	}
 }
@@ -1532,7 +1569,25 @@ func (h *Handler) checkExitClick(px, py float64) (entity.Direction, int, bool) {
 }
 
 func (h *Handler) renderHighlights(screen *ebiten.Image) {
+	// Portail portable preview (doit s'afficher même sur cases vides)
+	if h.portablePortalMode {
+		if hovered, gridID, ok := h.getHoveredTile(); ok {
+			if gridID == board.InventoryGridID {
+				// Ne pas afficher l'aperçu quand on survole l'inventaire
+			} else {
+				grid, ok := h.world.GetGrid(gridID)
+				if ok && h.isValidPortalPreviewPosition(grid, hovered) {
+					h.renderer.RenderPortalPlacementPreview(screen, hovered, gridID, h.world)
+				}
+			}
+		}
+	}
+
+	// Highlight de la tuile survolée (ne s'affiche que si entité présente ET pas inventaire)
 	if hovered, gridID, ok := h.getHoveredTile(); ok {
+		if gridID == board.InventoryGridID {
+			return
+		}
 		grid, ok := h.world.GetGrid(gridID)
 		if !ok {
 			return
@@ -1563,20 +1618,7 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 			highlightColor = color.RGBA{255, 255, 255, 50}
 		}
 
-		// On ne dessine pas le highlight ici si c'est l'inventaire,
-		// car le BoardRenderer le gère maintenant de manière inclinée (tilted).
-		if gridID != board.InventoryGridID {
-			h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
-		}
-	}
-
-	if h.portablePortalMode {
-		if hovered, gridID, ok := h.getHoveredTile(); ok {
-			grid, ok := h.world.GetGrid(gridID)
-			if ok && h.isValidPortalPreviewPosition(grid, hovered) {
-				h.renderer.RenderPortalPlacementPreview(screen, hovered, gridID, h.world)
-			}
-		}
+		h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
 	}
 
 	if h.selectedTile != nil {
@@ -1721,9 +1763,20 @@ func (h *Handler) ResetGameState() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
 	h.revealedTiles = nil
+	h.revealedGridIDs = nil
 	h.isProcessing = false
 	h.victoryTimer = nil
 	h.entranceDir = -1
+	h.portablePortalMode = false
+	h.ClearFootsteps()
+}
+
+// ClearFootsteps supprime toutes les empreintes de pas actives du monde.
+func (h *Handler) ClearFootsteps() {
+	for _, id := range h.footstepTrackIDs {
+		h.world.RemoveEntity(entity.ID(id))
+	}
+	h.footstepTrackIDs = h.footstepTrackIDs[:0]
 }
 
 // triggerSealingAnimation gère l'animation de bascule des tuiles d'entrée
@@ -1797,6 +1850,57 @@ func (h *Handler) invertFlipDirection(d entity.FlipDirection) entity.FlipDirecti
 		return entity.FlipLeft
 	}
 	return d
+}
+
+// spawnFootstepTrack crée une empreinte de pas sur le bord extérieur de la tuile cliquée.
+// La direction du bord est déterminée par la position du clic par rapport au centre de la tuile.
+func (h *Handler) spawnFootstepTrack(clickX, clickY int, tilePos board.Position, gridID string) {
+	grid, ok := h.world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	centerX, centerY := h.renderer.GetTileCenter(tilePos, grid)
+	tileSize := float64(h.renderer.GetTileSize())
+
+	// Direction du centre vers le clic (pour placer l'empreinte du côté du clic)
+	dirX := float64(clickX) - centerX
+	dirY := float64(clickY) - centerY
+	dist := math.Sqrt(dirX*dirX + dirY*dirY)
+
+	// Si le clic est trop près du centre, on utilise une direction par défaut (vers le bas)
+	if dist < 1.0 {
+		dirX, dirY = 0, 1
+		dist = 1.0
+	}
+
+	// Normalise la direction
+	dirX /= dist
+	dirY /= dist
+
+	// Position sur le bord extérieur de la tuile (rayon = tileSize/2 + petit décalage)
+	edgeDist := tileSize/2 + 4
+	offsetX := dirX * edgeDist
+	offsetY := dirY * edgeDist
+
+	// Angle de rotation : orienté vers le centre de la tuile (opposé à la direction du bord)
+	angle := math.Atan2(-dirY, -dirX)
+
+	// Crée le track d'empreinte de pas
+	track := entity.NewTrack("footprints", 3, tilePos, tilePos)
+	track.SetGridID(gridID)
+	track.OffsetX = offsetX
+	track.OffsetY = offsetY
+	track.Angle = angle
+	h.world.Entities.Register(track)
+
+	// FIFO : max 2 empreintes visibles, supprime la plus ancienne si débordement
+	h.footstepTrackIDs = append(h.footstepTrackIDs, string(track.GetID()))
+	for len(h.footstepTrackIDs) > 2 {
+		oldID := entity.ID(h.footstepTrackIDs[0])
+		h.footstepTrackIDs = h.footstepTrackIDs[1:]
+		h.world.RemoveEntity(oldID)
+	}
 }
 
 // exitMatchable est un wrapper pour soumettre les sorties au moteur d'association

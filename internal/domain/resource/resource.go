@@ -131,7 +131,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		r.SetHazard(component.Hazard{
 			BaseDamage:       2.0,
 			DamageType:       "poison",
-			Radius:           0,
+			Radius:           1,
 			IsConstant:       true,
 			DegressionFactor: 0.2,
 			ActiveStages:     []int{3}, // Stade 4 (index 3)

@@ -655,6 +655,31 @@ func (b BorderPosition) GetInwardDirection() entity.Direction {
 	}
 }
 
+// GetOutwardDirection retourne la direction de la créature vers le joueur quand
+// le joueur est sur un bord de la même tuile que la créature.
+func (b BorderPosition) GetOutwardDirection() entity.Direction {
+	switch b {
+	case BorderTop:
+		return entity.DirNorth
+	case BorderTopRight:
+		return entity.DirNorthEast
+	case BorderRight:
+		return entity.DirEast
+	case BorderBottomRight:
+		return entity.DirSouthEast
+	case BorderBottom:
+		return entity.DirSouth
+	case BorderBottomLeft:
+		return entity.DirSouthWest
+	case BorderLeft:
+		return entity.DirWest
+	case BorderTopLeft:
+		return entity.DirNorthWest
+	default:
+		return entity.DirNorth
+	}
+}
+
 // IsLookingAt vérifie si le joueur regarde vers une position donnée (Champ de vision 180° depuis l'arête).
 func (p *Player) IsLookingAt(target entity.Position) bool {
 	dir := p.anchor.GetInwardDirection()

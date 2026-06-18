@@ -75,7 +75,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Mechanics` : Flip, Match, Merge.
   - `Navigation` : Gestion des grids et navigation.
   - `Entities` : Logique de spawn.
-  - `Portal` : Système de portail portable.
+  - `Portal` : Système de portail portable (`world_portal.go`) — déploiement 3x3, effet séisme, pénalités (Rê, vortex shader, prévisualisation curseur.
   - `Query` : Fonctions de recherche.
 - **`board/`** : Gestion de la géométrie et de la structure du monde
 - **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
@@ -94,7 +94,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes
   - `LifecycleSystem` : Gère la maturation des ressources
   - `PropagationSystem` : Gère l'expansion organique des ressources
-  - `ToxicitySystem` : Gère les dégâts de poison cumulés et dégressifs infligés par les ressources toxiques (ex: Dreamberry stade 4)
+  - `ToxicitySystem` : Gère les dégâts de poison cumulés et dégressifs infligés par les ressources toxiques (ex: Dreamberry stade 4). Vérifie **toutes** les entités au sommet des piles (pas seulement révélées) avec hazard actif + `IsConstant`.
   - `TriggerSystem` : Gère les structures interactives (terriers, etc.) et les dégâts de révélation (ex: Singe Mousse)
   - `PreviewSystem` : Gère la révélation temporaire des tuiles à l'entrée d'une zone
   - `LootSystem` : Gère la transformation des associations réussies en butin d'inventaire
@@ -433,6 +433,22 @@ Le domaine définit quatre niveaux de difficulté influençant la génération e
 
 - `hidden: true` (Furtivité) : L'entité est réellement invisible (ex: Shadowstalker). Le rendu saute l'animation de déplacement.
 - `mode: "under"` (Profondeur) : L'entité est physiquement sous les autres, mais le joueur peut la voir si rien ne la recouvre. L'animation de déplacement est maintenue pour guider l'œil du joueur.
+
+### Correspondance Inter-Zones (Cross-Zone Matching)
+
+Le système d'appariement supporte maintenant les tuiles sur **grilles différentes** :
+- `revealedGridIDs []string` dans Handler : grille d'origine par tuile révélée (parallèle à `revealedTiles`).
+- `MatchTilesCommand.GridID2` : grille de la seconde tuile (optionnel, défaut = `GridID`).
+- `processMatchAttempt()` résout chaque tuile sur sa grille respective via `revealedGridIDs[0]` / `[1]`.
+- `processSkip()` utilise aussi `revealedGridIDs` pour pénalités inter-zones.
+
+### Traces de Pas (Footsteps)
+
+Système de traces visuelles pour les déplacements de créatures :
+- **Entité `Track`** : Champs `OffsetX`, `OffsetY`, `Angle` (positionnement bord de case, rotation vers centre).
+- **Types** : Boue (Under, interstice), Herbe Brisée (Under, origine), Griffures (Over, destination), Empreintes (Normal, sous tuiles), Intent Beam (Over, créature→cible).
+- **FIFO max 2** : `footstepTrackIDs` dans Handler, nettoyage dans `OnTurnEnd` callback.
+- **Aperçu curseur** : `DrawFootstepPreview()` — empreinte semi-transparente snappée au bord de case.
 
 ---
 

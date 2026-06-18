@@ -136,13 +136,16 @@ func NewWorld() *World {
 func (w *World) initListeners() {
 	w.EventBus.SubscribeFunc(event.AnimationEnded, func(e event.Event) {
 		if animType, ok := e.Payload["animation_type"].(string); ok && animType == "attack" {
-			if targetPos, ok := e.Payload["hit_target"].(entity.Position); ok {
+			if _, ok := e.Payload["hit_target"].(entity.Position); ok {
 				ent, exists := w.Entities.Get(entity.ID(e.SourceID))
 				if !exists {
 					return
 				}
-				// Création de la trace persistante (red beam)
-				track := entity.NewTrack("intent_beam", 2, ent.GetPosition(), targetPos)
+				// La trace persistante part du centre de la créature vers le bord du joueur
+				creaturePos := ent.GetPosition()
+				outwardDir := w.Player.GetAnchor().GetOutwardDirection()
+				edgePos := creaturePos.Add(outwardDir.ToVector())
+				track := entity.NewTrack("intent_beam", 2, creaturePos, edgePos)
 				track.SetGridID(ent.GetGridID())
 				w.Entities.Register(track)
 			}

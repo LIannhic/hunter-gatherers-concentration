@@ -44,8 +44,8 @@ func TestButtonActivationAtRest(t *testing.T) {
 	if !states[BtnEndTurn].Active {
 		t.Error("EndTurn should always be active")
 	}
-	if !states[BtnMerge].Active {
-		t.Error("Merge should always be active")
+	if states[BtnMerge].Active {
+		t.Error("Merge should be inactive at rest")
 	}
 }
 

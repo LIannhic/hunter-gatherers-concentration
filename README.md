@@ -86,9 +86,10 @@ Pour rompre le rythme classique du Memory et simuler l'urgence de la survie en p
 ### Système de Portail Portable
 
 Le portail portable permet au joueur de s'extraire rapidement du plan actif.
-- **Déploiement** : Nécessite une zone 3x3.
-- **Effet Séisme** : Lors de l'activation, toutes les entités présentes sur les 8 parcelles entourant le portail sont immédiatement supprimées pour libérer l'espace.
-- **Feedback Visuel** : Un shader de type **Vortex** crée un tourbillon de distorsion centré sur le portail pendant toute la durée de l'extraction.
+- **Déploiement** : Nécessite une zone 3x3 (centre à au moins 1 case des bords). Cible toutes les grilles (zone de départ, d'arrivée, et zones intermédiaires).
+- **Effet Séisme** : Lors de l'activation, toutes les entités présentes dans la zone 3x3 (9 cases) sont immédiatement supprimées pour libérer l'espace.
+- **Pénalités** : Si la zone contient des entités (ressources, créatures, structures), le joueur subit **5 dégâts** (Rêve Brisé) + **Taxe Butin 50%** (perte aléatoire de la moitié de l'inventaire).
+- **Feedback Visuel** : Un shader de type **Vortex** crée un tourbillon de distorsion centré sur le portail pendant toute la durée de l'extraction (5 secondes). L'aperçu au curseur affiche un cadre **vert** (zone vide = sûr) ou **jaune** (entités présentes = pénalité).
 - **Extraction** : Une fois déployé, un compte à rebours de 5 secondes se lance avant la victoire.
 
 ### Boutons d'action réactifs du Playmat

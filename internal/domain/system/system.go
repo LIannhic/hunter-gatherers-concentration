@@ -1285,11 +1285,8 @@ func (s *ToxicitySystem) Update(world *World) {
 				continue
 			}
 
-			// On ne considère que l'entité au sommet pour la toxicité (ou toutes ?)
-			// Le prompt dit "si le joueur révèle d'autres dreamberries", donc Revealed est requis.
 			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-			ent, ok := world.Entities.Get(entity.ID(topID))
-			if !ok || ent.GetState()&entity.Revealed == 0 {
+			if _, ok := world.Entities.Get(entity.ID(topID)); !ok {
 				continue
 			}
 
