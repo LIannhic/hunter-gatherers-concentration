@@ -15,6 +15,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
 	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
@@ -83,9 +84,14 @@ func NewApplication() (*Application, error) {
 	// 3. Crée et interconnecte les grilles de zones
 	app.setupGrids()
 
-	// 4. Couche Infrastructure & Persistance (dossier ./saves)
+	// 4. Couche Infrastructure & Persistance (dossier ./saves sur Desktop, LocalStorage sur Web)
 	app.Assets = assets.NewManager()
-	repo := infraPersistence.NewJsonRepository("./saves")
+	var repo persistence.Repository
+	if isWasm() {
+		repo = infraPersistence.NewWebRepository()
+	} else {
+		repo = infraPersistence.NewJsonRepository("./saves")
+	}
 	app.Persistence = usecase.NewPersistenceManager(repo)
 
 	// 5. Initialisation des composants UI et Rendering
