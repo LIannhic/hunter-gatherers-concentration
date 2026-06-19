@@ -787,6 +787,16 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	myIcon := ui.PortraitY + ui.MenuIconRelativeY
 	vector.DrawFilledRect(screen, float32(mxIcon), float32(myIcon), float32(ui.MenuIconSize), float32(ui.MenuIconSize), color.RGBA{150, 150, 150, 255}, true)
 	text.Draw(screen, "M", basicfont.Face7x13, int(mxIcon)+15, int(myIcon)+25, color.Black)
+
+	// Fullscreen Icon
+	fxIcon := ui.PortraitX + ui.FullscreenIconRelativeX
+	fyIcon := ui.PortraitY + ui.FullscreenIconRelativeY
+	vector.DrawFilledRect(screen, float32(fxIcon), float32(fyIcon), float32(ui.FullscreenIconSize), float32(ui.FullscreenIconSize), color.RGBA{150, 150, 150, 255}, true)
+	fsLabel := "F"
+	if ebiten.IsFullscreen() {
+		fsLabel = "W"
+	}
+	text.Draw(screen, fsLabel, basicfont.Face7x13, int(fxIcon)+15, int(fyIcon)+25, color.Black)
 }
 
 func (h *HUD) renderInventory(screen *ebiten.Image) {
@@ -1205,6 +1215,15 @@ func (h *HUD) HandleClick(x, y int) bool {
 		// On ne peut pas appeler ReturnToMenu ici car HUD ne connaît pas app.
 		// On laisse app.go gérer via ses propres callbacks (Input.OnExitToMenu déjà lié à l'icône M)
 		// On retourne juste true pour dire que le clic a été consommé.
+		return true
+	}
+
+	// Clic sur l'icône Fullscreen (F/W)
+	fsxIcon := ui.PortraitX + ui.FullscreenIconRelativeX
+	fsyIcon := ui.PortraitY + ui.FullscreenIconRelativeY
+	if fx >= float64(fsxIcon) && fx <= float64(fsxIcon)+ui.FullscreenIconSize &&
+		fy >= float64(fsyIcon) && fy <= float64(fsyIcon)+ui.FullscreenIconSize {
+		ebiten.SetFullscreen(!ebiten.IsFullscreen())
 		return true
 	}
 

@@ -1192,6 +1192,10 @@ func (h *Handler) handleKeyboard() {
 		}
 	}
 
+	if inpututil.IsKeyJustPressed(ebiten.KeyF11) {
+		ebiten.SetFullscreen(!ebiten.IsFullscreen())
+	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
 		if h.OnToggleInvDetails != nil {
 			h.OnToggleInvDetails()
