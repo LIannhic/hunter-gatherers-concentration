@@ -452,6 +452,30 @@ Système de traces visuelles pour les déplacements de créatures :
 
 ---
 
+## 10. Persistance et Stockage
+
+Le domaine définit une interface de persistance (`Repository`) pour découpler la logique de sauvegarde des détails techniques.
+
+### Interface Repository
+
+```go
+type Repository interface {
+    Save(slotID int, data *SaveData) error
+    Load(slotID int) (*SaveData, error)
+    Delete(slotID int) error
+    GetAllMetadata() ([]Metadata, error)
+    GetLatestSlotID() (int, error)
+    Exists(slotID int) bool
+}
+```
+
+### Implémentations
+
+- **`JsonRepository`** : Utilisé sur Desktop, stocke les fichiers dans un dossier local (`./saves`).
+- **`WebRepository`** : Utilisé dans les builds WebAssembly (Itch.io), utilise le `LocalStorage` du navigateur via `syscall/js`.
+
+---
+
 ## Flux de données
 
 ```

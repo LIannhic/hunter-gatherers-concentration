@@ -278,6 +278,7 @@ Le jeu utilise une résolution logique fixe de **1280x720**. L'interface est div
 - **Gauges** (270x420) : Barres verticales de Santé, Mana et Santé Mentale.
 - **Minimap** (270x270) : Carte interactive du Plan de Rêve.
 - **Atlas des Assets** : Fenêtre modale (T) paginée pour le debug visuel. Utilise un système de boutons pour la navigation et la fermeture.
+- **Plein Écran** : Le jeu supporte le mode plein écran natif (F11 ou bouton dédié dans le HUD).
 
 Séparation des responsabilités :
 - **Renderer**: Dessine le plateau central avec espacement dynamique.
@@ -304,6 +305,8 @@ Connecte tout ensemble :
 ```go
 app.NewApplication() // Crée world, assets, renderer, input...
 ```
+
+La couche `App` gère également le choix du dépôt de persistance en fonction de l'environnement (WASM vs Desktop).
 
 La couche `App` gère également le flux de navigation pré-jeu, notamment la **sélection de difficulté** qui est déclenchée lors du clic sur "DEMARRER" (pour les nouveaux joueurs) ou via le menu de profil.
 
@@ -365,6 +368,7 @@ go test ./internal/domain/... -v
 | Naviguer entre les zones | ZQSD / WASD / Flèches |
 | Rotation plateau (Visuel) | + (Horaire) / - (Anti-horaire) |
 | Reset rotation | R |
+| Basculer Plein Écran | F11 ou Bouton F/W |
 
 ### Gestion et Debug
 
@@ -569,14 +573,16 @@ go test ./internal/domain/... -cover
 
 ## Compiler votre projet en WebAssembly
 
-```bash
-# 1. On renomme pour "cacher" le fichier Windows à Go
+Pour générer le fichier WebAssembly compatible avec Itch.io :
+
+```powershell
+# 1. On renomme temporairement le fichier de ressources Windows pour éviter les conflits
 Rename-Item ./cmd/game/rsrc.syso rsrc.syso.bak
 
 # 2. On compile pour le WebAssembly
 $env:GOOS="js"; $env:GOARCH="wasm"; go build -o hgcv0.2_basic-incursion.wasm ./cmd/game
 
-# 3. On remet le nom d'origine pour que votre version Windows fonctionne à nouveau
+# 3. On restaure le fichier de ressources
 Rename-Item ./cmd/game/rsrc.syso.bak rsrc.syso
 ```
 
