@@ -322,6 +322,27 @@ go build -o game ./cmd/game
 ./game
 ```
 
+### Compiler pour le Web (WASM)
+
+Pour générer le fichier WebAssembly (compatible avec Itch.io), utilisez les commandes suivantes (PowerShell) :
+
+```powershell
+# 1. On renomme temporairement le fichier de ressources Windows pour éviter les conflits
+Rename-Item ./cmd/game/rsrc.syso rsrc.syso.bak
+
+# 2. On compile pour le WebAssembly
+$env:GOOS="js"; $env:GOARCH="wasm"; go build -o hgcv0.2_basic-incursion.wasm ./cmd/game
+
+# 3. On restaure le fichier de ressources
+Rename-Item ./cmd/game/rsrc.syso.bak rsrc.syso
+```
+
+### Sauvegardes
+
+Le jeu supporte la persistance des données :
+- **Desktop** : Les sauvegardes sont stockées dans le dossier `./saves` au format JSON.
+- **Web (WASM)** : Les sauvegardes utilisent le `LocalStorage` du navigateur pour garantir la persistance entre les sessions.
+
 ### Contrôles
 
 #### Jeu de base (Actions directes)
@@ -337,6 +358,7 @@ go build -o game ./cmd/game
 | Naviguer entre les zones | Flèches ou ZQSD / WASD / Clic Sortie |
 | Rotation plateau (Visuel) | + (Horaire) / - (Anti-horaire) |
 | Reset rotation | R |
+| Basculer Plein Écran | F11 ou Bouton F/W (Portrait) |
 
 #### Gestion et Inventaire
 

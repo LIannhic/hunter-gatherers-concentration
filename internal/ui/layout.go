@@ -16,6 +16,10 @@ const (
 	MenuIconRelativeX = 5
 	MenuIconRelativeY = 5
 	MenuIconSize      = 43.75
+
+	FullscreenIconRelativeX = 53.75
+	FullscreenIconRelativeY = 5
+	FullscreenIconSize      = 43.75
 )
 
 // Inventory Panel

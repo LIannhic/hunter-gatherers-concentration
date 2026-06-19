@@ -17,7 +17,8 @@ func main() {
 	// Configure la fenêtre
 	ebiten.SetWindowTitle("Hunter-Gatherers Concentration - Dev Build")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
-	
+	ebiten.SetFullscreen(true)
+
 	// Lance la boucle de jeu
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
