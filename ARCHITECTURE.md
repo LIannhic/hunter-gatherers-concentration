@@ -93,12 +93,13 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
     - `Update()` : Cycle par tour (IA, maturation, fin de tour).
     - `UpdateFrame(dt)` : Cycle temps réel à 60 FPS (Timers, évènements UI, prévisualisation).
   - **CreatureAISystem** : Gère les comportements de base des créatures
-  - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes)
+  - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes). **Filtre par grille** : stocke les révélations dans `RevealedTile{Position, GridID}`. `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature.
   - **ResourcePropagationSystem** : Gère la multiplication des ressources sur les cases adjacentes. Émet l'événement `ResourcePropagated` enrichi des positions `from` et `to` pour l'UI.
   - **ResourceLifecycleSystem** : Gère la maturation des ressources. Émet des logs détaillés sur les transitions de stade.
-  - **ToxicitySystem** : Calcule les dégâts de poison cumulés et dégressifs infligés au joueur par les ressources révélées (ex: Dreamberry stade 4).
+  - **ToxicitySystem** : Calcule les dégâts de poison cumulés et dégressifs infligés au joueur par les ressources révélées (ex: Dreamberry stade 4). **Ne vérifie que la grille actuelle** (`world.CurrentGridID`).
   - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire. Le butin hérite du niveau de cumul de la paire.
   - **TrackSystem** : Gère la décomposition temporelle des traces
+  - **AggressionSystem** : Calcule l'agressivité modulaire des créatures (Priority 1, avant mouvement). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `AnimationEnded` (type: "flip", finalState: Revealed) pour déclencher l'attaque si agressivité totale ≥ 100. Publie `CreatureAttacked` (payload: hit_target) pour l'animation de lunge, et `PlayerDamaged` si le joueur est dans la zone de menace. Gère aussi les facteurs dynamiques : "inventory" (trophées), "species_anger" (congénères révélés), "empty_plots" (Singe Mousse), "toxic_dreamberry" (Lumifly).
 
 - **Animations Organiques** :
   - **Propagation (Division Cellulaire)** : Lorsqu'une ressource se multiplie, une animation de type `propagate` est déclenchée. Elle simule une division organique en deux phases :
@@ -115,6 +116,12 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Déclenche un auto-skip à l'expiration
   - Phase de panique (< 3s) utilisée pour les feedbacks visuels (pulse Sanity Gauge)
   - Durée maximale synchronisée avec `meta.DifficultySettings.TurnTimerDuration`
+  - **Time Scaling** : Vitesse adaptée selon contexte dans `Engine.UpdateFrame` :
+    - Grille vide → `Stop()` (0%)
+    - Preview/Animation → 50% vitesse (`dt * 0.5`)
+    - Normal → 100%
+
+- **World.ActiveAnimationCount** : Compteur d'animations actives (flip, slide, attack). Incrémenté par `AnimationStarted`, décrémenté par `AnimationEnded` (handlers dans `BoardRenderer.SubscribeToEvents`).
 
 - **Suivi de Progression et Score** :
   - `TotalExperience` : Cumul de toute l'expérience acquise durant une session (Matchs + Butin final). Utilisé comme base pour le calcul du Score dans la persistance.
@@ -159,7 +166,7 @@ if revealCmd.CanExecute() {
 ```
 
 **Commandes principales :**
-- `RevealTileCommand` : Révèle une entité, met à jour la position périphérique du joueur et vérifie la **Confrontation** (dégâts si dans la `ThreatZone`).
+- `RevealTileCommand` : Révèle une entité, met à jour la position périphérique du joueur.
 - `MatchTilesCommand` : Tente d'appairer deux entités identiques de même niveau de cumul. Applique la **Matrice de Dégâts** (pénalité si match invalide ou skip de match valide). Pour le moment, seul l'appairage par similarité est actif.
 - `MergeTilesCommand` : Fusionne deux entités identiques normales en une seule version cumulée.
 - `SwitchGridCommand` : Change de grille active.
@@ -174,6 +181,71 @@ if revealCmd.CanExecute() {
   - TODO: Remplacer par des assets finaux avant release
   
 - **Loader**: Configuration depuis JSON (avec fallback par défaut)
+
+### Paramètres de Difficulté Étendus
+
+La structure `DifficultySettings` (dans `domain/meta/difficulty.go`) inclut désormais :
+
+```go
+type DifficultySettings struct {
+	PreviewDuration    float64 // Durée d'affichage de la prévisualisation (s)
+	PreviewRatio       float64 // % de tuiles montrées (1.0 = 100%)
+	NavThreshold       float64 // % de paires pour ouvrir les sorties
+	TurnTimerDuration  float64 // Durée max du timer par tour (s)
+	MaxSafeReveals     int     // Nb révélations sûres avant agressivité 100%
+	AggressionMult     float64 // Multiplicateur global d'agressivité (futur)
+}
+```
+
+| Niveau   | Timer | Preview | NavThreshold | MaxSafeReveals | AggressionMult |
+|----------|-------|---------|--------------|----------------|----------------|
+| Easy     | 15.0  | 1.3s    | 0.5          | 3              | 0.5            |
+| Normal   | 10.0  | 0.8s    | 0.6          | 2              | 1.0            |
+| Hard     | 5.0   | 0.3s    | 0.7          | 1              | 1.5            |
+| Insane   | 5.0   | 0.1s    | 0.8          | 0              | 2.0            |
+
+**Logique MaxSafeReveals** : Chaque révélation joueur ajoute `100 / (MaxSafeReveals + 1)` % d'agressivité. À 0 (Insane), 1 clic = 100% = attaque immédiate.
+
+---
+
+### Time Scaling (Gestion Dynamique du Temps)
+
+Le `TurnTimer` adapte sa vitesse selon le contexte dans `Engine.UpdateFrame(dt)` :
+
+| Condition | Time Scale | Comportement |
+|-----------|------------|--------------|
+| **Grille vide** (aucune Resource/Creature) | 0.0 | Timer **arrêté** (`Stop()`) |
+| **Prévisualisation active** (`PreviewSystem.IsPreviewActive`) | 0.5 | Timer **ralenti 50%** |
+| **Animation active** (`World.ActiveAnimationCount > 0`) | 0.5 | Timer **ralenti 50%** |
+| **Normal** | 1.0 | Vitesse normale |
+
+**Priorité** : Grille vide > Animation/Preview > Normal.
+
+**Implémentation** :
+- `World.ActiveAnimationCount` : Incrémenté par `AnimationStarted`, décrémenté par `AnimationEnded` (handlers dans `BoardRenderer.SubscribeToEvents`).
+- `PreviewSystem.IsPreviewActive(gridID)` : Vérifie `previewTimers[gridID] > 0`.
+- Détection grille vide : Aucune entité `TypeResource` ou `TypeCreature` sur la grille actuelle.
+
+---
+
+### Correction : Toxicité Locale
+
+Le `ToxicitySystem` (Priority 6) ne vérifie maintenant que la **grille actuelle** (`world.CurrentGridID`) au lieu de `world.GridOrder`. Les Dreamberries stade 4 sur d'autres grilles ne causent plus de dégâts de poison.
+
+---
+
+### Correction : Déclencheurs de Mouvement par Grille
+
+Le `CreatureMovementSystem` filtre maintenant les déclencheurs par grille :
+
+- **Nouveau struct** `RevealedTile{Position, GridID}` stocke la grille de chaque révélation.
+- `TriggerOnReveal` : Ne se déclenche que si révélation sur **même grille** + même position.
+- `TriggerOnEcho` : Ne réagit qu'aux révélations sur **même grille**.
+- `TriggerProximity` : Ne calcule la distance que pour les révélations sur **même grille**.
+
+Cela corrige le bug où les Stone Wardens (et autres) bougeaient dans toutes les grilles quand le joueur révélait une tuile aux mêmes coordonnées ailleurs.
+
+---
 
 ### Système de Portail Portable
 
@@ -288,6 +360,7 @@ Séparation des responsabilités :
   - **Espaces de Coordonnées** :
     - **Plateau (Board)** : 525x525. Contient les tuiles et les traces.
     - **Tapis de Jeu (Playmat)** : 700x700. Contient le plateau, les boutons et les **Effets Plein Écran** (ex: Scanner de l'Echo Hound).
+  - **Barre d'Agressivité** : Sur les créatures révélées (`Aggression > 0`), dessine une barre horizontale (40x4px) en bas de la tuile. Couleur dégradée : Orange (faible) → Rouge (100%). Fond semi-transparent noir.
 - **Input**: Capture les événements (clavier, souris, tactile), gère la navigation entre les zones et les raccourcis clavier. Supporte les interactions mobiles (Wasm) via le défilement de l'inventaire par glissement (Drag-to-scroll) et l'appui long pour la suppression.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
@@ -341,6 +414,8 @@ Pour les révélations de tuiles, le bus transporte aussi les informations néce
 eventBus.Publish(event.NewEntityRevealedEvent(position, entityID, gridID, flipDirection))
 ```
 
+**Nouveau type d'événement** : `CreatureAttacked` — Publié par `AggressionSystem` quand l'agressivité ≥ 100 à la fin du flip. Payload : `hit_target` (*entity.Position, nil si joueur hors zone). Utilisé par le renderer pour déclencher l'animation de lunge.
+
 ## Lancer le jeu
 
 ```bash
@@ -359,31 +434,52 @@ go test ./internal/domain/... -v
 
 ### Jeu de base (Actions directes)
 
-| Action | Touche |
+| Action | Touche / Geste |
 |--------|--------|
-| Révéler tuile | Click gauche (Plateau) |
+| Révéler tuile | Relâchement Clic gauche / Doigt (Plateau) |
+| Sélectionner tuile révélée | Relâchement Clic gauche / Doigt (Tuile révélée) |
+| Désélectionner / Annuler | Clic droit (Plateau) / Échap / Toggle (Mobile) |
 | Matcher (valider paire) | M ou Bouton MATCH |
 | Skip (si 2 tuiles révélées) | Espace ou Bouton SKIP |
-| Fin de tour forcée | Espace (sans match) ou Bouton TURN |
-| Naviguer entre les zones | ZQSD / WASD / Flèches |
+| Fin de tour forcée | Espace (sans match en cours) ou Bouton TURN |
+| Naviguer entre les zones | Flèches ou ZQSD / WASD / Clic Sortie |
 | Rotation plateau (Visuel) | + (Horaire) / - (Anti-horaire) |
 | Reset rotation | R |
-| Basculer Plein Écran | F11 ou Bouton F/W |
+| Basculer Plein Écran | F11 ou Bouton F/W (Portrait) |
 
-### Gestion et Debug
+### Gestion et Inventaire
+
+| Action | Touche / Geste |
+|--------|--------|
+| Sélection Butin (Usage) | Relâchement Clic gauche / Tap (Inventaire) |
+| Utiliser Butin sélectionné | Re-Relâchement / Re-Tap (Inventaire) |
+| Sélection Suppression | Clic droit / Appui Long (0.5s) (Inventaire) |
+| Désélectionner Butin | Clic droit / Tap hors inventaire |
+| Défilement Inventaire | Molette / Glissement (Drag) vertical |
+| Portail Portatif (Raccourci) | P |
+| Statistiques des zones | I |
+| Détails Inventaire | L |
+| Atlas des Assets (Toggle) | T |
+| Pagination Atlas | Boutons [PRECEDENT] / [SUIVANT] |
+| Fermer Atlas | Bouton [X] ou T |
+
+### Paramètres et Debug
 
 | Action | Touche |
 |--------|--------|
-| Inventaire (Usage/Détails) | Click gauche / L |
-| Statistiques zones | I |
-| Menu / Abandon | Échap ou \ |
-| Changer de grille | 1-9 |
-| Difficulté | F1 à F4 |
-| Console de Debug | F12 |
+| Difficulté (E, N, H, I) | F1 à F4 |
+| Fenêtre de Debug (Console) | F12 |
+| Spawn entités (Debug ouvert) | S |
+| Spawn toutes créatures | Shift + S |
+| Spawn créature aléatoire | F9 |
+| Nettoyer plateau (Cheat) | C |
 | Révéler tout (Cheat) | F5 |
 | Cacher tout (Cheat) | F6 |
-| Spawn entités (Debug) | S / Shift+S / F9 |
-| Nettoyer plateau (Cheat) | C |
+| Débloquer Navigation (Cheat) | F7 |
+| Retirer état Bloqué (Cheat) | F8 |
+| Changer de grille active | 1 à 9 |
+| Retour menu / Abandon | \ ou Échap |
+| Remplir Inventaire (Debug) | B |
 
 ## Ajouter une fonctionnalité
 
@@ -456,13 +552,17 @@ type MovementProfile struct {
 
 #### Bestiaire (Exemples)
 
-| Créature | Déclencheur | Navigation | Perception | Mode |
-|----------|-------------|------------|------------|------|
-| **Lumifly** | Auto | Errance | Manifest | Over |
-| **Shadowstalker** | Proximité | Attraction | Cloaked | Normal |
-| **Echo Hound** | Echo | Attraction | Manifest | Normal |
-| **Burrower** | Vue | Errance | Manifest | Under |
-| **Specter** | Echo | Errance | Cloaked | Under |
+| Créature | Déclencheur      | Navigation             | Perception | Mode | AggressionBase |
+|----------|------------------|------------------------|------------|------|----------------|
+| **Lumifly** | Auto             | Attraction (baie)      | Manifest | Over | 0 |
+| **Shadowstalker** | Proximité (4)    | Attraction (Player)    | Cloaked | Swap | 80 |
+| **Echo Hound** | Echo             | Attraction (baie)      | Manifest | Normal | 50 |
+| **Burrower** | Auto             | Relatif                | Manifest | Under | 20 |
+| **Specter** | Echo             | Errance                | Cloaked | Under | 60 |
+| **Stonewarden** | OnReveal         | Orientation            | Manifest | Normal | 40 |
+| **Moss Monkey** | Proximité (4)    | Attraction (Empty)     | Manifest | Normal | 0 (dynamique) |
+| **Flutterwing** | Proximité (2)    | Répulsion (Player)     | Manifest | Over | 0 |
+| **Fleeing Sprite** | Proximité (3)    | Répulsion (Player)     | Manifest | Normal | 0 |
 
 #### Types de navigation
 
@@ -507,6 +607,44 @@ Régit comment le monde/joueur perçoit les actions d'une entité via son `Perce
 | `CollideBounce` | Rebondit (change d'orientation 180°) |
 | `CollideSlide` | Glisse le long de l'obstacle |
 | `CollidePhase` | Traverse certains types de tuiles |
+
+---
+
+### Système d'Agressivité (AggressionSystem)
+
+**Fichier** : `internal/domain/system/aggression_system.go`  
+**Tests** : `internal/domain/system/aggression_test.go`
+
+#### Architecture
+L'`AggressionSystem` remplace l'ancienne logique de confrontation statique par un système modulaire et dynamique. Il s'exécute en **Priority 1** (avant le mouvement) dans l'Engine.
+
+#### Composantes de l'Agressivité
+Chaque créature a un composant `Behavior` enrichi :
+- `AggressionBase` (int) : Valeur de base par espèce (0-80).
+- `AggressionFactors` (map[string]int) : Facteurs dynamiques recalculés chaque tour.
+- `Aggression` (int) : Total = Base + ΣFacteurs, plafonné à 100.
+- `RevealCount` (int) : Compteur de révélations manuelles joueur.
+
+#### Facteurs Dynamiques (mis à jour dans `Update()`)
+| Facteur | Source | Description |
+|---------|--------|-------------|
+| `reveals` | `TileRevealed` (player_action) | `RevealCount * (100 / (MaxSafeReveals + 1))` |
+| `inventory` | Inventaire joueur | +50 par objet taggé `{species}_trophy` |
+| `species_anger` | Grille | +20 par congénère révélé |
+| `empty_plots` | Singe Mousse | % cases vides * 2 (max 100) |
+| `toxic_dreamberry` | Lumifly | 100 si Dreamberry stade 4 adjacent |
+
+#### Déclencheur d'Attaque
+L'attaque ne se produit **pas** à la révélation, mais à la **fin de l'animation de flip** (`AnimationEnded`, type="flip", state=Revealed). Si `Aggression >= 100` :
+1. Vérifie si le joueur est dans la `ThreatZone` (même logique périphérique qu'avant).
+2. Publie `CreatureAttacked` (payload: `hit_target` = position joueur si menacé, nil sinon) → Renderer lance l'animation de lunge.
+3. Si joueur menacé et pas de *Grâce* : `TakeDamage(10, "physical")` + `PlayerDamaged` event + effets visuels (Blur Shadowstalker, Bulle Lumifly).
+
+#### Difficulté
+`MaxSafeReveals` et `AggressionMult` dans `DifficultySettings` contrôlent la tolérance et l'intensité globale.
+
+#### Feedback Visuel
+Le `BoardRenderer` affiche une **barre d'agressivité** (orange→rouge) sous les créatures révélées quand `Aggression > 0`.
 
 #### Créer une créature avec un profil de mouvement
 

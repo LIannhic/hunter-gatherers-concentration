@@ -72,6 +72,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `World` : Structure World (Cœur de l'état global).
   - `Engine` : Orchestrateur des systèmes ECS.
   - `ECS Systems` : Implémentations (IA, Mouvement, Lifecycle, Loot...).
+  - `AggressionSystem` : Gère le calcul modulaire de l'agressivité des créatures (Base + Facteurs dynamiques : révélations, inventaire, colère d'espèce, facteurs spécifiques). Déclenche les attaques quand l'agressivité ≥ 100 à la fin de l'animation de flip. Publie `CreatureAttacked`.
   - `Mechanics` : Flip, Match, Merge.
   - `Navigation` : Gestion des grids et navigation.
   - `Entities` : Logique de spawn.
@@ -86,20 +87,22 @@ func (s *LifecycleSystem) Update(world *World) {
   - `DebugState` : État global de débogage permettant d'outrepasser les règles de difficulté, de filtrer les entités et de forcer les shaders.
   - `AddTag(string)`, `HasTag(string)`, `RemoveTag(string)` : Méthodes permettant de gérer les propriétés dynamiques ou visuelles des entités (ex: "moss_lure", "flying").
   - `ThreatZone` : (Creature) Liste de directions attaquées localement.
+  - `Behavior` : Composant IA enrichi — `AggressionBase` (statique), `Aggression` (total calculé), `AggressionFactors` (map[string]int : "reveals", "inventory", "species_anger", "empty_plots", "toxic_dreamberry"), `RevealCount` (compteur révélations manuelles).
 - **`component/`** : Stockage et définition des composants (`Store`)
 - **`world.go`** : Agrégateur de l'état global (Grids, Entities, Player).
 - **`engine.go`** : Orchestrateur des systèmes. Sépare le cycle par tour (`Update`) du cycle temps réel (`UpdateFrame`).
 - **`system.go`** : Implémentation des systèmes ECS qui traitent les données.
   - `CreatureAISystem` : Gère les comportements de base des créatures
-  - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes
+  - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes. **Filtre les déclencheurs par grille** : `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature. Stocke les révélations avec `RevealedTile{Position, GridID}`.
   - `LifecycleSystem` : Gère la maturation des ressources
   - `PropagationSystem` : Gère l'expansion organique des ressources
-  - `ToxicitySystem` : Gère les dégâts de poison cumulés et dégressifs infligés par les ressources toxiques (ex: Dreamberry stade 4). Vérifie **toutes** les entités au sommet des piles (pas seulement révélées) avec hazard actif + `IsConstant`.
+  - `ToxicitySystem` : Gère les dégâts de poison cumulés et dégressifs infligés par les ressources toxiques (ex: Dreamberry stade 4). Vérifie les entités au sommet des piles **sur la grille actuelle uniquement** avec hazard actif + `IsConstant`.
   - `TriggerSystem` : Gère les structures interactives (terriers, etc.) et les dégâts de révélation (ex: Singe Mousse)
   - `PreviewSystem` : Gère la révélation temporaire des tuiles à l'entrée d'une zone
   - `LootSystem` : Gère la transformation des associations réussies en butin d'inventaire
   - `ActionSystem` : Gère les actions spécifiques des créatures (ex: `spawn_trap` du Singe Mousse)
   - `TrackSystem` : Gère la durée de vie et la disparition progressive des traces au sol
+  - `AggressionSystem` : **Nouveau** — Calcule l'agressivité totale des créatures (Base + Facteurs). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `AnimationEnded` (type: "flip", state: Revealed) pour déclencher l'attaque si agressivité ≥ 100. Publie `CreatureAttacked` pour l'animation de lunge et `PlayerDamaged` pour les dégâts.
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)
@@ -244,6 +247,7 @@ ResourcePropagated // Expansion (directions cardinales uniquement)
 AssociationMade    // Paire trouvée
 PlayerDamaged      // Dégâts subis
 TurnEnded          // Fin de tour
+CreatureAttacked   // Attaque de créature (agressivité ≥ 100) — payload: hit_target (*Position)
 ```
 
 ---
@@ -423,11 +427,29 @@ Le moteur gère une unification réelle des transformations géométriques :
 
 ### Niveaux de Difficulté
 
-Le domaine définit quatre niveaux de difficulté influençant la génération et le rythme :
-- **Easy** : Timer généreux (10s), prévisualisation longue.
-- **Normal** : Équilibre standard (8s).
-- **Hard** : Pression accrue (5s), prévisualisation courte.
-- **Insane** : Défi ultime (4s), la prévisualisation se recache presque instantanément.
+Le domaine définit quatre niveaux de difficulté influençant la génération, le rythme et l'agressivité :
+- **Easy** : Timer 15s, prévisualisation 1.3s, `MaxSafeReveals: 3`, `AggressionMult: 0.5`.
+- **Normal** : Timer 10s, prévisualisation 0.8s, `MaxSafeReveals: 2`, `AggressionMult: 1.0`.
+- **Hard** : Timer 5s, prévisualisation 0.3s, `MaxSafeReveals: 1`, `AggressionMult: 1.5`.
+- **Insane** : Timer 5s, prévisualisation 0.1s, `MaxSafeReveals: 0`, `AggressionMult: 2.0`.
+
+**MaxSafeReveals** : Nombre de révélations "sûres" par créature avant que l'agressivité n'atteigne 100%. Formule : `increment = 100 / (MaxSafeReveals + 1)` par clic.
+**AggressionMult** : Multiplicateur global appliqué à l'agressivité totale (implémentation future).
+
+### Time Scaling (Gestion Dynamique du Temps)
+
+Le `TurnTimer` adapte sa vitesse selon le contexte dans `Engine.UpdateFrame` :
+
+| Condition | Time Scale | Comportement |
+|-----------|------------|--------------|
+| **Grille vide** (aucune Resource/Creature) | 0.0 | Timer **arrêté** (`Stop()`) |
+| **Prévisualisation active** (`PreviewSystem.IsPreviewActive`) | 0.5 | Timer **ralenti 50%** |
+| **Animation active** (`World.ActiveAnimationCount > 0`) | 0.5 | Timer **ralenti 50%** |
+| **Normal** | 1.0 | Vitesse normale |
+
+Priorité : Grille vide > Animation/Preview > Normal.
+
+Le `World.ActiveAnimationCount` est incrémenté par `AnimationStarted` et décrémenté par `AnimationEnded` (géré par `BoardRenderer.SubscribeToEvents`).
 
 ### Distinction Invisibilité vs Profondeur
 
