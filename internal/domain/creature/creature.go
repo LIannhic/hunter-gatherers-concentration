@@ -39,6 +39,9 @@ func New(species string, pos entity.Position) *Creature {
 	c := &Creature{
 		BaseEntity: entity.NewBaseEntity(entity.TypeCreature),
 		Species:    species,
+		Behavior: component.Behavior{
+			AggressionFactors: make(map[string]int),
+		},
 		ThreatZone: []entity.Direction{Forward}, // Par défaut face à elle
 	}
 	c.SetPosition(pos)
@@ -140,7 +143,6 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 	case "spreading_moss":
 		currentPos := c.GetPosition()
 		emptyPlots := world.GetEmptyPlots()
-		totalPlots := world.GetGridTotalPlots()
 
 		if world.GetTileState(currentPos) == "alone" {
 			return Action{Type: "spawn_trap", Metadata: map[string]interface{}{"trap_type": "moss_lure"}}
@@ -152,13 +154,6 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 
 		if world.IsGridSaturatedWithTraps() {
 			return Action{Type: "flee"}
-		}
-
-		if totalPlots > 0 {
-			c.Behavior.Aggression = (len(emptyPlots) * 200) / totalPlots
-			if c.Behavior.Aggression > 100 {
-				c.Behavior.Aggression = 100
-			}
 		}
 
 		if len(emptyPlots) > 0 {
@@ -298,7 +293,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Stealth:  StealthManifest, // Glissement visible à l'écran
 				Acoustic: AcousticSilent,  // Vol silencieux
 			},
-			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Frequency:   *NewMovementFrequency(FreqDelay, 0, 1),
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
@@ -308,8 +303,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 	case "flutterwing":
 		c.SetBehavior(component.Behavior{
-			State:      "dancing",
-			Aggression: 0,
+			State:          "dancing",
+			AggressionBase: 0,
 		})
 		c.SetMobility(component.Mobility{
 			CanMove: true,
@@ -328,7 +323,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Stealth:  StealthManifest,
 				Acoustic: AcousticSilent,
 			},
-			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Frequency:   *NewMovementFrequency(FreqDelay, 0, 1),
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
@@ -339,9 +334,9 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 	case "shadowstalker":
 		c.SetBehavior(component.Behavior{
-			State:       "hunting",
-			Aggression:  80,
-			Territorial: true,
+			State:          "hunting",
+			AggressionBase: 80,
+			Territorial:    true,
 		})
 		c.SetMobility(component.Mobility{
 			CanMove: true,
@@ -358,7 +353,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic:         AcousticSilent, // Pas de bruit
 				TelegraphsIntent: true,           // ajoute des traces de griffures sur les tuiles autour de lui
 			},
-			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
+			Frequency:   *NewMovementFrequency(FreqVelocity, 1, 0),
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideBounce},
 		})
@@ -368,9 +363,9 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 	case "burrower":
 		c.SetBehavior(component.Behavior{
-			State:       "hiding",
-			Aggression:  20,
-			Territorial: false,
+			State:          "hiding",
+			AggressionBase: 20,
+			Territorial:    false,
 		})
 		c.SetMobility(component.Mobility{
 			CanMove: true,
@@ -402,7 +397,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				TrackType:     "mud",
 				TrackDuration: 2,
 			},
-			Frequency:   MovementFrequency{Type: FreqDelay, Delay: 1},
+			Frequency:   *NewMovementFrequency(FreqDelay, 0, 1),
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"dirt", "soil"}},
 		})
@@ -411,8 +406,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 	case "specter":
 		c.SetBehavior(component.Behavior{
-			State:      "haunting",
-			Aggression: 60,
+			State:          "haunting",
+			AggressionBase: 60,
 		})
 		c.SetMobility(component.Mobility{
 			CanMove: true,
@@ -428,9 +423,9 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 	case "stonewarden":
 		c.SetBehavior(component.Behavior{
-			State:       "guarding",
-			Aggression:  40,
-			Territorial: true,
+			State:          "guarding",
+			AggressionBase: 40,
+			Territorial:    true,
 		})
 		c.SetMobility(component.Mobility{
 			CanMove: true,
@@ -444,7 +439,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 			Navigation: NavigationLogic{Type: NavOrientation},
 			Mode:       MovementMode{Type: ModeNormal},
 			Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
-			Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+Frequency:   *NewMovementFrequency(FreqDelay, 0, 1),
 			Orientation: Orientation{Direction: entity.DirNorthEast},
 			Collision:  CollisionHandler{Type: CollideStop},
 		})
@@ -453,8 +448,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 	case "echo_hound":
 		c.SetBehavior(component.Behavior{
-			State:      "echoing",
-			Aggression: 50,
+			State:          "echoing",
+			AggressionBase: 50,
 		})
 		c.SetMobility(component.Mobility{
 			CanMove: true,
@@ -474,7 +469,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				TrackType:     "claws",
 				TrackDuration: 2,
 			},
-			Frequency:   MovementFrequency{Type: FreqVelocity, Velocity: 1},
+			Frequency:   *NewMovementFrequency(FreqVelocity, 1, 0),
 			Orientation: Orientation{Direction: Forward},
 			Collision:   CollisionHandler{Type: CollideSlide},
 		})
@@ -483,8 +478,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 
 	case "fleeing_sprite":
 		c.SetBehavior(component.Behavior{
-			State:      "fleeing",
-			Aggression: 0,
+			State:          "fleeing",
+			AggressionBase: 0,
 		})
 		c.SetMobility(component.Mobility{
 			CanMove: true,
@@ -515,7 +510,7 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 				Acoustic:     AcousticSilent,
 				LeavesTracks: false, // Le singe mousse ne laisse pas de traces, mais des pièges
 			},
-			Frequency: MovementFrequency{Type: FreqDelay, Delay: 1},
+			Frequency: *NewMovementFrequency(FreqDelay, 0, 1),
 			// NOTE: Le comportement du singe-mousse est validé. Son orientation Backward
 			// est intentionnelle pour son mode de déplacement "à reculons" ou sa zone de menace.
 			Orientation: Orientation{Direction: Backward},
@@ -542,9 +537,9 @@ func (f *Factory) CreatePatroller(species string, pos entity.Position, route []e
 
 	c.SetMovementProfile(PatrollerProfile(route))
 	c.SetBehavior(component.Behavior{
-		State:       "patrolling",
-		Aggression:  30,
-		Territorial: true,
+		State:          "patrolling",
+		AggressionBase: 30,
+		Territorial:    true,
 	})
 	c.SetMobility(component.Mobility{
 		CanMove: true,

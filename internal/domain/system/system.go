@@ -314,6 +314,10 @@ func (s *PreviewSystem) Reset() {
 
 func (s *PreviewSystem) Priority() int { return 0 }
 
+func (s *PreviewSystem) IsPreviewActive(gridID string) bool {
+	return s.previewTimers[gridID] > 0
+}
+
 func (s *PreviewSystem) Update(world *World) {
 	for gridID, timer := range s.previewTimers {
 		if timer > 0 {
@@ -554,8 +558,8 @@ func (s *CreatureAISystem) Update(world *World) {
 				continue
 			}
 
-			world.Engine.TrackTileReveal(board.Position{X: oldPos.X, Y: oldPos.Y})
-			world.Engine.TrackTileReveal(board.Position{X: newPos.X, Y: newPos.Y})
+			world.Engine.TrackTileReveal(board.Position{X: oldPos.X, Y: oldPos.Y}, grid.ID)
+			world.Engine.TrackTileReveal(board.Position{X: newPos.X, Y: newPos.Y}, grid.ID)
 
 			newPlot, _ := grid.Get(board.Position{X: newPos.X, Y: newPos.Y})
 			idStr := string(c.GetID())
@@ -614,20 +618,45 @@ func (s *CreatureAISystem) Update(world *World) {
 }
 
 // --- SYSTEM: CREATURE MOVEMENT (ADVANCED) ---
-type CreatureMovementSystem struct {
-	recentReveals []board.Position
+type RevealedTile struct {
+	Position board.Position
+	GridID   string
 }
 
-func NewCreatureMovementSystem() *CreatureMovementSystem {
-	return &CreatureMovementSystem{
-		recentReveals: make([]board.Position, 0),
+type CreatureMovementSystem struct {
+	world         *World
+	recentReveals []RevealedTile
+}
+
+func NewCreatureMovementSystem(world *World) *CreatureMovementSystem {
+	s := &CreatureMovementSystem{
+		world:         world,
+		recentReveals: make([]RevealedTile, 0),
 	}
+	world.EventBus.SubscribeFunc(event.TileRevealed, s.onTileRevealed)
+	return s
+}
+
+func (s *CreatureMovementSystem) onTileRevealed(e event.Event) {
+	reason, _ := e.Payload["reason"].(string)
+	if reason != "player_action" {
+		return
+	}
+	pos := entity.Position{}
+	if p, ok := e.Payload["position"].(entity.Position); ok {
+		pos = p
+	}
+	gridID := ""
+	if g, ok := e.Payload["grid_id"].(string); ok {
+		gridID = g
+	}
+	s.TrackReveal(board.Position{X: pos.X, Y: pos.Y}, gridID)
 }
 
 func (s *CreatureMovementSystem) Priority() int { return 3 }
 
-func (s *CreatureMovementSystem) TrackReveal(pos board.Position) {
-	s.recentReveals = append(s.recentReveals, pos)
+func (s *CreatureMovementSystem) TrackReveal(pos board.Position, gridID string) {
+	s.recentReveals = append(s.recentReveals, RevealedTile{Position: pos, GridID: gridID})
 }
 
 func (s *CreatureMovementSystem) ClearReveals() {
@@ -689,6 +718,7 @@ func (s *CreatureMovementSystem) Update(world *World) {
 }
 
 func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger, c *creature.Creature) bool {
+	creatureGridID := c.GetGridID()
 	switch trigger.Type {
 	case creature.TriggerPassive:
 		return false
@@ -696,7 +726,9 @@ func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger,
 		return true
 	case creature.TriggerOnReveal:
 		for _, revealed := range s.recentReveals {
-			if revealed.X == c.GetPosition().X && revealed.Y == c.GetPosition().Y {
+			if revealed.GridID == creatureGridID &&
+				revealed.Position.X == c.GetPosition().X &&
+				revealed.Position.Y == c.GetPosition().Y {
 				if !trigger.Triggered {
 					trigger.Triggered = true
 					return true
@@ -705,10 +737,18 @@ func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger,
 		}
 		return false
 	case creature.TriggerOnEcho:
-		return len(s.recentReveals) > 0
+		for _, revealed := range s.recentReveals {
+			if revealed.GridID == creatureGridID {
+				return true
+			}
+		}
+		return false
 	case creature.TriggerProximity:
 		for _, revealed := range s.recentReveals {
-			dist := abs(revealed.X-c.GetPosition().X) + abs(revealed.Y-c.GetPosition().Y)
+			if revealed.GridID != creatureGridID {
+				continue
+			}
+			dist := abs(revealed.Position.X-c.GetPosition().X) + abs(revealed.Position.Y-c.GetPosition().Y)
 			if dist <= trigger.Radius {
 				return true
 			}
@@ -1025,8 +1065,11 @@ func (wa *worldAdapter) WasTileRecentlyRevealed(pos entity.Position) bool {
 	if wa.world.Engine == nil || wa.world.Engine.movementSystem == nil {
 		return false
 	}
+	gridID := wa.grid.ID
 	for _, revealed := range wa.world.Engine.movementSystem.recentReveals {
-		if revealed.X == pos.X && revealed.Y == pos.Y {
+		if revealed.GridID == gridID &&
+			revealed.Position.X == pos.X &&
+			revealed.Position.Y == pos.Y {
 			return true
 		}
 	}
@@ -1179,8 +1222,12 @@ func (wa *worldAdapter) HasActivityNearby(pos entity.Position, radius int) bool 
 		return false
 	}
 
+	gridID := wa.grid.ID
 	for _, activityPos := range wa.world.Engine.movementSystem.recentReveals {
-		dist := abs(activityPos.X-pos.X) + abs(activityPos.Y-pos.Y)
+		if activityPos.GridID != gridID {
+			continue
+		}
+		dist := abs(activityPos.Position.X-pos.X) + abs(activityPos.Position.Y-pos.Y)
 		if dist <= radius {
 			return true
 		}
@@ -1273,14 +1320,14 @@ func (s *ToxicitySystem) Update(world *World) {
 	stackCount := 0
 	maxDegression := 0.0
 
-	// 1. Collecte des dangers actifs
-	for _, gridID := range world.GridOrder {
-		grid, ok := world.GetGrid(gridID)
-		if !ok {
-			continue
-		}
+	// 1. Collecte des dangers actifs (seulement sur la grille actuelle)
+	gridID := world.CurrentGridID
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
 
-		for _, tile := range grid.Plots {
+	for _, tile := range grid.Plots {
 			if len(tile.EntitiesID) == 0 {
 				continue
 			}
@@ -1339,7 +1386,6 @@ func (s *ToxicitySystem) Update(world *World) {
 				if hazard.DegressionFactor > maxDegression {
 					maxDegression = hazard.DegressionFactor
 				}
-			}
 		}
 	}
 

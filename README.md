@@ -34,6 +34,32 @@ Chaque zone (grille) respecte désormais une répartition équilibrée et déter
 
 Cette répartition est calculée individuellement pour chaque grille lors de sa génération, garantissant un défi constant quelle que soit la zone explorée.
 
+### Système d'Agressivité Modulaire (Nouveau)
+
+Chaque créature possède désormais une **Agressivité Totale** calculée dynamiquement, remplaçant la valeur statique précédente. Ce système modulaire permet aux créatures de réagir au comportement du joueur et à l'état du monde.
+
+#### Composantes de l'Agressivité
+- **Base (AggressionBase)** : Valeur statique propre à l'espèce (ex: Shadowstalker 80, Lumifly 0).
+- **Facteurs Dynamiques (AggressionFactors)** : S'additionnent à la base pour former le total (plafonné à 100) :
+  - **Révélations (reveals)** : Chaque révélation manuelle par le joueur augmente l'agressivité. La tolérance dépend de la difficulté (`MaxSafeReveals`).
+  - **Inventaire (inventory)** : Porter des trophées d'une espèce énerve ses congénères (+50 par trophée).
+  - **Colère d'Espèce (species_anger)** : Voir des congénères révélés augmente l'agressivité (+20 par congénère).
+  - **Facteurs Spécifiques** :
+    - **Singe Mousse (moss_monkey)** : Proportion de cases vides sur la grille (plus il y a de vide, plus il est agressif).
+    - **Lumifly** : Présence d'une Dreamberry toxique (stade 4) dans les 8 cases voisines (agressivité 100 immédiate).
+
+#### Seuil d'Attaque
+Lorsqu'une créature est révélée (fin d'animation de flip), si son **Agressivité Totale ≥ 100**, elle déclenche une **Attaque Immédiate** (Lunge) :
+- Vérifie si le joueur est dans sa **Zone de Menace** (même logique que l'ancienne Confrontation).
+- Inflige **10 dégâts physiques** (sauf si *Grâce* active).
+- Déclenche des effets visuels selon l'espèce (Blur pour Shadowstalker, Bulle pour Lumifly).
+- Publie l'événement `CreatureAttacked` pour l'animation et `PlayerDamaged` pour le HUD.
+
+#### Feedback Visuel
+Sur les tuiles révélées, une **barre d'agressivité** (orange → rouge) s'affiche en bas de la créature, permettant d'anticiper le danger.
+
+---
+
 ### Minimap et Exploration (Fog of War)
 
 Le plan onirique est un réseau de zones interconnectées. Pour s'orienter sans briser le mystère, la minimap utilise un système de **brouillard de guerre dynamique** :
@@ -68,20 +94,64 @@ Chaque créature possède une **Zone de Menace** (directions qu'elle attaque).
 - **Placement Périphérique** : Le joueur agit depuis le bord des cases. Sa position (`entity.Position`) et son ancrage (`BorderPosition`) sont déterminés par l'endroit où il clique pour révéler une tuile.
 - **Animation de Lunge** : Lors du dévoilement (Hidden -> Revealed), la créature effectue une translation brusque de quelques pixels vers sa zone de menace, suivie d'un retour lent à sa position initiale.
 - **Indicateurs de Menace** : Durant cette animation, des demi-cercles blancs (Intention de Menace) apparaissent entre la créature et les cases qu'elle menace. Ces indicateurs s'affichent même si la cible est en dehors de la grille (sur le tapis de jeu).
-- **Calcul de Confrontation** : Si le joueur se trouve dans la zone de menace lors du dévoilement, il subit **10 points de dégâts physiques**.
-- **Visualisation des Dégâts** : Une attaque réussie remplace l'indicateur blanc par un demi-cercle rouge intense, synchronisé avec le mouvement brusque de la créature.
+
+#### Nouveau : Attaque par Agressivité (Remplace l'ancienne Confrontation)
+L'attaque ne se déclenche plus systématiquement à la révélation. Elle est désormais conditionnée par le **Système d'Agressivité** :
+1. Le joueur révèle une créature.
+2. L'**AggressionSystem** incrémente le compteur de révélations de cette créature.
+3. À la fin de l'animation de flip (`AnimationEnded`), si **Agressivité Totale ≥ 100** :
+   - Vérification de la **Zone de Menace** (même logique qu'avant).
+   - Si le joueur est menacé : **10 dégâts physiques** (sauf *Grâce* active).
+   - Effets visuels spécifiques à l'espèce (Blur Shadowstalker, Bulle Lumifly).
+   - Événement `CreatureAttacked` publié pour l'animation.
+- **Visualisation des Dégâts** : Une attaque réussie remplace l'indicateur blanc par un demi-cercle rouge intense, synchronisé avec le mouvement brusque.
 - **Esquive** : En choisissant de "tirer" la tuile depuis un angle mort de la créature, le joueur peut éviter l'attaque lors de la révélation.
 
 ### Compte à rebours temps réel (Turn Timer)
 
 Pour rompre le rythme classique du Memory et simuler l'urgence de la survie en plan onirique, chaque tour est soumis à une **pression temporelle dynamique** :
 
-- **Durée** : dépend de la difficulté (10s en Easy, 8s en Normal, 5s en Hard, 4s en Insane).
+- **Durée** : dépend de la difficulté (15s en Easy, 10s en Normal, 5s en Hard, 5s en Insane).
 - **Reset** : le timer se réinitialise à chaque action volontaire (retourner une tuile, Match, Skip, Fin de tour).
 - **Auto-skip** : si le timer atteint 0, le système simule automatiquement un **Skip** via l'événement `turn_timer_expired` — les tuiles retournées se referment et le tour est consommé, entraînant la pénalité de Santé Mentale associée.
 - **Feedback visuel** :
   - Le bouton **Skip** se remplit progressivement d'une couleur violette, puis passe au rouge brique en phase d'alerte.
   - La jauge de **Santé Mentale** tremble de plus en plus fort lorsque le timer descend sous les 3 secondes (phase de panique).
+
+### Paramètres de Difficulté Étendus
+
+La difficulté influence désormais aussi le système d'agressivité :
+
+| Difficulté | Timer | Max Révélations Sûres | Multiplicateur Agressivité |
+|------------|-------|----------------------|----------------------------|
+| **Easy**   | 15s   | 3                    | 0.5x                       |
+| **Normal** | 10s   | 2                    | 1.0x                       |
+| **Hard**   | 5s    | 1                    | 1.5x                       |
+| **Insane** | 5s    | 0 (attaque immédiate)| 2.0x                       |
+
+- **Max Révélations Sûres** : Nombre de fois qu'une créature peut être révélée avant d'atteindre 100% d'agressivité (formule : `100 / (MaxSafeReveals + 1)` par révélation).
+- **Multiplicateur Agressivité** : Appliqué au total final (Base + Facteurs) avant plafonnement à 100.
+
+### Gestion du Temps (Time Scaling)
+
+Le compte à rebours s'adapte dynamiquement au contexte de jeu :
+
+| Situation | Time Scale | Comportement |
+|-----------|------------|--------------|
+| **Grille vide** (aucune Resource/Creature) | 0.0 | Timer **arrêté** (`Stop()`) |
+| **Prévisualisation** active (nouvelle zone) | 0.5 | Timer **ralenti 50%** |
+| **Animation** en cours (flip, slide, attack) | 0.5 | Timer **ralenti 50%** |
+| **Normal** | 1.0 | Vitesse normale |
+
+Priorité : Grille vide > Animation/Preview > Normal.
+
+### Correction : Toxicité Locale
+
+Le système de toxicité (Dreamberry stade 4, etc.) ne s'applique maintenant que sur la **grille actuelle** du joueur. Les ressources toxiques sur d'autres grilles ne causent plus de dégâts.
+
+### Correction : Déclencheurs de Mouvement par Grille
+
+Les créatures avec déclencheurs `OnReveal`, `OnEcho`, `Proximity` ne réagissent plus qu'aux événements sur **leur propre grille**. Fini les Stone Wardens qui bougent dans toutes les zones quand le joueur révèle (0,0) quelque part.
 
 ### Système de Portail Portable
 
@@ -239,17 +309,17 @@ Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il
 
 ### Bestiaire
 
-| Créature | Biome | Déclencheur | Navigation | Mode | Collision | Description |
-|----------|-------|-------------|------------|------|-----------|-------------|
-| **Lumifly** | Global | Auto | Errance (nord) | Over | Glisse | Insecte lumineux qui vole au-dessus du plateau |
-| **Shadowstalker** | Global | Proximité (4) | Attraction joueur | Shadow | Rebond | Prédateur qui chasse discrètement le joueur |
-| **Burrower** | Désert | Vue | Errance | Under | Phase (terre) | Créature fouisseuse qui se cache sous terre (Exclusif) |
-| **Specter** | Grotte | Echo | Errance | Shadow | Phase (murs) | Fantôme qui traverse les murs (Exclusif) |
-| **Stonewarden** | Global | Passif | Patrouille | Bento | Stop | Gardien immobile qui patrouille si révélé |
-| **Echo Hound** | Marais | Echo | Attraction curseur | Bento | Glisse | Chien rapide qui réagit aux révélations (Exclusif). |
-| **Moss Monkey** | Forêt | Proximité (4) | Target Empty | Bento | Glisse | Saboteur qui rebouche les cases vides avec des leurres (Exclusif). Fuit si saturé. |
-| **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | Créature timide dont l'essence apaise l'esprit. |
-| **Fleeing Sprite** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | Étincelle d'énergie vive révélant les dangers. |
+| Créature | Biome | Déclencheur | Navigation | Mode | Collision | Agressivité Base | Description |
+----------|-------|-------------|------------|------|-----------|------------------|-------------|
+| **Lumifly** | Global | Auto | Attraction (baie) | Over | Glisse | 0 | Insecte lumineux qui vole au-dessus du plateau. S'énerve près de Dreamberries toxiques. |
+| **Shadowstalker** | Global | Proximité (4) | Attraction joueur | Swap | Rebond | 80 | Prédateur qui chasse discrètement le joueur. Très agressif de base. |
+| **Burrower** | Désert | Auto | Relatif | Under | Phase (terre) | 20 | Créature fouisseuse qui se cache sous terre (Exclusif). |
+| **Specter** | Grotte | Echo | Errance | Under | Phase (murs) | 60 | Fantôme qui traverse les murs (Exclusif). |
+| **Stonewarden** | Global | Vue | Orientation | Normal | Stop | 40 | Gardien immobile qui patrouille si révélé. Territorial. |
+| **Echo Hound** | Marais | Echo | Attraction (baie) | Normal | Glisse | 50 | Chien rapide qui réagit aux révélations (Exclusif). |
+| **Moss Monkey** | Forêt | Proximité (4) | Target Empty | Normal | Glisse | 0 (dynamique) | Saboteur qui rebouche les cases vides. Agressivité = % cases vides. Fuit si saturé. |
+| **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | 0 | Créature timide dont l'essence apaise l'esprit. |
+| **Fleeing Sprite** | Global | Proximité (3) | Répulsion joueur | Normal | Glisse | 0 | Étincelle d'énergie vive révélant les dangers. |
 
 ### Botanique et Minéralogie
 
@@ -393,5 +463,4 @@ Le jeu supporte la persistance des données :
 | Changer de grille active | 1 à 9 |
 | Retour menu / Abandon | \ ou Échap |
 | Remplir Inventaire (Debug) | B |
-| Toggle Mouvement Auto | F10 |
-Annulation de la PR #39
+

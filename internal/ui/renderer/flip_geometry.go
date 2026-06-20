@@ -278,6 +278,27 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 		bx := tx + (cx-tx)*0.25
 		by := ty + (cy-ty)*0.25
 		vector.DrawFilledCircle(screen, bx, by, 4*currentScale, behaviorColor, true)
+
+		// --- NOUVEAU: BARRE D'AGRESSIVITÉ (Feedback Visuel) ---
+		if cre, ok := e.(*domain.Creature); ok && cre.Behavior.Aggression > 0 {
+			agg := cre.Behavior.Aggression
+			// Barre en bas de la tuile
+			barW := 40.0 * currentScale
+			barH := 4.0 * currentScale
+			barX := cx - barW/2
+			barY := vFace[2].DstY - 12*currentScale
+
+			// Couleur dégradée : Orange (Peu énervé) -> Rouge (Très énervé)
+			rVal := uint8(200 + (agg * 55 / 100))
+			gVal := uint8(150 - (agg * 150 / 100))
+			barColor := color.RGBA{rVal, gVal, 0, 255}
+
+			// Fond de la barre
+			vector.DrawFilledRect(screen, barX, barY, barW, barH, color.RGBA{20, 20, 20, 180}, true)
+			// Remplissage
+			fillW := barW * float32(agg) / 100.0
+			vector.DrawFilledRect(screen, barX, barY, fillW, barH, barColor, true)
+		}
 	}
 
 	if label != "" {

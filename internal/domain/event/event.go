@@ -34,6 +34,7 @@ const (
 	NavigationOpened   Type = "navigation_opened"
 	NavigationClosed   Type = "navigation_closed"
 	LevelUp            Type = "level_up"
+	CreatureAttacked   Type = "creature_attacked"
 	// Animation events pour l'UI
 	AnimationStarted Type = "animation_started"
 	AnimationEnded   Type = "animation_ended"

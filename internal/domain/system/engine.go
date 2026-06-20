@@ -3,6 +3,7 @@ package system
 import (
 	"fmt"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 )
 
@@ -16,7 +17,6 @@ type System interface {
 type Engine struct {
 	systems        []System
 	world          *World
-	Running        bool
 	movementSystem *CreatureMovementSystem // Référence directe pour les mises à jour
 	previewSystem  *PreviewSystem          // Référence pour les événements
 	lootSystem     *LootSystem
@@ -24,7 +24,7 @@ type Engine struct {
 
 // NewEngine initialise le moteur de jeu avec ses systèmes
 func NewEngine(world *World) *Engine {
-	moveSys := NewCreatureMovementSystem()
+	moveSys := NewCreatureMovementSystem(world)
 	prevSys := NewPreviewSystem()
 	lootSys := NewLootSystem(world)
 
@@ -33,6 +33,7 @@ func NewEngine(world *World) *Engine {
 		systems: []System{
 			&LifecycleSystem{},
 			&PropagationSystem{},
+			NewAggressionSystem(world),
 			&CreatureAISystem{},
 			moveSys,
 			&TriggerSystem{},
@@ -40,7 +41,6 @@ func NewEngine(world *World) *Engine {
 			&TrackSystem{},
 			lootSys,
 		},
-		Running:        false,
 		movementSystem: moveSys,
 		previewSystem:  prevSys,
 		lootSystem:     lootSys,
@@ -58,16 +58,6 @@ func NewEngine(world *World) *Engine {
 	return e
 }
 
-// Start active la simulation automatique
-func (e *Engine) Start() {
-	e.Running = true
-}
-
-// Stop met en pause la simulation automatique
-func (e *Engine) Stop() {
-	e.Running = false
-}
-
 // ResetPreviews réinitialise le suivi des prévisualisations (pour une nouvelle partie)
 func (e *Engine) ResetPreviews() {
 	if e.previewSystem != nil {
@@ -77,10 +67,6 @@ func (e *Engine) ResetPreviews() {
 
 // Update fait progresser le tour de jeu
 func (e *Engine) Update() {
-	if !e.Running {
-		return
-	}
-
 	// Tri des systèmes par priorité
 	for i := 0; i < len(e.systems)-1; i++ {
 		for j := i + 1; j < len(e.systems); j++ {
@@ -127,15 +113,50 @@ func (e *Engine) Update() {
 
 // UpdateFrame effectue les mises à jour visuelles et les systèmes temps réel (pseudo-systèmes de frame)
 func (e *Engine) UpdateFrame(dt float64) {
-	// 1. Mise à jour du TurnTimer (Pression temporelle)
+	// 1. Détecter grille vide (aucune entité matchable)
+	isEmptyGrid := false
+	if grid, ok := e.world.GetGrid(e.world.CurrentGridID); ok {
+		hasMatchable := false
+		for _, tile := range grid.Plots {
+			if len(tile.EntitiesID) > 0 {
+				if ent, ok := e.world.Entities.Get(entity.ID(tile.EntitiesID[len(tile.EntitiesID)-1])); ok {
+					if ent.GetType() == entity.TypeResource || ent.GetType() == entity.TypeCreature {
+						hasMatchable = true
+						break
+					}
+				}
+			}
+		}
+		isEmptyGrid = !hasMatchable
+	}
+
+	// 2. Détecter prévisualisation active
+	isPreviewing := e.previewSystem != nil && e.previewSystem.IsPreviewActive(e.world.CurrentGridID)
+
+	// 3. Détecter animations actives (via compteur dans World)
+	isAnimating := e.world.ActiveAnimationCount > 0
+
+	// 4. Calculer le facteur de temps
+	timeScale := 1.0
+	if isEmptyGrid {
+		timeScale = 0.0 // Timer arrêté
+	} else if isPreviewing || isAnimating {
+		timeScale = 0.5 // 50% vitesse
+	}
+
+	// 5. Mise à jour du TurnTimer (Pression temporelle)
 	if e.world.TurnTimer != nil {
-		if e.world.TurnTimer.Update(dt) {
-			fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
-			e.world.TurnTimer.Reset()
-			e.world.EventBus.PublishImmediate(event.Event{
-				Type:     event.Type("turn_timer_expired"),
-				SourceID: "engine",
-			})
+		if timeScale > 0 {
+			if e.world.TurnTimer.Update(dt * timeScale) {
+				fmt.Println("[TIMER] Temps écoulé ! Auto-skip forcé.")
+				e.world.TurnTimer.Reset()
+				e.world.EventBus.PublishImmediate(event.Event{
+					Type:     event.Type("turn_timer_expired"),
+					SourceID: "engine",
+				})
+			}
+		} else {
+			e.world.TurnTimer.Stop()
 		}
 
 		targetDuration := e.world.Difficulty.TurnTimerDuration
@@ -147,21 +168,21 @@ func (e *Engine) UpdateFrame(dt float64) {
 		}
 	}
 
-	// 2. Mise à jour des systèmes temps réel (PreviewSystem, etc.)
+	// 6. Mise à jour des systèmes temps réel (PreviewSystem, etc.)
 	if e.previewSystem != nil {
 		e.previewSystem.Update(e.world)
 	}
 
-	// 3. Traitement de la queue des événements à chaque frame
+	// 7. Traitement de la queue des événements à chaque frame
 	// Essentiel pour que les événements Publish() (non-immédiats) soient consommés
 	// par le Renderer ou les systèmes entre deux tours.
 	e.world.EventBus.ProcessQueue()
 }
 
 // TrackTileReveal enregistre une interaction pour les systèmes de proximité
-func (e *Engine) TrackTileReveal(pos board.Position) {
+func (e *Engine) TrackTileReveal(pos board.Position, gridID string) {
 	if e.movementSystem != nil {
-		e.movementSystem.TrackReveal(pos)
+		e.movementSystem.TrackReveal(pos, gridID)
 	}
 }
 

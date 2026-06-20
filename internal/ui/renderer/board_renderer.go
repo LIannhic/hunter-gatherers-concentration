@@ -307,32 +307,23 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 		}
 	})
 
-	// Démarre l'animation d'attaque après le flip d'une créature
-	world.EventBus.SubscribeFunc(event.AnimationEnded, func(e event.Event) {
-		if animType, ok := e.Payload["animation_type"].(string); ok && animType == "flip" {
-			// On ne déclenche l'attaque QUE si la tuile finit Révélée (pas si on la cache)
-			if finalState, ok := e.Payload["tile_state"].(entity.TileState); ok && finalState&entity.Revealed == 0 {
-				return
-			}
+	// Déclenche l'animation d'attaque (lunge)
+	world.EventBus.SubscribeFunc(event.CreatureAttacked, func(e event.Event) {
+		ent, ok := world.Entities.Get(entity.ID(e.SourceID))
+		if !ok || ent.GetType() != entity.TypeCreature {
+			return
+		}
 
-			ent, ok := world.Entities.Get(entity.ID(e.SourceID))
-			if !ok || ent.GetType() != entity.TypeCreature {
-				return
-			}
+		creature := ent.(*domain.Creature)
+		dx, dy := creature.GetLungeDirectionVector()
 
-			creature := ent.(*domain.Creature)
-			dx, dy := creature.GetLungeDirectionVector()
+		var hitTarget *entity.Position
+		if pos, ok := e.Payload["hit_target"].(*entity.Position); ok {
+			hitTarget = pos
+		}
 
-			var hitTarget *entity.Position
-			if pos, ok := r.pendingHits[e.SourceID]; ok {
-				target := pos
-				hitTarget = &target
-				delete(r.pendingHits, e.SourceID)
-			}
-
-			if r.AnimManager != nil {
-				r.AnimManager.StartAttack(world, e.SourceID, dx, dy, hitTarget)
-			}
+		if r.AnimManager != nil {
+			r.AnimManager.StartAttack(world, e.SourceID, dx, dy, hitTarget)
 		}
 	})
 
@@ -365,6 +356,18 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 				"propagate",
 				entity.FlipRight,
 			)
+		}
+	})
+
+	// Incrémenter le compteur d'animations actives
+	world.EventBus.SubscribeFunc(event.AnimationStarted, func(e event.Event) {
+		world.ActiveAnimationCount++
+	})
+
+	// Décrémenter le compteur d'animations actives
+	world.EventBus.SubscribeFunc(event.AnimationEnded, func(e event.Event) {
+		if world.ActiveAnimationCount > 0 {
+			world.ActiveAnimationCount--
 		}
 	})
 }

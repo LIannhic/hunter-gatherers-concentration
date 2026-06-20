@@ -514,16 +514,6 @@ func (app *Application) setupDebugCallbacks() {
 			fmt.Printf("[CHEAT] État bloqué %s %d tuile(s) dans la zone %s\n", action, count, gridID)
 		}
 	}
-
-	// F10 : Activer/Désactiver la boucle d'automatisation des mouvements de l'Engine
-	app.Input.OnToggleAutoMove = func() {
-		app.Engine.Running = !app.Engine.Running
-		if app.Engine.Running {
-			fmt.Println("[DEBUG] Mouvement automatique : ON")
-		} else {
-			fmt.Println("[DEBUG] Mouvement automatique : OFF")
-		}
-	}
 }
 
 // setupEventSubscriptions connecte l'EventBus aux animations graphiques du Renderer.
@@ -541,7 +531,7 @@ func (app *Application) setupEventSubscriptions() {
 		if ok1 && ok3 && ok4 && ok5 {
 			// On ne tracke la révélation pour l'IA que si c'est une action du joueur
 			if reason, ok := e.Payload["reason"].(string); ok && reason == "player_action" {
-				app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y})
+				app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y}, gridID)
 			}
 
 			var entState entity.TileState
@@ -950,8 +940,7 @@ func (app *Application) StartGame() {
 	app.World.Player.Inventory.ScrollOffset = 0
 
 	app.Engine.ResetPreviews()
-	app.Engine.Start()
-	fmt.Println("[ENGINE] Started")
+	fmt.Println("[ENGINE] Ready")
 
 	if app.World.TurnTimer != nil {
 		app.World.TurnTimer.SetMaxTime(app.World.Difficulty.TurnTimerDuration)

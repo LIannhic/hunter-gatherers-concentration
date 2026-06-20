@@ -300,6 +300,15 @@ type MovementFrequency struct {
 	TurnLastMoved int
 }
 
+func NewMovementFrequency(freqType FrequencyType, velocity, delay int) *MovementFrequency {
+	return &MovementFrequency{
+		Type:          freqType,
+		Velocity:      velocity,
+		Delay:         delay,
+		TurnLastMoved: -1,
+	}
+}
+
 func (mf *MovementFrequency) CanMove() bool {
 	switch mf.Type {
 	case FreqVelocity, FreqInstant:
@@ -323,6 +332,9 @@ func (mf *MovementFrequency) GetMoveCount() int {
 }
 
 func (mf *MovementFrequency) HasMovedThisTurn(turn int) bool {
+	if mf.TurnLastMoved < 0 {
+		return false
+	}
 	return mf.TurnLastMoved == turn
 }
 
@@ -533,7 +545,7 @@ func DefaultMovementProfile() *MovementProfile {
 		},
 		Mode:       MovementMode{Type: ModeNormal},
 		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
-		Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+		Frequency:  *NewMovementFrequency(FreqDelay, 0, 1),
 		Collision:  CollisionHandler{Type: CollideStop},
 	}
 }
@@ -550,7 +562,7 @@ func FleeingProfile() *MovementProfile {
 			TrackType:     "broken_grass",
 			TrackDuration: 3,
 		},
-		Frequency: MovementFrequency{Type: FreqVelocity, Velocity: 1},
+		Frequency: *NewMovementFrequency(FreqVelocity, 1, 0),
 		Collision: CollisionHandler{Type: CollideSlide},
 	}
 }
@@ -565,7 +577,7 @@ func SpecterProfile() *MovementProfile {
 			Acoustic:         AcousticSilent,
 			TelegraphsIntent: true, // Indique sa prochaine destination
 		},
-		Frequency: MovementFrequency{Type: FreqDelay, Delay: 1},
+		Frequency: *NewMovementFrequency(FreqDelay, 0, 1),
 		Collision: CollisionHandler{Type: CollidePhase, CanPhaseThrough: []string{"wall", "structure"}},
 	}
 }
@@ -577,7 +589,7 @@ func PassiveProfile() *MovementProfile {
 		Navigation: NavigationLogic{Type: NavWander},
 		Mode:       MovementMode{Type: ModeNormal},
 		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
-		Frequency:  MovementFrequency{Type: FreqInstant},
+		Frequency:  *NewMovementFrequency(FreqInstant, 0, 0),
 		Collision:  CollisionHandler{Type: CollideStop},
 	}
 }
@@ -589,7 +601,7 @@ func PatrollerProfile(route []entity.Position) *MovementProfile {
 		Navigation: NavigationLogic{Type: NavPatrol, PatrolRoute: route},
 		Mode:       MovementMode{Type: ModeNormal},
 		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
-		Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+		Frequency:  *NewMovementFrequency(FreqDelay, 0, 1),
 		Collision:  CollisionHandler{Type: CollideStop},
 	}
 }
@@ -605,7 +617,7 @@ func RelativePatrollerProfile(pattern []entity.Position) *MovementProfile {
 		},
 		Mode:       MovementMode{Type: ModeNormal}, // Mode normal par défaut (le burrower le surchargera en ModeUnder)
 		Perception: PerceptionProfile{Stealth: StealthManifest, Acoustic: AcousticSilent},
-		Frequency:  MovementFrequency{Type: FreqDelay, Delay: 1},
+		Frequency:  *NewMovementFrequency(FreqDelay, 0, 1),
 		Collision:  CollisionHandler{Type: CollideStop},
 	}
 }

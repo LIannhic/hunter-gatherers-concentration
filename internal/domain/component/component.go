@@ -168,6 +168,9 @@ func (m Matchable) GetLogicKey() string     { return m.LogicKey }
 func (m Matchable) GetElement() string      { return m.Element }
 func (m Matchable) GetNarrativeTag() string { return m.NarrativeTag }
 func (m Matchable) GetMatchTypes() []string { return m.MatchTypes }
+func (m Matchable) GetCumulationLevel() int { return 0 }
+func (m Matchable) IsCumulated() bool       { return false }
+func (m Matchable) GetCategory() string     { return "resource" }
 
 // Mobility pour créatures
 type Mobility struct {
@@ -199,11 +202,14 @@ const (
 
 // Behavior pour IA des créatures
 type Behavior struct {
-	State          string // "idle", "hunting", "fleeing", "pollinating"
-	Aggression     int    // 0-100
-	Territorial    bool
-	Transformation string // ex: "pollinize", "break", "fertilize"
-	LeavesTracks   bool
+	State             string         // "idle", "hunting", "fleeing", "pollinating"
+	Aggression        int            // 0-100 (Total calculé)
+	AggressionBase    int            // Agressivité statique
+	AggressionFactors map[string]int // Facteurs d'agressivité (ex: "reveals", "inventory", "grid")
+	RevealCount       int            // Nombre de fois que la créature a été révélée manuellement
+	Territorial       bool
+	Transformation    string // ex: "pollinize", "break", "fertilize"
+	LeavesTracks      bool
 }
 
 func (b Behavior) Type() string { return "behavior" }
