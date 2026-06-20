@@ -1048,6 +1048,13 @@ func (h *HUD) renderMiniMap(screen *ebiten.Image) {
 				icon := h.assets.GetImage("minimap_" + string(grid.Biome))
 				if icon != nil {
 					op := &ebiten.DrawImageOptions{}
+					// Centrer pour la rotation
+					op.GeoM.Translate(-nodeSize/2, -nodeSize/2)
+					// Rotation basée sur MainBearing
+					op.GeoM.Rotate(float64(grid.MainBearing) * (math.Pi / 2))
+					// Replacer
+					op.GeoM.Translate(nodeSize/2, nodeSize/2)
+
 					op.GeoM.Translate(float64(nx), float64(ny))
 					if isCurrent {
 						op.ColorScale.ScaleWithColor(color.RGBA{255, 255, 180, 255})

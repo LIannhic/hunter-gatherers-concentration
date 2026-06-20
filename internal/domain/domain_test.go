@@ -61,7 +61,6 @@ func TestIntegrationGameFlow(t *testing.T) {
 
 	// Create and run engine
 	engine := NewEngine(world)
-	engine.Start()
 
 	// Run a few turns
 	for i := 0; i < 5; i++ {

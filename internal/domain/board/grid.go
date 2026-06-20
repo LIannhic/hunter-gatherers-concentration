@@ -172,29 +172,48 @@ func (g *Grid) GetTileAt(x, y int) (*Plot, error) {
 
 // RotateClockwise fait pivoter la grille de 90 degrés dans le sens horaire.
 func (g *Grid) RotateClockwise() {
+	oldHeight := g.Height
 	g.MainBearing = Bearing((int(g.MainBearing) + 1) % 4)
 
 	newPlots := make(map[Position]*Plot)
 	for oldPos, plot := range g.Plots {
-		newPos := g.TransformPosition(oldPos)
+		// On utilise oldHeight pour la transformation car g.Height n'a pas encore changé
+		newPos := Position{
+			X: oldHeight - 1 - oldPos.Y,
+			Y: oldPos.X,
+		}
 		plot.Position = newPos
+		// Rotation de la pente (Slope) de 90° (+2 pas de 45°)
+		plot.Tilt = RotateSlope(plot.Tilt, 2)
 		newPlots[newPos] = plot
 	}
 	g.Plots = newPlots
 
+	// Permutation des dimensions
+	g.Width, g.Height = g.Height, g.Width
+
 	// Rotation des sorties
 	newExitsState := make(map[Direction][2]entity.TileState)
-	newExitsState[East] = g.ExitsState[North]
-	newExitsState[South] = g.ExitsState[East]
-	newExitsState[West] = g.ExitsState[South]
-	newExitsState[North] = g.ExitsState[West]
+	newExitsTransform := make(map[Direction][2]entity.Transformation)
+
+	directions := []Direction{North, East, South, West}
+	rotatedDirs := []Direction{East, South, West, North}
+
+	for i, dir := range directions {
+		newDir := rotatedDirs[i]
+		newExitsState[newDir] = g.ExitsState[dir]
+		newExitsTransform[newDir] = g.ExitsTransform[dir]
+	}
+
 	g.ExitsState = newExitsState
+	g.ExitsTransform = newExitsTransform
 }
 
 // TransformPosition calcule la nouvelle position après une rotation de 90°.
-func (g *Grid) TransformPosition(pos Position) Position {
+// Note: Cette fonction doit être utilisée avec précaution car elle dépend de la hauteur de la grille.
+func (g *Grid) TransformPosition(pos Position, heightBeforeRotation int) Position {
 	return Position{
-		X: g.Height - 1 - pos.Y,
+		X: heightBeforeRotation - 1 - pos.Y,
 		Y: pos.X,
 	}
 }

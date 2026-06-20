@@ -15,31 +15,8 @@ func TestNewEngine(t *testing.T) {
 		t.Error("Engine should reference world")
 	}
 
-	if engine.Running {
-		t.Error("Engine should not be running initially")
-	}
-
-	if len(engine.systems) != 8 {
-		t.Errorf("Engine should have 8 systems, got %d", len(engine.systems))
-	}
-}
-
-func TestEngineStartStop(t *testing.T) {
-	w := NewWorld()
-	engine := NewEngine(w)
-
-	if engine.Running {
-		t.Error("Should not be running")
-	}
-
-	engine.Start()
-	if !engine.Running {
-		t.Error("Should be running after Start()")
-	}
-
-	engine.Stop()
-	if engine.Running {
-		t.Error("Should not be running after Stop()")
+	if len(engine.systems) != 9 {
+		t.Errorf("Engine should have 9 systems, got %d", len(engine.systems))
 	}
 }
 
@@ -53,23 +30,10 @@ func TestEngineUpdate(t *testing.T) {
 
 	initialTurn := w.Turn
 
-	engine.Start()
 	engine.Update()
 
 	if w.Turn != initialTurn+1 {
 		t.Errorf("Turn should increase, expected %d, got %d", initialTurn+1, w.Turn)
-	}
-}
-
-func TestEngineUpdateNotRunning(t *testing.T) {
-	w := NewWorld()
-	engine := NewEngine(w)
-
-	initialTurn := w.Turn
-	engine.Update() // Should not update when not running
-
-	if w.Turn != initialTurn {
-		t.Error("Should not update when not running")
 	}
 }
 

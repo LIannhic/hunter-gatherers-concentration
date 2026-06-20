@@ -119,28 +119,43 @@ func TestCalculateFlipDirection(t *testing.T) {
 	}
 }
 
-func TestGridRotateClockwise(t *testing.T) {
-	g := NewGrid("test", 4, 4, BiomeForest)
+func TestGridRotateNonSquare(t *testing.T) {
+	// Créer une grille 3x4 (Width=3, Height=4)
+	g := NewGrid("non-square", 3, 4, BiomeDefault)
 
+	// Placer une entité en (1, 0)
 	pos := Position{X: 1, Y: 0}
 	g.PlaceEntity(pos, "test_entity")
 
+	// Définir une pente
+	plot, _ := g.Get(pos)
+	plot.Tilt = SlopeTop // Nord
+
+	// Rotation 90° horaire
 	g.RotateClockwise()
 
-	if g.MainBearing != BearingEast {
-		t.Errorf("Expected MainBearing to be East (1), got %d", g.MainBearing)
+	// Vérifier les nouvelles dimensions : 4x3
+	if g.Width != 4 || g.Height != 3 {
+		t.Errorf("Expected 4x3 grid, got %dx%d", g.Width, g.Height)
 	}
 
+	// Nouvelle position attendue : (oldHeight - 1 - oldY, oldX) = (4 - 1 - 0, 1) = (3, 1)
 	newPos := Position{X: 3, Y: 1}
-	plot, err := g.Get(newPos)
+	newPlot, err := g.Get(newPos)
 	if err != nil {
 		t.Fatalf("Plot at %v not found after rotation: %v", newPos, err)
 	}
 
-	if len(plot.EntitiesID) != 1 || plot.EntitiesID[0] != "test_entity" {
-		t.Errorf("Expected entity at %v, but plot entities are %v", newPos, plot.EntitiesID)
+	if len(newPlot.EntitiesID) != 1 || newPlot.EntitiesID[0] != "test_entity" {
+		t.Errorf("Expected entity at %v, but plot entities are %v", newPos, newPlot.EntitiesID)
 	}
 
+	// Vérifier la rotation de la pente : SlopeTop (0) -> SlopeRight (2)
+	if newPlot.Tilt != SlopeRight {
+		t.Errorf("Expected Tilt to be SlopeRight (2), got %d", newPlot.Tilt)
+	}
+
+	// Vérifier que l'ancienne position est invalide ou vide (ici (1,0) est valide dans 4x3 mais doit être vide)
 	oldPlot, _ := g.Get(pos)
 	if len(oldPlot.EntitiesID) != 0 {
 		t.Errorf("Expected old plot at %v to be empty, but got %v", pos, oldPlot.EntitiesID)

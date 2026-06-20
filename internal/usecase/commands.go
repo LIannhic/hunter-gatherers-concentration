@@ -6,7 +6,6 @@ import (
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
-	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/creature"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
@@ -116,64 +115,12 @@ func (c *RevealTileCommand) Execute() error {
 	}
 
 	// Révèle l'entité via le world
-	ent, err := c.World.RevealTile(c.GridID, c.Position, c.FlipDirection, "player_action")
+	_, err := c.World.RevealTile(c.GridID, c.Position, c.FlipDirection, "player_action")
 	if err != nil {
 		return err
 	}
 
-	// Logique de Confrontation (Zone de Menace)
-	if cre, ok := ent.(*creature.Creature); ok {
-		// Le joueur est sur un bord de la même tuile que la créature.
-		// On vérifie si la direction du bord du joueur correspond à une direction de menace.
-		outwardDir := border.GetOutwardDirection()
-		isThreatened := false
-		for _, threat := range cre.GetActiveThreatDirections() {
-			if threat == outwardDir {
-				isThreatened = true
-				break
-			}
-		}
-
-		fmt.Printf("[DEBUG] Reveal Créature: %s en %v | Menacé ? %v\n", cre.Species, cre.GetPosition(), isThreatened)
-
-		// Si le joueur est sous l'effet de Grace (Flutterwing), il évite l'attaque
-		if isThreatened && c.World.Player.GraceTurns > 0 {
-			fmt.Printf("[ABILITY] Grâce active : l'attaque de %s est évitée !\n", cre.Species)
-			isThreatened = false
-		}
-
-		if isThreatened {
-			fmt.Printf("[COMBAT] Confrontation ! La créature %s attaque le joueur en %v\n", cre.Species, playerPos)
-			c.World.Player.TakeDamage(10, "physical")
-
-			// Déclenche les effets visuels (Shaders) selon l'espèce
-			if cre.Species == "shadowstalker" {
-				c.World.Player.VisualEffects["blur"] = 3 // Dure 3 tours
-			} else if cre.Species == "lumifly" {
-				c.World.Player.VisualEffects["bubble"] = 3
-			}
-
-			// Publie un événement de dégâts pour l'UI (le renderer gérera le feedback visuel)
-			c.World.EventBus.Publish(event.NewPlayerDamagedEvent(
-				string(cre.GetID()),
-				10,
-				"physical",
-				"confrontation",
-				map[string]interface{}{"position": playerPos},
-			))
-		}
-	}
-
 	c.World.AddFlippedTile(c.Position)
-
-	// Publie l'événement avec la direction de flip
-	c.World.EventBus.Publish(event.NewEntityRevealedEvent(
-		entity.Position{X: c.Position.X, Y: c.Position.Y},
-		string(ent.GetID()),
-		c.GridID,
-		c.FlipDirection,
-		map[string]interface{}{"reason": "player_action"},
-	))
 
 	return nil
 }
