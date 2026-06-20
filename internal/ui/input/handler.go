@@ -61,7 +61,6 @@ type Handler struct {
 	OnUsePortablePortal   func(gridID string, center board.Position) // P / grid placement: Déployer le portail portable
 	OnVictory             func()                                     // Callback déclenché lors de l'activation du portail final
 	OnForceTurn           func()                                     // KeySpace: Forcer le prochain tour
-	OnToggleAutoMove      func()                                     // F10: Toggle mouvement auto
 	OnHoverButton         func(mana, health, sanity int)             // Feedback de coût au survol
 	OnLongPress           func(pos board.Position, gridID string)    // Appui long tactile
 
@@ -808,15 +807,17 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 			return
 		}
 
-		// Si des tuiles sont révélées mais non matchées, on les recache d'abord
-		if len(h.revealedTiles) > 0 {
-			h.hideRevealedTiles()
-		}
+		h.skipPending = true
+		h.isProcessing = true
+		h.processSkip()
+
+		// Si aucune animation n'est lancée immédiatement, on reset tout de suite
 		if h.world.TurnTimer != nil {
-			h.world.TurnTimer.Reset()
-		}
-		if h.OnTurnEnd != nil {
-			h.OnTurnEnd()
+			if len(h.world.Components.QueryByComponent("moving_animation")) == 0 {
+				h.world.TurnTimer.Reset()
+				h.skipPending = false
+				h.isProcessing = false
+			}
 		}
 	case actionbuttons.BtnMerge:
 		fmt.Println("[ACTION] Bouton Merge activé")
@@ -939,18 +940,16 @@ func (h *Handler) processSkip() {
 
 // hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles (toute la pile).
 func (h *Handler) hideRevealedTiles() {
-	gridID := h.selectedGridID
-	if gridID == "" {
-		gridID = h.world.CurrentGridID
-	}
-	grid, ok := h.world.GetGrid(gridID)
-	if !ok {
-		h.revealedTiles = nil
-						h.revealedGridIDs = nil
-		return
-	}
+	for i, pos := range h.revealedTiles {
+		gridID := h.revealedGridIDs[i]
+		if gridID == "" {
+			gridID = h.world.CurrentGridID
+		}
+		grid, ok := h.world.GetGrid(gridID)
+		if !ok {
+			continue
+		}
 
-	for _, pos := range h.revealedTiles {
 		plot, err := grid.Get(pos)
 		if err != nil || len(plot.EntitiesID) == 0 {
 			continue
@@ -978,19 +977,18 @@ func (h *Handler) hideRevealedTiles() {
 		}
 	}
 	h.revealedTiles = nil
-						h.revealedGridIDs = nil
+	h.revealedGridIDs = nil
 }
 
 // hideAllTilesInGrid parcourt toute la grille et passe TOUTES les entités de TOUTES les piles en état Hidden.
 func (h *Handler) hideAllTilesInGrid() {
-	gridID := h.selectedGridID
-	if gridID == "" {
-		gridID = h.world.CurrentGridID
-	}
+	// 1. D'abord on cache spécifiquement les tuiles sélectionnées (peut traverser plusieurs grilles)
+	h.hideRevealedTiles()
+
+	// 2. Puis on cache le reste de la grille actuelle (comportement de sécurité standard)
+	gridID := h.world.CurrentGridID
 	grid, ok := h.world.GetGrid(gridID)
 	if !ok {
-		h.revealedTiles = nil
-						h.revealedGridIDs = nil
 		return
 	}
 
@@ -1018,8 +1016,6 @@ func (h *Handler) hideAllTilesInGrid() {
 			}
 		}
 	}
-	h.revealedTiles = nil
-						h.revealedGridIDs = nil
 }
 
 // processMergeAttempt tente de fusionner les 2 tuiles révélées
@@ -1237,18 +1233,18 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		if len(h.revealedTiles) == 2 {
-			fmt.Println("[ACTION] Raccourci clavier : Skip")
-			h.processSkip()
-			if h.world.TurnTimer != nil {
+		fmt.Println("[ACTION] Touche Espace activée")
+		h.skipPending = true
+		h.isProcessing = true
+		h.processSkip()
+
+		// Si aucune animation n'est lancée immédiatement, on reset tout de suite
+		if h.world.TurnTimer != nil {
+			if len(h.world.Components.QueryByComponent("moving_animation")) == 0 {
 				h.world.TurnTimer.Reset()
+				h.skipPending = false
+				h.isProcessing = false
 			}
-		} else if h.OnTurnEnd != nil {
-			fmt.Println("[TOUR] Passage au tour suivant")
-			if h.world.TurnTimer != nil {
-				h.world.TurnTimer.Reset()
-			}
-			h.OnTurnEnd()
 		}
 	}
 
@@ -1381,7 +1377,7 @@ func (h *Handler) handleNavigationKeys() {
 	var dir entity.Direction
 	var pressed bool
 
-	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) || inpututil.IsKeyJustPressed(ebiten.KeyZ) {
 		dir = board.North
 		pressed = true
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) {
@@ -1390,7 +1386,7 @@ func (h *Handler) handleNavigationKeys() {
 			dir = board.South
 			pressed = true
 		}
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) || inpututil.IsKeyJustPressed(ebiten.KeyA) {
+	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) || inpututil.IsKeyJustPressed(ebiten.KeyA) || inpututil.IsKeyJustPressed(ebiten.KeyQ) {
 		dir = board.West
 		pressed = true
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowRight) || inpututil.IsKeyJustPressed(ebiten.KeyD) {
@@ -1773,6 +1769,9 @@ func (h *Handler) ResetGameState() {
 	h.entranceDir = -1
 	h.portablePortalMode = false
 	h.ClearFootsteps()
+	if h.world != nil {
+		h.world.ActiveAnimationCount = 0
+	}
 }
 
 // ClearFootsteps supprime toutes les empreintes de pas actives du monde.
