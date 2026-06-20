@@ -224,8 +224,8 @@ func TestShadowstalkerProperties(t *testing.T) {
 		t.Errorf("Shadowstalker should be hunting, got %s", c.Behavior.State)
 	}
 	
-	if c.Behavior.Aggression != 80 {
-		t.Errorf("Shadowstalker should have aggression 80, got %d", c.Behavior.Aggression)
+	if c.Behavior.AggressionBase != 80 {
+		t.Errorf("Shadowstalker should have AggressionBase 80, got %d", c.Behavior.AggressionBase)
 	}
 	
 	if !c.HasTag("dangerous") {

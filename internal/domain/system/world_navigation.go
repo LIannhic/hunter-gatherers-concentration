@@ -442,15 +442,21 @@ func (w *World) RotateGrid(gridID string) error {
 		return ErrGridNotFound
 	}
 
-	// 1. Rotation logique du plateau
+	// 1. Sauvegarde la hauteur pour la transformation
+	oldHeight := grid.Height
+
+	// 2. Rotation logique du plateau (permute Width/Height, tourne les pentes)
 	grid.RotateClockwise()
 
-	// 2. Mise à jour de toutes les entités présentes sur cette grille
+	// 3. Mise à jour de toutes les entités présentes sur cette grille
 	for _, e := range w.Entities.GetAllActive() {
 		if e.GetGridID() == gridID {
-			// Recalcule la position physique
+			// Recalcule la position physique avec l'ancienne hauteur
 			oldPos := e.GetPosition()
-			newPos := grid.TransformPosition(oldPos)
+			newPos := board.Position{
+				X: oldHeight - 1 - oldPos.Y,
+				Y: oldPos.X,
+			}
 
 			// Met à jour la position dans l'interface et l'index du manager
 			_ = w.Entities.UpdatePosition(e.GetID(), newPos)
@@ -460,6 +466,29 @@ func (w *World) RotateGrid(gridID string) error {
 			newTrans := entity.Compose(currentTrans, entity.TransRot90)
 			e.SetTransformation(newTrans)
 		}
+	}
+
+	// 4. Mettre à jour la position du joueur si il est sur cette grille
+	if w.CurrentGridID == gridID {
+		oldPlayerPos := w.playerPosition
+		w.playerPosition = board.Position{
+			X: oldHeight - 1 - oldPlayerPos.Y,
+			Y: oldPlayerPos.X,
+		}
+	}
+
+	// 5. Mettre à jour les tuiles retournées suivies (Memory)
+	for i, pos := range w.tilesFlippedThisTurn {
+		// On suppose ici que w.tilesFlippedThisTurn sont sur la grille actuelle
+		w.tilesFlippedThisTurn[i] = board.Position{
+			X: oldHeight - 1 - pos.Y,
+			Y: pos.X,
+		}
+	}
+
+	// 6. Mise à jour des connexions dans le DreamPlane
+	if w.DreamPlane != nil {
+		w.DreamPlane.RotateConnectionsClockwise(gridID)
 	}
 
 	return nil

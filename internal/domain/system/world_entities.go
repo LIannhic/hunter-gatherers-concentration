@@ -245,7 +245,7 @@ func (w *World) RemoveEntity(id entity.ID) {
 
 	// Enregistre l'activité pour les déclencheurs de créatures
 	if w.Engine != nil {
-		w.Engine.TrackTileReveal(board.Position{X: pos.X, Y: pos.Y})
+		w.Engine.TrackTileReveal(board.Position{X: pos.X, Y: pos.Y}, gridID)
 	}
 
 	// Ne tente de retirer de la grille que si ce n'est pas une Trace (qui n'y est jamais enregistrée)

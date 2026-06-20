@@ -57,6 +57,9 @@ type World struct {
 	// Real-time turn pressure timer
 	TurnTimer *TurnTimer
 
+	// Active animation counter (for time scaling during animations)
+	ActiveAnimationCount int
+
 	// Référence vers l'engine (pour la communication entre systèmes)
 	Engine *Engine
 
