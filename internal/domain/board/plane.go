@@ -78,7 +78,7 @@ func (p *DreamPlane) GetConnectedZone(fromID string, dir Direction) (string, boo
 	return "", false
 }
 
-// RotateConnectionsClockwise fait pivoter les directions de connexion pour une grille donnée.
+// RotateConnectionsClockwise fait pivoter les directions de connexion LOCALES pour une grille donnée.
 func (p *DreamPlane) RotateConnectionsClockwise(gridID string) {
 	conns, ok := p.Connections[gridID]
 	if !ok {
@@ -101,16 +101,9 @@ func (p *DreamPlane) RotateConnectionsClockwise(gridID string) {
 			newDir = dir
 		}
 		newConns[newDir] = targetID
-
-		// Mettre à jour la connexion inverse
-		if targetConns, exists := p.Connections[targetID]; exists {
-			oldOpposite := p.OppositeDirection(dir)
-			// On suppose que la grille cible n'a pas forcément tourné,
-			// mais sa connexion ENTRANTE depuis gridID doit maintenant pointer vers la nouvelle direction.
-			// En fait, OppositeDirection(newDir) est la direction vers gridID depuis targetID.
-			targetConns[p.OppositeDirection(newDir)] = gridID
-			delete(targetConns, oldOpposite)
-		}
+		// NOTE : On ne modifie plus la connexion inverse du voisin.
+		// Si A est au Nord de B, et que B tourne, B voit maintenant A à l'Est.
+		// Mais pour A, B est toujours au Sud (A n'a pas tourné).
 	}
 	p.Connections[gridID] = newConns
 }
