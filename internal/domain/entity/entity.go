@@ -228,6 +228,18 @@ func (f FlipDirection) String() string {
 	return "unknown"
 }
 
+// Rotate fait pivoter une direction de flip par pas de 45° (sens horaire).
+func (f FlipDirection) Rotate(steps int) FlipDirection {
+	if f == FlipCenter {
+		return FlipCenter
+	}
+	newDir := (int(f) + steps) % 8
+	if newDir < 0 {
+		newDir += 8
+	}
+	return FlipDirection(newDir)
+}
+
 // ToRotationAngles retourne les angles de rotation (X, Y) pour l'animation de flip
 // en degrés, selon la direction. Utilisé par le renderer pour l'animation.
 func (f FlipDirection) ToRotationAngles() (rotateX, rotateY float64) {

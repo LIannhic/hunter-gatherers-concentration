@@ -443,9 +443,10 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 
 	if world.CurrentGridID != "" {
 		grid, _ := world.GetGrid(world.CurrentGridID)
-		if grid != nil {
-			r.boardRotation = float64(int(grid.MainBearing) * 90)
-		}
+
+		// NOTE : On ne synchronise plus r.boardRotation avec grid.MainBearing ici.
+		// La rotation est gérée logiquement par world.RotateGrid qui déplace les tuiles
+		// et met à jour leurs transformations. boardRotation reste à 0 sauf animation.
 
 		// --- 2. COUCHE : FOND DE LA GRILLE (Les cases vides) ---
 		// Toujours rendu sur le plateau (Board area)
@@ -843,26 +844,12 @@ func (r *BoardRenderer) calculateTileScreenPos(pos board.Position, grid *board.G
 	return sx, sy
 }
 
-// GetTileCenter retourne le centre d'une case en coordonnées écran, avec rotation globale appliquée
+// GetTileCenter retourne le centre d'une case en coordonnées écran.
+// Note: On ne prend plus en compte boardRotation ici car la rotation est gérée logiquement par le swap d'index.
 func (r *BoardRenderer) GetTileCenter(pos board.Position, grid *board.Grid) (float64, float64) {
-	isPortalZone := grid.ID == "zone_start" || grid.ID == "zone_end" // Simplification pour l'export
+	isPortalZone := grid.ID == "zone_start" || grid.ID == "zone_end"
 	x, y := r.calculateTileScreenPos(pos, grid, isPortalZone)
 	cx, cy := x+r.tileSize/2, y+r.tileSize/2
-
-	if r.boardRotation != 0 {
-		// Le plateau pivote autour de son centre géométrique
-		boardCenterX := r.gridOffsetX + ui.BoardW/2
-		boardCenterY := r.gridOffsetY + ui.BoardH/2
-
-		angle := r.boardRotation * math.Pi / 180
-		cosA, sinA := math.Cos(angle), math.Sin(angle)
-
-		relX := cx - boardCenterX
-		relY := cy - boardCenterY
-
-		cx = boardCenterX + relX*cosA - relY*sinA
-		cy = boardCenterY + relX*sinA + relY*cosA
-	}
 
 	return cx, cy
 }
@@ -1092,8 +1079,22 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 
 	// 1. Dessin du Dos
 	r.drawGeometryPart(screen, geo.V, geo.I[6:12], backImg)
-	// 2. Dessin de la Face
+
+	// 2. Dessin de la Face (avec rotation si c'est une structure ou un piège)
+	// Les créatures/ressources sont déjà gérées par renderFlippingEntityTriangles.
+	// Mais les structures/pièges sont souvent des "fonds de tuiles" complets.
+	if ent.GetType() == entity.TypeStructure || ent.GetType() == entity.TypeTrap {
+		w, h := faceImg.Size()
+		fw, fh := float32(w), float32(h)
+		uvCoords := GetTransformationGeometry(ent.GetTransformation())
+		for i := 0; i < 4; i++ {
+			geo.V[i].SrcX = uvCoords[i][0] * fw
+			geo.V[i].SrcY = uvCoords[i][1] * fh
+		}
+	}
+
 	r.drawGeometryPart(screen, geo.V, geo.I[:6], faceImg)
+
 	// 3. Dessin de l'Overlay (si présent)
 	if overlayImg != nil {
 		r.drawGeometryPart(screen, geo.V, geo.I[:6], overlayImg)
@@ -1113,7 +1114,8 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	}
 
 	shouldShowContent := visualState&entity.Revealed != 0 || visualState&entity.Matched != 0
-	if shouldShowContent && ent.GetType() != entity.TypeTrap {
+	if shouldShowContent {
+		// On applique la transformation de l'entité (qui inclut déjà la rotation de la grille via RotateGrid)
 		r.renderFlippingEntityTriangles(screen, geo.V[:4], ent, ent.GetTransformation())
 	}
 }
@@ -1125,7 +1127,7 @@ func (r *BoardRenderer) getEntityRevealedImage(ent entity.Entity, themeName stri
 
 	switch ent.GetType() {
 	case entity.TypeTrap:
-		return r.assets.GetTileImage("trap", themeName)
+		return r.assets.GetImage("tile_trap_" + themeName)
 	case entity.TypeStructure:
 		if ent.HasTag("start_portal") || ent.HasTag("finish_portal") || ent.HasTag("portable_portal") || ent.HasTag("portal") {
 			return r.assets.GetTileImage("portal", themeName)
@@ -1275,7 +1277,12 @@ func (r *BoardRenderer) ScreenToLocalTile(screenX, screenY int, world *domain.Wo
 	isPortalZone := world.DreamPlane != nil && (gID == world.DreamPlane.StartZoneID || gID == world.DreamPlane.EndZoneID)
 
 	tileScreenX, tileScreenY := r.calculateTileScreenPos(pos, grid, isPortalZone)
-	return int(float64(screenX) - tileScreenX), int(float64(screenY) - tileScreenY), gID, true
+	localXVal, localYVal := float64(screenX)-tileScreenX, float64(screenY)-tileScreenY
+
+	// NOTE : On ne pivote plus les coordonnées locales ici pour le survol (Hover).
+	// On veut que le survol soit purement VISUEL (survoler le haut de la tuile sur l'écran lève le haut).
+
+	return int(localXVal), int(localYVal), gID, true
 }
 
 func (r *BoardRenderer) RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, highlightColor color.Color, world *domain.World) {
