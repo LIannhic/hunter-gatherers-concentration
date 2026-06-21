@@ -18,6 +18,7 @@ type AggressionSystem struct {
 func NewAggressionSystem(world *World) *AggressionSystem {
 	s := &AggressionSystem{world: world}
 	world.EventBus.SubscribeFunc(event.TileRevealed, s.onTileRevealed)
+	world.EventBus.SubscribeFunc(event.CreatureMoved, s.onCreatureMoved)
 	world.EventBus.SubscribeFunc(event.AnimationEnded, s.onAnimationEnded)
 	return s
 }
@@ -35,6 +36,40 @@ func (s *AggressionSystem) Update(world *World) {
 		s.updateAggressionFactors(c)
 		s.calculateTotalAggression(c)
 	}
+}
+
+func (s *AggressionSystem) onCreatureMoved(e event.Event) {
+	entID := entity.ID(e.SourceID)
+	ent, ok := s.world.Entities.Get(entID)
+	if !ok || ent.GetType() != entity.TypeCreature {
+		return
+	}
+
+	c := ent.(*creature.Creature)
+
+	// On ne fait pas monter la patience du Singe Mousse via le mouvement
+	if c.Species == "moss_monkey" {
+		return
+	}
+
+	// Récupère les infos du mouvement
+	mode, _ := e.Payload["mode"].(string)
+
+	if c.Behavior.AggressionFactors == nil {
+		c.Behavior.AggressionFactors = make(map[string]int)
+	}
+
+	// 1. Incrément de patience de base (mouvement normal)
+	patience := c.Behavior.AggressionFactors["patience"]
+	patience += 2 // +2% par mouvement
+
+	// 2. Bonus si rebond (collision avec un bord ou obstacle)
+	if mode == "bounce" {
+		patience += 10 // +10% supplémentaire si la créature s'impatiente contre un mur
+		fmt.Printf("[AGGRESSION] %s s'impatiente contre un bord (+10%%)\n", c.Species)
+	}
+
+	c.Behavior.AggressionFactors["patience"] = patience
 }
 
 func (s *AggressionSystem) onTileRevealed(e event.Event) {

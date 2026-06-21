@@ -462,6 +462,7 @@ func (w *World) RotateGrid(gridID string) error {
 			_ = w.Entities.UpdatePosition(e.GetID(), newPos)
 
 			// Met à jour la transformation diédrique (Rotation du plateau : +90°)
+			// On compose la transformation actuelle avec une rotation de 90°.
 			currentTrans := e.GetTransformation()
 			newTrans := entity.Compose(currentTrans, entity.TransRot90)
 			e.SetTransformation(newTrans)

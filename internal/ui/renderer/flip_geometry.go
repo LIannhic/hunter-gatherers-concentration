@@ -181,7 +181,7 @@ func (r *BoardRenderer) renderFlippingTile(screen *ebiten.Image, x, y float64, a
 
 	shouldShowIcon := (!isHiding && anim.Progress >= 0.5) || (isHiding && anim.Progress < 0.5)
 
-	if shouldShowIcon && ent != nil && ent.GetType() != entity.TypeTrap {
+	if shouldShowIcon && ent != nil {
 		r.renderFlippingEntityTriangles(screen, g.V[:4], ent, trans)
 	}
 }

@@ -1858,26 +1858,23 @@ func (h *Handler) invertFlipDirection(d entity.FlipDirection) entity.FlipDirecti
 // spawnFootstepTrack crée une empreinte de pas sur le bord extérieur de la tuile cliquée.
 // La direction du bord est déterminée par la position du clic par rapport au centre de la tuile.
 func (h *Handler) spawnFootstepTrack(clickX, clickY int, tilePos board.Position, gridID string) {
-	grid, ok := h.world.GetGrid(gridID)
+	// On récupère les coordonnées locales LOGIQUES (déjà corrigées par le renderer)
+	localX, localY, _, ok := h.renderer.ScreenToLocalTile(clickX, clickY, h.world)
 	if !ok {
 		return
 	}
 
-	centerX, centerY := h.renderer.GetTileCenter(tilePos, grid)
 	tileSize := float64(h.renderer.GetTileSize())
 
-	// Direction du centre vers le clic (pour placer l'empreinte du côté du clic)
-	dirX := float64(clickX) - centerX
-	dirY := float64(clickY) - centerY
+	// Direction du centre vers le clic LOGIQUE
+	dirX := float64(localX) - (tileSize / 2)
+	dirY := float64(localY) - (tileSize / 2)
 	dist := math.Sqrt(dirX*dirX + dirY*dirY)
 
-	// Si le clic est trop près du centre, on utilise une direction par défaut (vers le bas)
 	if dist < 1.0 {
 		dirX, dirY = 0, 1
 		dist = 1.0
 	}
-
-	// Normalise la direction
 	dirX /= dist
 	dirY /= dist
 
@@ -1897,7 +1894,7 @@ func (h *Handler) spawnFootstepTrack(clickX, clickY int, tilePos board.Position,
 	track.Angle = angle
 	h.world.Entities.Register(track)
 
-	// FIFO : max 2 empreintes visibles, supprime la plus ancienne si débordement
+	// FIFO : max 2 empreintes visibles
 	h.footstepTrackIDs = append(h.footstepTrackIDs, string(track.GetID()))
 	for len(h.footstepTrackIDs) > 2 {
 		oldID := entity.ID(h.footstepTrackIDs[0])

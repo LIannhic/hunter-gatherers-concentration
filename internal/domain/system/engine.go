@@ -34,6 +34,7 @@ func NewEngine(world *World) *Engine {
 			&LifecycleSystem{},
 			&PropagationSystem{},
 			NewAggressionSystem(world),
+			NewCreatureAttackEffectSystem(world),
 			&CreatureAISystem{},
 			moveSys,
 			&TriggerSystem{},

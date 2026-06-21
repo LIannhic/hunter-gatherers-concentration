@@ -937,31 +937,61 @@ func (c *SwitchZoneCommand) Execute() error {
 		return errors.New("aucune zone connectée dans cette direction ou conditions non remplies")
 	}
 
-	if grid, ok := c.World.GetGrid(c.World.CurrentGridID); ok {
+	sourceID := c.World.CurrentGridID
+	targetID, _ := c.World.DreamPlane.GetConnectedZone(sourceID, c.Direction)
+
+	if grid, ok := c.World.GetGrid(sourceID); ok {
 		grid.ExitsState[c.Direction] = [2]entity.TileState{
 			entity.Revealed | entity.Matched,
 			entity.Revealed | entity.Matched,
 		}
 	}
 
-	targetID, _ := c.World.DreamPlane.GetConnectedZone(c.World.CurrentGridID, c.Direction)
 	c.World.SetCurrentGridFrom(targetID, c.Direction)
 
 	grid, _ := c.World.GetGrid(targetID)
 	newPos := entity.Position{X: grid.Width / 2, Y: grid.Height / 2}
 
-	switch c.Direction {
-	case entity.DirNorth:
-		newPos = entity.Position{X: grid.Width / 2, Y: grid.Height - 1}
-	case entity.DirSouth:
-		newPos = entity.Position{X: grid.Width / 2, Y: 0}
-	case entity.DirEast:
-		newPos = entity.Position{X: 0, Y: grid.Height / 2}
-	case entity.DirWest:
-		newPos = entity.Position{X: grid.Width - 1, Y: grid.Height / 2}
+	// --- NOUVEAU : Calcul de la position d'arrivée intelligente ---
+	// On cherche quelle sortie de la grille CIBLE mène à la grille SOURCE.
+	arrivalDir := entity.DirNorth
+	found := false
+	if conns, ok := c.World.DreamPlane.Connections[targetID]; ok {
+		for dir, backToSourceID := range conns {
+			if backToSourceID == sourceID {
+				arrivalDir = dir
+				found = true
+				break
+			}
+		}
 	}
-	c.World.SetPlayerPosition(newPos)
 
+	if found {
+		switch arrivalDir {
+		case entity.DirNorth:
+			newPos = entity.Position{X: grid.Width / 2, Y: 0}
+		case entity.DirSouth:
+			newPos = entity.Position{X: grid.Width / 2, Y: grid.Height - 1}
+		case entity.DirEast:
+			newPos = entity.Position{X: grid.Width - 1, Y: grid.Height / 2}
+		case entity.DirWest:
+			newPos = entity.Position{X: 0, Y: grid.Height / 2}
+		}
+	} else {
+		// Fallback sur l'ancienne logique si non trouvé (ne devrait pas arriver)
+		switch c.Direction {
+		case entity.DirNorth:
+			newPos = entity.Position{X: grid.Width / 2, Y: grid.Height - 1}
+		case entity.DirSouth:
+			newPos = entity.Position{X: grid.Width / 2, Y: 0}
+		case entity.DirEast:
+			newPos = entity.Position{X: 0, Y: grid.Height / 2}
+		case entity.DirWest:
+			newPos = entity.Position{X: grid.Width - 1, Y: grid.Height / 2}
+		}
+	}
+
+	c.World.SetPlayerPosition(newPos)
 	return nil
 }
 

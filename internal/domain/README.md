@@ -72,7 +72,8 @@ func (s *LifecycleSystem) Update(world *World) {
   - `World` : Structure World (Cœur de l'état global).
   - `Engine` : Orchestrateur des systèmes ECS.
   - `ECS Systems` : Implémentations (IA, Mouvement, Lifecycle, Loot...).
-  - `AggressionSystem` : Gère le calcul modulaire de l'agressivité des créatures (Base + Facteurs dynamiques : révélations, inventaire, colère d'espèce, facteurs spécifiques). Déclenche les attaques quand l'agressivité ≥ 100 à la fin de l'animation de flip. Publie `CreatureAttacked`.
+  - `AggressionSystem` : Gère le calcul modulaire de l'agressivité (Base + Facteurs : révélations, patience, inventaire, colère d'espèce). Déclenche les attaques à 100%.
+  - `CreatureAttackEffectSystem` : Centralise les effets mondiaux déclenchés par les attaques (ex: rotation de grille).
   - `Mechanics` : Flip, Match, Merge.
   - `Navigation` : Gestion des grids et navigation.
   - `Entities` : Logique de spawn.
@@ -102,7 +103,8 @@ func (s *LifecycleSystem) Update(world *World) {
   - `LootSystem` : Gère la transformation des associations réussies en butin d'inventaire
   - `ActionSystem` : Gère les actions spécifiques des créatures (ex: `spawn_trap` du Singe Mousse)
   - `TrackSystem` : Gère la durée de vie et la disparition progressive des traces au sol
-  - `AggressionSystem` : **Nouveau** — Calcule l'agressivité totale des créatures (Base + Facteurs). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `AnimationEnded` (type: "flip", state: Revealed) pour déclencher l'attaque si agressivité ≥ 100. Publie `CreatureAttacked` pour l'animation de lunge et `PlayerDamaged` pour les dégâts.
+  - `AggressionSystem` : **Nouveau** — Calcule l'agressivité totale des créatures (Base + Facteurs). S'abonne à `TileRevealed` (reason: "player_action") pour le facteur "reveals" et à `CreatureMoved` pour le facteur "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité ≥ 100 à la fin de l'animation de flip.
+  - `CreatureAttackEffectSystem` : Centralise les effets mondiaux des attaques (ex: rotation de grille du Stonewarden).
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)

@@ -99,7 +99,9 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **ToxicitySystem** : Calcule les dégâts de poison cumulés et dégressifs infligés au joueur par les ressources révélées (ex: Dreamberry stade 4). **Ne vérifie que la grille actuelle** (`world.CurrentGridID`).
   - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire. Le butin hérite du niveau de cumul de la paire.
   - **TrackSystem** : Gère la décomposition temporelle des traces
-  - **AggressionSystem** : Calcule l'agressivité modulaire des créatures (Priority 1, avant mouvement). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `AnimationEnded` (type: "flip", finalState: Revealed) pour déclencher l'attaque si agressivité totale ≥ 100. Publie `CreatureAttacked` (payload: hit_target) pour l'animation de lunge, et `PlayerDamaged` si le joueur est dans la zone de menace. Gère aussi les facteurs dynamiques : "inventory" (trophées), "species_anger" (congénères révélés), "empty_plots" (Singe Mousse), "toxic_dreamberry" (Lumifly).
+  - **AggressionSystem** : Calcule l'agressivité modulaire des créatures (Priority 1, avant mouvement). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `CreatureMoved` pour gérer la "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité totale ≥ 100 à la fin de l'animation de flip.
+
+- **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden).
 
 - **Animations Organiques** :
   - **Propagation (Division Cellulaire)** : Lorsqu'une ressource se multiplie, une animation de type `propagate` est déclenchée. Elle simule une division organique en deux phases :
