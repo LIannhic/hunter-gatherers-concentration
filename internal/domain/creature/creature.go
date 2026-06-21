@@ -583,7 +583,7 @@ func (c *Creature) SetThreatZone(zone []entity.Direction) {
 	c.ThreatZone = zone
 }
 
-// IsPositionThreatened vérifie si une position cible est menacée par la créature
+// IsPositionThreatened vérifie si une position cible est menacée par la créature.
 func (c *Creature) IsPositionThreatened(target entity.Position) bool {
 	currentPos := c.GetPosition()
 
