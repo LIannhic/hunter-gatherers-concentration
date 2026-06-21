@@ -42,16 +42,19 @@ Chaque créature possède désormais une **Agressivité Totale** calculée dynam
 - **Base (AggressionBase)** : Valeur statique propre à l'espèce (ex: Shadowstalker 80, Lumifly 0).
 - **Facteurs Dynamiques (AggressionFactors)** : S'additionnent à la base pour former le total (plafonné à 100) :
   - **Révélations (reveals)** : Chaque révélation manuelle par le joueur augmente l'agressivité. La tolérance dépend de la difficulté (`MaxSafeReveals`).
+  - **Patience (patience)** : Chaque mouvement de la créature augmente son énervement (+2%). Cogner un bord ou un obstacle est plus frustrant (+10% par rebond).
   - **Inventaire (inventory)** : Porter des trophées d'une espèce énerve ses congénères (+50 par trophée).
   - **Colère d'Espèce (species_anger)** : Voir des congénères révélés augmente l'agressivité (+20 par congénère).
   - **Facteurs Spécifiques** :
-    - **Singe Mousse (moss_monkey)** : Proportion de cases vides sur la grille (plus il y a de vide, plus il est agressif).
+    - **Singe Mousse (moss_monkey)** : Proportion de cases vides sur la grille. Ignoré par le facteur patience.
     - **Lumifly** : Présence d'une Dreamberry toxique (stade 4) dans les 8 cases voisines (agressivité 100 immédiate).
 
-#### Seuil d'Attaque
+#### Seuil d'Attaque et Effets Logiques
 Lorsqu'une créature est révélée (fin d'animation de flip), si son **Agressivité Totale ≥ 100**, elle déclenche une **Attaque Immédiate** (Lunge) :
 - Vérifie si le joueur est dans sa **Zone de Menace** (même logique que l'ancienne Confrontation).
 - Inflige **10 dégâts physiques** (sauf si *Grâce* active).
+- **Effets Spécifiques au Monde** : Centralisés par le `CreatureAttackEffectSystem`.
+  - **Stonewarden** : Son attaque provoque un séisme de rotation (pivote la grille de 90°).
 - Déclenche des effets visuels selon l'espèce (Blur pour Shadowstalker, Bulle pour Lumifly).
 - Publie l'événement `CreatureAttacked` pour l'animation et `PlayerDamaged` pour le HUD.
 
