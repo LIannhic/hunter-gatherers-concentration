@@ -110,7 +110,7 @@ func (c *RevealTileCommand) Execute() error {
 	c.World.SetPlayerPosition(playerPos)
 
 	// Déplace les shadowstalkers d'une case vers le joueur (comportement pré-révélation)
-	if c.World != nil {
+	if c.World != nil && c.World.IsPlayerOnBoard() {
 		c.World.MoveSpeciesOneStepTowards("shadowstalker", c.World.GetPlayerPosition())
 	}
 

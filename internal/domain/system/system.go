@@ -1015,6 +1015,10 @@ func (wa *worldAdapter) GetPlayerPosition() entity.Position {
 	return wa.world.playerPosition
 }
 
+func (wa *worldAdapter) IsPlayerOnBoard() bool {
+	return wa.world.IsPlayerOnBoard()
+}
+
 func (wa *worldAdapter) GetNearbyCreatures(pos entity.Position, radius int) []*creature.Creature {
 	var result []*creature.Creature
 	creatures := wa.world.Entities.GetByType(entity.TypeCreature)
@@ -1098,6 +1102,9 @@ func (wa *worldAdapter) FindNearestTarget(from entity.Position, targetType creat
 	case creature.TargetPlayer:
 		// Seule l'attraction/répulsion du joueur sur sa propre grille est possible
 		if wa.world.CurrentGridID != wa.grid.ID {
+			return nil
+		}
+		if !wa.world.IsPlayerOnBoard() {
 			return nil
 		}
 		pos := wa.world.playerPosition
@@ -1327,6 +1334,10 @@ func (s *ToxicitySystem) Priority() int { return 6 }
 
 func (s *ToxicitySystem) Update(world *World) {
 	if world.Player == nil {
+		return
+	}
+
+	if !world.IsPlayerOnBoard() {
 		return
 	}
 

@@ -47,6 +47,16 @@ func (w *World) GetPlayerPosition() entity.Position {
 	return w.playerPosition
 }
 
+// SetPlayerOnBoard définit si le joueur est physiquement présent sur le plateau
+func (w *World) SetPlayerOnBoard(on bool) {
+	w.playerOnBoard = on
+}
+
+// IsPlayerOnBoard indique si le joueur est présent sur le plateau
+func (w *World) IsPlayerOnBoard() bool {
+	return w.playerOnBoard
+}
+
 // MoveSpeciesOneStepTowards est un wrapper pratique pour appeler le CreatureMovementSystem
 // depuis d'autres couches (usecases, UI) sans exposer directement le movementSystem.
 func (w *World) MoveSpeciesOneStepTowards(species string, target entity.Position) {

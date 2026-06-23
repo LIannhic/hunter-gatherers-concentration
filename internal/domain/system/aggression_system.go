@@ -278,6 +278,10 @@ func (s *AggressionSystem) onAnimationEnded(e event.Event) {
 }
 
 func (s *AggressionSystem) triggerExceededAttack(c *creature.Creature) {
+	if !s.world.IsPlayerOnBoard() {
+		return
+	}
+
 	fmt.Printf("[AGGRESSION] %s est excédée ! ATTAQUE IMMÉDIATE.\n", c.Species)
 
 	// --- Logique de Confrontation Périphérique ---
