@@ -94,13 +94,14 @@ const (
 )
 
 type NavigationLogic struct {
-	Type           NavigationType
-	Target         TargetType
-	PatrolRoute    []entity.Position
-	PatrolIndex    int
-	WanderBias     entity.Position
-	TargetName     string // Optionnel: nom/ID spécifique de la cible (ex: "dreamberry")
-	ExcludedStages []int  // Stages du cycle de vie à ignorer (indexés à partir de 0)
+	Type             NavigationType
+	Target           TargetType
+	PatrolRoute      []entity.Position
+	PatrolIndex      int
+	PatrolInitialized bool
+	WanderBias       entity.Position
+	TargetName       string // Optionnel: nom/ID spécifique de la cible (ex: "dreamberry")
+	ExcludedStages   []int  // Stages du cycle de vie à ignorer (indexés à partir de 0)
 }
 
 func (nl *NavigationLogic) DecideDirection(world WorldQuery, creature *Creature) entity.Position {
@@ -142,6 +143,38 @@ func (nl *NavigationLogic) patrol(world WorldQuery, creature *Creature) entity.P
 	if len(nl.PatrolRoute) == 0 {
 		return nl.wander(world, creature)
 	}
+
+	if !nl.PatrolInitialized {
+		nl.PatrolInitialized = true
+		current := creature.GetPosition()
+		bestIdx := 0
+		dx := current.X - nl.PatrolRoute[0].X
+		dy := current.Y - nl.PatrolRoute[0].Y
+		if dx < 0 {
+			dx = -dx
+		}
+		if dy < 0 {
+			dy = -dy
+		}
+		bestDist := dx + dy
+		for i, wp := range nl.PatrolRoute {
+			ddx := current.X - wp.X
+			ddy := current.Y - wp.Y
+			if ddx < 0 {
+				ddx = -ddx
+			}
+			if ddy < 0 {
+				ddy = -ddy
+			}
+			dist := ddx + ddy
+			if dist < bestDist {
+				bestDist = dist
+				bestIdx = i
+			}
+		}
+		nl.PatrolIndex = bestIdx
+	}
+
 	target := nl.PatrolRoute[nl.PatrolIndex]
 	current := creature.GetPosition()
 	dir := entity.Position{X: entity.Sign(target.X - current.X), Y: entity.Sign(target.Y - current.Y)}

@@ -458,20 +458,25 @@ Frequency:   *NewMovementFrequency(FreqDelay, 0, 1),
 			Weight:  component.WeightMedium,
 		})
 		c.SetMovementProfile(&MovementProfile{
-			Trigger: MovementTrigger{Type: TriggerOnEcho},
-			// Quand une tile est révélée, se dirige vers la ressource la plus proche (dreamberries)
-			Navigation: NavigationLogic{Type: NavAttraction, Target: TargetResource, TargetName: "dreamberry"},
-			Mode:       MovementMode{Type: ModeNormal},
+			Trigger: MovementTrigger{Type: TriggerAuto},
+			Navigation: NavigationLogic{
+				Type:        NavRelative,
+				PatrolRoute: []entity.Position{
+					{X: 0, Y: -1}, // Avant relatif
+				},
+				PatrolIndex: 0,
+			},
+			Mode: MovementMode{Type: ModeSwap},
 			Perception: PerceptionProfile{
-				Stealth:       StealthManifest, // On le voit courir à toute vitesse
-				Acoustic:      AcousticEcho,    // Il fait énormément de bruit (lourd)
-				LeavesTracks:  true,            // Laisse de grosses traces de griffes
+				Stealth:       StealthManifest,
+				Acoustic:      AcousticEcho,
+				LeavesTracks:  true,
 				TrackType:     "claws",
 				TrackDuration: 2,
 			},
 			Frequency:   *NewMovementFrequency(FreqVelocity, 1, 0),
 			Orientation: Orientation{Direction: Forward},
-			Collision:   CollisionHandler{Type: CollideSlide},
+			Collision:   CollisionHandler{Type: CollideBounce},
 		})
 		c.SetThreatZone(ThreatCone)
 		c.AddTag("fast")
