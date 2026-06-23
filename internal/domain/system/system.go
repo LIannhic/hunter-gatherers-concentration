@@ -1379,7 +1379,12 @@ func (s *ToxicitySystem) Update(world *World) {
 					localDmg *= 1.0 - (float64(dist) / float64(hazard.Radius+1))
 				}
 
-				fmt.Printf("[TOXICITY] Hazard détecté: %s (Type: %s, Stade: %s) à %v\n", topID, hazard.DamageType, stageName, tile.Position)
+				if hazard.DamageType == "amnesia" {
+					dist := abs(tile.Position.X-world.playerPosition.X) + abs(tile.Position.Y-world.playerPosition.Y)
+					fmt.Printf("[TOXICITY] Amnésie détectée: %s (Stade: %s) à %v, Dist: %d, Radius: %d\n", topID, stageName, tile.Position, dist, hazard.Radius)
+				} else {
+					fmt.Printf("[TOXICITY] Hazard détecté: %s (Type: %s, Stade: %s) à %v\n", topID, hazard.DamageType, stageName, tile.Position)
+				}
 
 				totalDamage += localDmg
 				stackCount++
@@ -1406,15 +1411,60 @@ func (s *ToxicitySystem) Update(world *World) {
 			dmgInt = 1 // Minimum 1 dégât si actif
 		}
 
-		fmt.Printf("[TOXICITY] Le joueur subit %d dégâts de poison (%d stacks actifs, dégressivité appliquée)\n", dmgInt, stackCount)
-		world.Player.TakeDamage(dmgInt, "poison")
+		// CAS PARTICULIER : Amnésie (Void Bloom)
+		isAmnesia := false
+		amnesiaDuration := 0
+		// On vérifie si un des hazards actifs est de type amnesia
+		for _, tile := range grid.Plots {
+			if len(tile.EntitiesID) == 0 {
+				continue
+			}
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			if comp, ok := world.Components.Get(topID, "hazard"); ok {
+				hazard := comp.(*component.Hazard)
+				if hazard.DamageType == "amnesia" {
+					dist := abs(tile.Position.X-world.playerPosition.X) + abs(tile.Position.Y-world.playerPosition.Y)
+					fmt.Printf("[TOXICITY-DEBUG] Bloom at %v, Player at %v, Dist: %d, Radius: %d\n", tile.Position, world.playerPosition, dist, hazard.Radius)
+					if dist <= hazard.Radius || (hazard.Radius == 0 && gridID == world.CurrentGridID) {
+						if lcComp, ok := world.Components.Get(topID, "lifecycle"); ok {
+							lc := lcComp.(*component.Lifecycle)
+							if hazard.IsActive(lc.CurrentStage) {
+								isAmnesia = true
+								amnesiaDuration = dmgInt + lc.CurrentStage
+								break
+							}
+						}
+					}
+				}
+			}
+		}
 
-		world.EventBus.PublishImmediate(event.NewPlayerDamagedEvent(
-			"toxicity_system",
-			dmgInt,
-			"poison",
-			"toxicity",
-			map[string]interface{}{"stack_count": stackCount},
-		))
+		if isAmnesia {
+			fmt.Printf("[TOXICITY] Le joueur subit une amnésie de proximité (Void Bloom)\n")
+			if world.Player.AmnesiaTurns <= 0 {
+				// Récupère l'inclinaison de l'inventaire pour l'animation
+				flipDir := entity.FlipCenter
+				if world.InventoryGrid != nil {
+					if plot, err := world.InventoryGrid.Get(board.Position{X: 0, Y: 0}); err == nil {
+						flipDir = plot.Tilt.ToFlipDirection()
+					}
+				}
+				world.HideInventory(flipDir)
+				world.EventBus.Publish(event.NewAmnesiaStartedEvent("void_bloom", amnesiaDuration))
+				world.EventBus.Publish(event.NewItemMessageEvent("Vous avez du mal à vous souvenir."))
+			}
+			world.Player.AmnesiaTurns = amnesiaDuration
+		} else {
+			fmt.Printf("[TOXICITY] Le joueur subit %d dégâts de poison (%d stacks actifs, dégressivité appliquée)\n", dmgInt, stackCount)
+			world.Player.TakeDamage(dmgInt, "poison")
+			world.EventBus.Publish(event.NewItemMessageEvent("Vous toussez du sang."))
+			world.EventBus.PublishImmediate(event.NewPlayerDamagedEvent(
+				"toxicity_system",
+				dmgInt,
+				"poison",
+				"toxicity",
+				map[string]interface{}{"stack_count": stackCount},
+			))
+		}
 	}
 }

@@ -225,6 +225,14 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 			MatchID:    "void_bloom",
 			MatchTypes: []string{"identical"},
 		})
+		r.SetHazard(component.Hazard{
+			BaseDamage:       3.0, // Durée de l'amnésie
+			DamageType:       "amnesia",
+			Radius:           1,
+			IsConstant:       true,
+			DegressionFactor: 0.0,
+			ActiveStages:     []int{2}, // Stade 3 (index 2)
+		})
 
 	case "echo_crystal":
 		r.SetLifecycle(component.Lifecycle{
