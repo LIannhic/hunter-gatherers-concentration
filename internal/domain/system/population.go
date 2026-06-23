@@ -11,13 +11,14 @@ import (
 type gridEntity struct {
 	name       string
 	isCreature bool
+	isTrap     bool
 	exclusive  bool
 	drawCount  int
 }
 
-// FillGridRandomly remplit un grid avec des paires d'entités et des pièges.
-// Pool commun créatures + ressources, tirage aléatoire, retrait après 2 paires (4 tuiles).
-// Priorité aux exclusives du biome. 2 paires de pièges fixes.
+// FillGridRandomly remplit un grid avec des paires d'entités.
+// Pool commun créatures + ressources + pièges, tirage aléatoire, retrait après 2 paires (4 tuiles).
+// Priorité aux exclusives du biome.
 func (w *World) FillGridRandomly(gridID string) {
 	grid, ok := w.GetGrid(gridID)
 	if !ok {
@@ -47,7 +48,7 @@ func (w *World) FillGridRandomly(gridID string) {
 		positions[i], positions[j] = positions[j], positions[i]
 	})
 
-	// 2. Construire le pool commun créatures + ressources
+	// 2. Construire le pool commun créatures + ressources + pièges
 	var pool []gridEntity
 
 	// Créatures
@@ -90,6 +91,9 @@ func (w *World) FillGridRandomly(gridID string) {
 		pool = append(pool, gridEntity{name: exclusiveResource, isCreature: false, exclusive: true})
 	}
 
+	// Pièges (dans le pool global, tirés aléatoirement)
+	pool = append(pool, gridEntity{name: "trap", isTrap: true})
+
 	// 3. Séparer exclusives et non-exclusives, mélanger, puis concaténer
 	var exclusives, commons []gridEntity
 	for _, e := range pool {
@@ -103,24 +107,17 @@ func (w *World) FillGridRandomly(gridID string) {
 	rand.Shuffle(len(commons), func(i, j int) { commons[i], commons[j] = commons[j], commons[i] })
 	pool = append(exclusives, commons...)
 
-	// 4. Pièges : 2 paires fixes
-	trapPairs := 2
-	trapTiles := trapPairs * 2
-	remainingSlots := totalSlots - trapTiles
-	if remainingSlots < 0 {
-		remainingSlots = 0
-	}
-
-	fmt.Printf("  - Total: %d slots, Traps: %d, Entities: %d\n",
-		totalSlots, trapTiles, remainingSlots)
-
-	// 5. Tirage aléatoire du pool, spawn 2 tuiles à chaque tirage, retrait après 2 paires
+	// 4. Tirage aléatoire du pool, spawn 2 tuiles à chaque tirage, retrait après 2 paires
+	remainingSlots := totalSlots
 	posIdx := 0
 	for remainingSlots >= 2 && len(pool) > 0 {
 		idx := rand.Intn(len(pool))
 		e := pool[idx]
 
-		if e.isCreature {
+		if e.isTrap {
+			w.SpawnTrap(gridID, positions[posIdx])
+			w.SpawnTrap(gridID, positions[posIdx+1])
+		} else if e.isCreature {
 			w.SpawnCreature(gridID, e.name, positions[posIdx])
 			w.SpawnCreature(gridID, e.name, positions[posIdx+1])
 		} else {
@@ -138,16 +135,20 @@ func (w *World) FillGridRandomly(gridID string) {
 		}
 	}
 
-	// 6. Spawn des Pièges
-	for i := 0; i < trapPairs; i++ {
-		w.SpawnTrap(gridID, positions[posIdx])
-		w.SpawnTrap(gridID, positions[posIdx+1])
-		posIdx += 2
-	}
-
-	// 7. Tuile orpheline si nombre impair
+	// 5. Tuile orpheline si nombre impair
 	if posIdx < totalSlots {
-		w.SpawnTrap(gridID, positions[posIdx])
+		if len(pool) > 0 {
+			e := pool[rand.Intn(len(pool))]
+			if e.isTrap {
+				w.SpawnTrap(gridID, positions[posIdx])
+			} else if e.isCreature {
+				w.SpawnCreature(gridID, e.name, positions[posIdx])
+			} else {
+				w.SpawnResource(gridID, e.name, positions[posIdx])
+			}
+		} else {
+			w.SpawnTrap(gridID, positions[posIdx])
+		}
 	}
 
 	fmt.Printf("[DEBUG-POP] Grid %s population terminee. Cibles (Matchable): %d\n",
