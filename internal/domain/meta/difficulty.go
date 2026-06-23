@@ -18,6 +18,7 @@ type DifficultySettings struct {
 	TurnTimerDuration float64 // Durée max du compte à rebours par tour (en secondes)
 	MaxSafeReveals    int     // Nombre de révélations avant attaque automatique
 	AggressionMult    float64 // Multiplicateur global d'agressivité
+	ForceHiddenInventory bool // Si vrai, l'inventaire est toujours face cachée
 }
 
 func GetSettings(level DifficultyLevel) DifficultySettings {
@@ -29,7 +30,7 @@ func GetSettings(level DifficultyLevel) DifficultySettings {
 	case LevelHard:
 		return DifficultySettings{Level: LevelHard, PreviewDuration: 0.3, PreviewRatio: 1.0, NavThreshold: 0.7, TurnTimerDuration: 5.0, MaxSafeReveals: 1, AggressionMult: 1.5}
 	case LevelInsane:
-		return DifficultySettings{Level: LevelInsane, PreviewDuration: 0.1, PreviewRatio: 1.0, NavThreshold: 0.8, TurnTimerDuration: 5.0, MaxSafeReveals: 0, AggressionMult: 2.0}
+		return DifficultySettings{Level: LevelInsane, PreviewDuration: 0.1, PreviewRatio: 1.0, NavThreshold: 0.8, TurnTimerDuration: 5.0, MaxSafeReveals: 0, AggressionMult: 2.0, ForceHiddenInventory: true}
 	default:
 		return GetSettings(LevelNormal)
 	}

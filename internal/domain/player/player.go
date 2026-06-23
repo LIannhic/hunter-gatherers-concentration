@@ -149,6 +149,7 @@ type Player struct {
 	ImmunityTurns int // Nombre de tours d'immunité restants
 	ThreatVisionTurns int // Nombre de tours où les zones de menace sont visibles
 	GraceTurns int // Nombre de tours où les créatures n'attaquent pas lors de la révélation (Flutterwing)
+	AmnesiaTurns int // Nombre de tours où l'inventaire est face cachée (Amnésie)
 
 	// Effets visuels (Shaders)
 	VisualEffects map[string]int // "blur", "bubble", etc. -> Durée en tours
@@ -202,6 +203,7 @@ func NewPortablePortalItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  false,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -215,6 +217,7 @@ func NewEchoHoundItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -228,6 +231,7 @@ func NewDreamberryItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -241,6 +245,7 @@ func NewMoonstoneItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -254,6 +259,7 @@ func NewCrystalShardItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -267,6 +273,7 @@ func NewWhisperingHerbItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -280,6 +287,7 @@ func NewSpecterItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -293,6 +301,7 @@ func NewShadowstalkerItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -306,6 +315,7 @@ func NewMossMonkeyItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -319,6 +329,7 @@ func NewStonewardenItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -332,6 +343,7 @@ func NewLumiflyItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -345,6 +357,7 @@ func NewBurrowerItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -358,6 +371,7 @@ func NewFleeingSpriteItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -371,6 +385,7 @@ func NewFlutterwingItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -384,6 +399,7 @@ func NewMossTruffleItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -397,6 +413,7 @@ func NewEchoCrystalItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -410,6 +427,7 @@ func NewVoidBloomItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -423,6 +441,7 @@ func NewSandCoreItem(level int) *LootItem {
 		IsUsable:     true,
 		IsDeletable:  true,
 	}
+	item.SetState(entity.Revealed)
 	item.SetCumulationLevel(level)
 	return item
 }
@@ -584,6 +603,9 @@ func (p *Player) ConsumeSanity(amount int) {
 	}
 	if amount > 0 && p.ThreatVisionTurns > 0 {
 		p.ThreatVisionTurns--
+	}
+	if amount > 0 && p.AmnesiaTurns > 0 {
+		p.AmnesiaTurns--
 	}
 }
 

@@ -684,6 +684,9 @@ func NewManager() *Manager {
 }
 
 func (m *Manager) Register(e Entity) {
+	if e.GetType() == TypeLoot {
+		fmt.Printf("[ENTITY] Enregistrement d'un LOOT: %s (ID: %s, State: %s)\n", e.GetCategory(), e.GetID(), e.GetState())
+	}
 	m.entities[e.GetID()] = e
 	if m.byType[e.GetType()] == nil {
 		m.byType[e.GetType()] = make(map[ID]Entity)

@@ -38,6 +38,9 @@ const (
 	// Animation events pour l'UI
 	AnimationStarted Type = "animation_started"
 	AnimationEnded   Type = "animation_ended"
+	// Amnésie
+	AmnesiaStarted Type = "amnesia_started"
+	AmnesiaEnded   Type = "amnesia_ended"
 )
 
 // Event structure de base
@@ -456,6 +459,28 @@ func NewAnimationEndedEvent(animationType string, targetID string, payload ...ma
 		Type:      AnimationEnded,
 		SourceID:  targetID,
 		Payload:   p,
+		Timestamp: time.Now(),
+	}
+}
+
+// NewAmnesiaStartedEvent crée un événement signalant le début d'un état d'amnésie.
+func NewAmnesiaStartedEvent(source string, duration int) Event {
+	return Event{
+		Type:     AmnesiaStarted,
+		SourceID: source,
+		Payload: map[string]interface{}{
+			"duration": duration,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewAmnesiaEndedEvent crée un événement signalant la fin d'un état d'amnésie.
+func NewAmnesiaEndedEvent(source string) Event {
+	return Event{
+		Type:     AmnesiaEnded,
+		SourceID: source,
+		Payload:  map[string]interface{}{},
 		Timestamp: time.Now(),
 	}
 }

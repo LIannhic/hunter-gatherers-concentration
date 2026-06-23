@@ -39,11 +39,27 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 	case "stonewarden":
 		fmt.Println("[STONEWARDEN] L'attaque provoque un séisme de rotation !")
 		s.world.RotateGrid(c.GetGridID())
+		s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vous êtes déboussolé."))
 
 	case "shadowstalker":
 		// Les effets de shader sont gérés par le AggressionSystem (immédiat)
 		// et le Renderer (visuel). On pourra ajouter ici des effets de statut
 		// comme la réduction de sanité maximale ou le vol d'objets.
+
+	case "specter":
+		hitTarget, hasHit := e.Payload["hit_target"].(*entity.Position)
+		if !hasHit || hitTarget == nil {
+			return
+		}
+		fmt.Printf("[%s] L'attaque touche le joueur et provoque une amnésie temporaire !\n", c.Species)
+		flipDir := entity.FlipTop
+		if s.world.Player != nil {
+			flipDir = s.world.Player.GetAnchor().GetFlipDirection()
+		}
+		s.world.HideInventory(flipDir)
+		s.world.Player.AmnesiaTurns = 5
+		s.world.EventBus.PublishImmediate(event.NewAmnesiaStartedEvent(string(c.GetID()), 5))
+		s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vous avez du mal à vous souvenir."))
 
 	case "lumifly":
 		// Effets logiques futurs pour le Lumifly (ex: étourdissement, mana drain)

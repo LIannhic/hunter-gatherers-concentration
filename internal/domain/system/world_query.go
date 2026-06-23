@@ -1,6 +1,8 @@
 package system
 
 import (
+	"fmt"
+
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
@@ -36,6 +38,7 @@ func (w *World) HasResourceAt(gridID string, pos board.Position) bool {
 
 // SetPlayerPosition définit la position logique du joueur sur la grille
 func (w *World) SetPlayerPosition(pos entity.Position) {
+	fmt.Printf("[WORLD] Joueur déplacé en %v\n", pos)
 	w.playerPosition = pos
 }
 
