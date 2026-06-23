@@ -85,7 +85,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Type` : Resource, Creature, Structure, Artefact, Trap, Loot
   - `CumulationLevel` : Niveau de cumul (0 à 2) utilisé pour la fusion et le scaling visuel.
   - `Manager` : Stockage et accès rapide aux entités
-  - `DebugState` : État global de débogage permettant d'outrepasser les règles de difficulté, de filtrer les entités et de forcer les shaders.
+  - `DebugState` : État global de débogage permettant d'outrepasser les règles de difficulté, de filtrer les entités et de forcer les shaders. Inclut `MessageSpeed float64` (défaut 1.0) contrôlable via F12 `+`/`-`.
   - `AddTag(string)`, `HasTag(string)`, `RemoveTag(string)` : Méthodes permettant de gérer les propriétés dynamiques ou visuelles des entités (ex: "moss_lure", "flying").
   - `ThreatZone` : (Creature) Liste de directions attaquées localement.
   - `Behavior` : Composant IA enrichi — `AggressionBase` (statique), `Aggression` (total calculé), `AggressionFactors` (map[string]int : "reveals", "inventory", "species_anger", "empty_plots", "toxic_dreamberry"), `RevealCount` (compteur révélations manuelles).
@@ -234,6 +234,8 @@ eventBus.ProcessQueue()
 
 Certains événements critiques pour le rendu (comme `TileRevealed`) utilisent `PublishImmediate` pour forcer la mise à jour du Renderer avant la fin de la frame logique. Les autres utilisent `Publish` et sont consommés lors du `ProcessQueue`.
 
+**Piège `ProcessQueue`** : `ProcessQueue()` itère sur un snapshot du slice (`for _, e := range b.queue`). Les événements publiés via `Publish()` pendant le traitement d'un handler sont perdus quand `b.queue[:0]` vide la file après l'itération. **Tout handler qui publie un événement chaîné doit utiliser `PublishImmediate()`**.
+
 Le payload de `TileRevealed` inclut désormais un champ `reason` pour distinguer l'origine de l'action :
 - `"player_action"` : Révélation explicite par un clic ou une capacité du joueur. Déclenche les triggers d'IA (`OnReveal`).
 - `"system_hide"` : Fermeture automatique (fin de tour, échec de match). Ignoré par les triggers d'IA.
@@ -247,9 +249,11 @@ CreatureFled       // Fuite (ex: Singe Mousse)
 ResourceMatured    // Changement de stade
 ResourcePropagated // Expansion (directions cardinales uniquement)
 AssociationMade    // Paire trouvée
-PlayerDamaged      // Dégâts subis
+PlayerDamaged      // Dégâts subis (reason: "physical", "toxicity", "match_error", etc.)
 TurnEnded          // Fin de tour
 CreatureAttacked   // Attaque de créature (agressivité ≥ 100) — payload: hit_target (*Position)
+AmnesiaStarted     // Début d'amnésie (payload: turns int) — message droite "AMNÉSIE ! X tours."
+AmnesiaEnded       // Fin d'amnésie — message gauche "La mémoire revient..."
 ```
 
 ---

@@ -208,9 +208,9 @@ L'interface assiste le joueur dans sa gestion des ressources via un système de 
 ### Notifications Défilantes (HUD)
 
 Pour maintenir l'immersion tout en informant le joueur, le HUD intègre deux zones de messages dynamiques :
-- **Zone Gauche (Portrait/Inventaire)** : Confirme l'activation des capacités d'objets (ex: "Vous vous sentez évanescent").
-- **Zone Droite (Jauges/Minimap)** : Signale les événements de combat et les erreurs (ex: "CONFRONTATION ! -10 HP", "MATCH INVALIDE").
-- **Comportement** : Les messages utilisent une file d'attente pour éviter les chevauchements et défilent de droite à gauche deux fois avant de disparaître.
+- **Zone Gauche (Portrait/Inventaire)** : Messages narratifs et effets d'objets (ex: "Vous vous sentez évanescent", "Vous êtes déboussolé.", "Vous toussez du sang.", "La mémoire revient...", "NIVEAU X ATTEINT !").
+- **Zone Droite (Jauges/Minimap)** : Événements de combat et erreurs (ex: "CONFRONTATION ! -10 HP", "TOXICITÉ ! -X HP", "AMNÉSIE ! X tours.", "MATCH INVALIDE !", "MATCH IGNORE !").
+- **Comportement** : Les messages utilisent une file d'attente pour éviter les chevauchements et défilent de droite à gauche deux fois avant de disparaître. La vitesse de défilement est contrôlable via `MessageSpeed` dans la console de debug (F12).
 
 ### Troubles cognitifs (Status Effects)
 
@@ -219,7 +219,7 @@ Le joueur peut subir des altérations mentales qui déforment l'interface :
 - **Aphasia** – brouille les labels des boutons (ex: "MATCH" devient "???" ou est permuté).
 - **Agnosia** – rend les boutons visuellement indifférenciés (couleurs altérées).
 - **Ataxia** – scramble les positions des boutons (ex: le bouton Match peut basculer au coin bas-droit).
-- **Amnesia** – désactive aléatoirement des boutons (30% de chance d'"oublier" un bouton).
+- **Amnesia** – désactive aléatoirement des boutons (30% de chance d'"oublier" un bouton). Seulement déclenché par le Spectre (pas l'Echo Hound) lorsqu'une attaque touche le joueur. Affiche "AMNÉSIE ! X tours." sur la zone droite et "Vous avez du mal à vous souvenir." sur la zone gauche. À la fin, "La mémoire revient..." et l'inventaire est révélé automatiquement.
 
 Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
 
@@ -318,7 +318,7 @@ Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il
 | **Shadowstalker** | Global | Proximité (4) | Attraction joueur | Swap | Rebond | 80 | Prédateur qui chasse discrètement le joueur. Très agressif de base. |
 | **Burrower** | Désert | Auto | Relatif | Under | Phase (terre) | 20 | Créature fouisseuse qui se cache sous terre (Exclusif). |
 | **Specter** | Grotte | Echo | Errance | Under | Phase (murs) | 60 | Fantôme qui traverse les murs (Exclusif). |
-| **Stonewarden** | Global | Vue | Orientation | Normal | Stop | 40 | Gardien immobile qui patrouille si révélé. Territorial. |
+| **Stonewarden** | Global | Vue | Orientation | Normal | Stop | 40 | Gardien immobile qui patrouille si révélé. Son attaque déclenche un séisme de rotation (90°) avec un effet visuel de ghost shader. |
 | **Echo Hound** | Marais | Echo | Attraction (baie) | Normal | Glisse | 50 | Chien rapide qui réagit aux révélations (Exclusif). |
 | **Moss Monkey** | Forêt | Proximité (4) | Target Empty | Normal | Glisse | 0 (dynamique) | Saboteur qui rebouche les cases vides. Agressivité = % cases vides. Fuit si saturé. |
 | **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | 0 | Créature timide dont l'essence apaise l'esprit. |
@@ -429,8 +429,8 @@ Le jeu supporte la persistance des données :
 | Skip (si 2 tuiles révélées) | Espace ou Bouton SKIP |
 | Fin de tour forcée | Espace (sans match en cours) ou Bouton TURN |
 | Naviguer entre les zones | Flèches ou ZQSD / WASD / Clic Sortie |
-| Rotation plateau (Visuel) | + (Horaire) / - (Anti-horaire) |
-| Reset rotation | R |
+| Rotation plateau (Visuel) | + (Horaire) / - (Anti-horaire) — déclenche un effet de séisme visuel (ghost shader 90°) |
+| Reset rotation | R — réinitialise la rotation avec l'angle correspondant (1, 2 ou 3 × 90°) |
 | Basculer Plein Écran | F11 ou Bouton F/W (Portrait) |
 
 #### Gestion et Inventaire

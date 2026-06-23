@@ -366,11 +366,17 @@ Séparation des responsabilités :
 - **Input**: Capture les événements (clavier, souris, tactile), gère la navigation entre les zones et les raccourcis clavier. Supporte les interactions mobiles (Wasm) via le défilement de l'inventaire par glissement (Drag-to-scroll) et l'appui long pour la suppression.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
-    - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets.
-    - **Zone Droite**: Affiche les feedbacks de gameplay immédiats (Confrontations, erreurs de match).
+    - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets (ex: "Vous êtes déboussolé.", "Vous toussez du sang.", "La mémoire revient...").
+    - **Zone Droite**: Affiche les feedbacks de gameplay immédiats (ex: "CONFRONTATION ! -10 HP", "TOXICITÉ ! -X HP", "AMNÉSIE ! X tours.", "MATCH INVALIDE !").
 - **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
 
-- **DebugWindow** (`ui/debug/window.go`) : Console de débogage interactive (F12) permettant de modifier les statistiques, la difficulté, et de filtrer les entités spawnables.
+- **Quake Shader** (`renderer/shader/quake.kage`) : Effet visuel de séisme déclenché par le Stonewarden. Utilise un frame buffer 990×990 avec SubImage pour cropper en 700×700. Le ghost snapshot (ancienne orientation) est roté dans le shader et le résultat est nettoyement affiché sur le playmat.
+  - **Snapshot** (`playmatSnapshot`) : Capture de 990×990 (playmat 700×700 + `QuakePadding` = 145px par côté) pour éviter les espaces vides lors de la rotation.
+  - **Frame Buffer** (`quakeFrameBuffer`) : 990×990, reçoit la sortie du shader, puis `SubImage` centre 700×700 affiché à `(PlaymatX, PlaymatY)`.
+  - **Uniforms** : `RotationAngle` (Pi/2 ou -Pi/2), `Clockwise` (bool), `GhostSize` [990,990], `Resolution` [990,990].
+  - **Rendu** : `RenderQuakeOverlay` appelé après `ProcessGlobalEffects` pour le plus haut z-index.
+
+- **DebugWindow** (`ui/debug/window.go`) : Console de débogage interactive (F12) permettant de modifier les statistiques, la difficulté, et de filtrer les entités spawnables. Contrôle la vitesse de défilement des messages HUD (`MessageSpeed` via `+`/`-`).
 
 - **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip. Coordonne le **Feedback de Coût** vers les jauges du HUD.
 
@@ -416,7 +422,9 @@ Pour les révélations de tuiles, le bus transporte aussi les informations néce
 eventBus.Publish(event.NewEntityRevealedEvent(position, entityID, gridID, flipDirection))
 ```
 
-**Nouveau type d'événement** : `CreatureAttacked` — Publié par `AggressionSystem` quand l'agressivité ≥ 100 à la fin du flip. Payload : `hit_target` (*entity.Position, nil si joueur hors zone). Utilisé par le renderer pour déclencher l'animation de lunge.
+**Piège `ProcessQueue`** : `ProcessQueue()` itère sur un snapshot du slice. Les événements publiés via `Publish()` pendant le traitement d'un handler sont perdus. **Tout handler qui publie un événement chaîné doit utiliser `PublishImmediate()`**.
+
+**Nouveau type d'événement** : `CreatureAttacked` — Publié par `AggressionSystem` quand l'agressivité ≥ 100 à la fin du flip. Payload : `hit_target` (*entity.Position, nil si joueur hors zone). Utilisé par le renderer pour déclencher l'animation de lunge. `AmnesiaStarted` (payload: `turns int`) et `AmnesiaEnded` — gèrent les messages HUD et l'inventaire.
 
 ## Lancer le jeu
 
@@ -561,7 +569,7 @@ type MovementProfile struct {
 | **Echo Hound** | Echo             | Attraction (baie)      | Manifest | Normal | 50 |
 | **Burrower** | Auto             | Relatif                | Manifest | Under | 20 |
 | **Specter** | Echo             | Errance                | Cloaked | Under | 60 |
-| **Stonewarden** | OnReveal         | Orientation            | Manifest | Normal | 40 |
+| **Stonewarden** | OnReveal         | Orientation            | Manifest | Normal | 40 | attaque = rotation grille 90° + shader quake |
 | **Moss Monkey** | Proximité (4)    | Attraction (Empty)     | Manifest | Normal | 0 (dynamique) |
 | **Flutterwing** | Proximité (2)    | Répulsion (Player)     | Manifest | Over | 0 |
 | **Fleeing Sprite** | Proximité (3)    | Répulsion (Player)     | Manifest | Normal | 0 |
