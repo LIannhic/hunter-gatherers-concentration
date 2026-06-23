@@ -80,6 +80,7 @@ type Handler struct {
 	revealedGridIDs  []string         // GridID associé à chaque tuile révélée (pour cross-zone)
 	isProcessing     bool             // Évite les clics pendant l'animation / verrouille la grille quand 2 tuiles sont retournées
 	footstepTrackIDs []string         // FIFO des empreintes de pas (max 2 visibles)
+	isMovedThisTurn  bool             // true si le joueur a cliqué sur une tuile ce tour
 
 	isTransitioning bool // Bloque les entrées pendant le changement de zone
 	transitionTimer int  // Frames restantes pour le blocage
@@ -132,6 +133,9 @@ func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
 
 			// L'entrée est la direction OPPOSÉE
 			h.entranceDir = world.DreamPlane.OppositeDirection(arrivalDir)
+
+			// Crée une empreinte de pas à la position d'arrivée
+			h.spawnFootstepAtArrival(arrivalDir)
 
 			// Si la zone n'est pas "ouverte", on lance l'animation de scellage (Révélé -> Caché)
 			if !world.IsNavigationOpen(gridID) {
@@ -649,6 +653,7 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 			FlipDirection: flipDir,
 		}
 		if err := cmd.Execute(); err == nil {
+			h.isMovedThisTurn = true
 			fmt.Printf("[INPUT] Clic en %v sur %s. Position logique du joueur : %v\n", pos, gridID, h.world.GetPlayerPosition())
 			info := h.getEntityInfo(ent)
 			num := len(h.revealedTiles) + 1
@@ -837,6 +842,7 @@ func (h *Handler) processSkip() {
 		if h.OnTurnEnd != nil {
 			h.OnTurnEnd()
 		}
+		h.isMovedThisTurn = false
 		return
 	}
 
@@ -938,6 +944,7 @@ func (h *Handler) processSkip() {
 	if h.OnTurnEnd != nil {
 		h.OnTurnEnd()
 	}
+	h.isMovedThisTurn = false
 }
 
 // hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles (toute la pile).
@@ -1770,6 +1777,7 @@ func (h *Handler) ResetTimerSkip() {
 	if h.OnTurnEnd != nil {
 		h.OnTurnEnd()
 	}
+	h.isMovedThisTurn = false
 }
 
 // ResetGameState réinitialise l'état du jeu (pour retour au menu)
@@ -1782,18 +1790,30 @@ func (h *Handler) ResetGameState() {
 	h.victoryTimer = nil
 	h.entranceDir = -1
 	h.portablePortalMode = false
+	h.isMovedThisTurn = false
 	h.ClearFootsteps()
 	if h.world != nil {
 		h.world.ActiveAnimationCount = 0
 	}
 }
 
-// ClearFootsteps supprime toutes les empreintes de pas actives du monde.
+// ClearFootsteps supprime les empreintes de pas actives du monde.
+// Si le joueur s'est déplacé ce tour, garde la dernière trace.
 func (h *Handler) ClearFootsteps() {
-	for _, id := range h.footstepTrackIDs {
-		h.world.RemoveEntity(entity.ID(id))
+	if h.isMovedThisTurn && len(h.footstepTrackIDs) > 1 {
+		// Garde seulement la dernière trace
+		toRemove := h.footstepTrackIDs[:len(h.footstepTrackIDs)-1]
+		for _, id := range toRemove {
+			h.world.RemoveEntity(entity.ID(id))
+		}
+		h.footstepTrackIDs = h.footstepTrackIDs[len(h.footstepTrackIDs)-1:]
+	} else {
+		// Pas déplacé : tout supprimer
+		for _, id := range h.footstepTrackIDs {
+			h.world.RemoveEntity(entity.ID(id))
+		}
+		h.footstepTrackIDs = h.footstepTrackIDs[:0]
 	}
-	h.footstepTrackIDs = h.footstepTrackIDs[:0]
 }
 
 // triggerSealingAnimation gère l'animation de bascule des tuiles d'entrée
@@ -1915,6 +1935,46 @@ func (h *Handler) spawnFootstepTrack(clickX, clickY int, tilePos board.Position,
 		h.footstepTrackIDs = h.footstepTrackIDs[1:]
 		h.world.RemoveEntity(oldID)
 	}
+}
+
+// spawnFootstepAtArrival crée une empreinte de pas sur le bord de la tuile d'arrivée
+// quand le joueur entre dans une nouvelle zone.
+func (h *Handler) spawnFootstepAtArrival(arrivalDir entity.Direction) {
+	pos := h.world.GetPlayerPosition()
+	grid, ok := h.world.GetGrid(h.world.CurrentGridID)
+	if !ok || grid == nil {
+		return
+	}
+
+	tileSize := float64(h.renderer.GetTileSize())
+
+	// Direction vers l'intérieur du plateau (opposée à l'arrivée)
+	var dirX, dirY float64
+	switch arrivalDir {
+	case entity.DirNorth:
+		dirX, dirY = 0, 1
+	case entity.DirSouth:
+		dirX, dirY = 0, -1
+	case entity.DirEast:
+		dirX, dirY = -1, 0
+	case entity.DirWest:
+		dirX, dirY = 1, 0
+	default:
+		dirX, dirY = 0, 1
+	}
+
+	edgeDist := tileSize/2 + 4
+	offsetX := dirX * edgeDist
+	offsetY := dirY * edgeDist
+	angle := math.Atan2(-dirY, -dirX)
+
+	track := entity.NewTrack("footprints", 3, pos, pos)
+	track.SetGridID(h.world.CurrentGridID)
+	track.OffsetX = offsetX
+	track.OffsetY = offsetY
+	track.Angle = angle
+	h.world.Entities.Register(track)
+	h.footstepTrackIDs = append(h.footstepTrackIDs, string(track.GetID()))
 }
 
 // exitMatchable est un wrapper pour soumettre les sorties au moteur d'association
