@@ -94,7 +94,7 @@ Le jeu punit l'inattention et la précipitation via une matrice de décision str
 ### Confrontation et Animations d'Attaque
 
 Chaque créature possède une **Zone de Menace** (directions qu'elle attaque).
-- **Placement Périphérique** : Le joueur agit depuis le bord des cases. Sa position (`entity.Position`) et son ancrage (`BorderPosition`) sont déterminés par l'endroit où il clique pour révéler une tuile.
+- **Placement Périphérique** : Le joueur agit depuis le bord des cases du plateau de jeu. Sa position (`entity.Position`) et son ancrage (`BorderPosition`) sont déterminés par l'endroit où il clique pour révéler une tuile. À l'arrivée dans une zone, le joueur est placé sur le bord du plateau de jeu côté navigation, avec une empreinte de pas indicative.
 - **Animation de Lunge** : Lors du dévoilement (Hidden -> Revealed), la créature effectue une translation brusque de quelques pixels vers sa zone de menace, suivie d'un retour lent à sa position initiale.
 - **Indicateurs de Menace** : Durant cette animation, des demi-cercles blancs (Intention de Menace) apparaissent entre la créature et les cases qu'elle menace. Ces indicateurs s'affichent même si la cible est en dehors de la grille (sur le tapis de jeu).
 
@@ -309,6 +309,16 @@ Les créatures laissent derrière elles des traces qui respectent des règles de
 - **Rayons d'Attaque (Intent Beam)** : Rendu sur le calque **Over**, positionné entre la créature et sa cible. Rouge pour une attaque réussie, Blanc pour une simple zone de menace.
 
 Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il s'agisse d'un plateau 3x3 ou 6x6.
+
+#### Empreintes de pas du joueur
+
+Le joueur laisse des empreintes de pas sur le plateau de jeu lors de ses actions :
+- **Création** : Une empreinte de pas est placée sur le bord extérieur de chaque tuile que le joueur clique pour révéler. L'orientation pointe vers le centre de la tuile.
+- **FIFO (max 2)** : Au plus deux empreintes sont visibles simultanément. La troisième fait disparaître la plus ancienne.
+- **Arrivée en zone** : Une empreinte de pas est créée automatiquement sur le bord du plateau de jeu côté navigation lorsque le joueur entre dans une nouvelle zone.
+- **Fin de tour** :
+  - Si le joueur s'est déplacé (a cliqué sur au moins une tuile) : la dernière empreinte est conservée, les précédentes sont supprimées.
+  - Si le joueur n'a pas bougé (passé son tour sans cliquer) : toutes les empreintes sont supprimées.
 
 ### Bestiaire
 

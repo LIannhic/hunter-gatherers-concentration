@@ -359,6 +359,11 @@ func (w *World) GenerateLayout(id string) {
 	w.CurrentGridID = w.DreamPlane.StartZoneID
 	w.UpdateDiscovery()
 
+	// Place le joueur au centre de la zone de départ
+	if grid, ok := w.Grids[w.CurrentGridID]; ok {
+		w.SetPlayerPosition(entity.Position{X: grid.Width / 2, Y: grid.Height / 2})
+	}
+
 	w.PopulateInitialStructures()
 	w.PopulateZones()
 
