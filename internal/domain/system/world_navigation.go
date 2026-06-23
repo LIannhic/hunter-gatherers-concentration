@@ -484,7 +484,7 @@ func (w *World) RotateGrid(gridID string) error {
 	}
 
 	// 4. Mettre à jour la position du joueur si il est sur cette grille
-	if w.CurrentGridID == gridID {
+	if w.CurrentGridID == gridID && w.playerOnBoard {
 		oldPlayerPos := w.playerPosition
 		w.playerPosition = board.Position{
 			X: oldHeight - 1 - oldPlayerPos.Y,

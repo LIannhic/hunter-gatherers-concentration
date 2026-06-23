@@ -46,6 +46,7 @@ type World struct {
 
 	// Player
 	playerPosition entity.Position
+	playerOnBoard  bool // true si le joueur est physiquement présent sur le plateau
 
 	// Turn state tracking
 	tilesFlippedThisTurn []board.Position // Tracks tiles flipped in current turn (max 2)
@@ -94,6 +95,7 @@ func NewWorld() *World {
 		Hub:                  meta.NewHub(),
 		Player:               p,
 		playerPosition:       entity.Position{X: 0, Y: 0},
+		playerOnBoard:        true,
 		tilesFlippedThisTurn: make([]board.Position, 0),
 		lastTurnNumber:       0,
 		TurnTimer:            NewTurnTimer(meta.GetSettings(meta.LevelNormal).TurnTimerDuration),

@@ -82,6 +82,8 @@ func (m *mockWorldState) GetNearbyCreatures(pos entity.Position, radius int) []*
 	return nil
 }
 
+func (m *mockWorldState) IsPlayerOnBoard() bool { return true }
+
 func (m *mockWorldState) GetEmptyPlots() []entity.Position {
 	return nil
 }

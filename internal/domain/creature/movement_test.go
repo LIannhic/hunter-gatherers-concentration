@@ -101,6 +101,7 @@ func TestCreatureOrientationRespectsTransformation(t *testing.T) {
 type mockWorldQuery struct{}
 
 func (m *mockWorldQuery) GetPlayerPosition() entity.Position                             { return entity.Position{} }
+func (m *mockWorldQuery) IsPlayerOnBoard() bool                                         { return true }
 func (m *mockWorldQuery) GetNearbyCreatures(pos entity.Position, radius int) []*Creature { return nil }
 func (m *mockWorldQuery) GetResources(pos entity.Position, radius int) []string          { return nil }
 func (m *mockWorldQuery) IsValidMove(pos entity.Position) bool                           { return true }

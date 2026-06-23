@@ -696,18 +696,16 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 					GridID:   gridID,
 					Position: pos,
 					OnSuccess: func() {
-						h.revealedTiles = nil
-						h.revealedGridIDs = nil
-						h.isProcessing = false
-						h.ClearSelection()
-						if h.OnTurnEnd != nil {
-							h.OnTurnEnd()
-						}
-					},
-				}
-				if err := cmd.Execute(); err != nil {
-					fmt.Printf("[ACTION] Erreur défausse : %v\n", err)
-				}
+					h.revealedTiles = nil
+					h.revealedGridIDs = nil
+					h.isProcessing = false
+					h.ClearSelection()
+					h.endTurn()
+				},
+			}
+			if err := cmd.Execute(); err != nil {
+				fmt.Printf("[ACTION] Erreur défausse : %v\n", err)
+			}
 				return nil
 			}
 
@@ -835,14 +833,20 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 	}
 }
 
+// endTurn synchronise l'état du joueur sur le plateau puis termine le tour.
+func (h *Handler) endTurn() {
+	h.world.SetPlayerOnBoard(h.isMovedThisTurn)
+	if h.OnTurnEnd != nil {
+		h.OnTurnEnd()
+	}
+	h.isMovedThisTurn = false
+}
+
 // processSkip recache les tuiles révélées et termine le tour.
 func (h *Handler) processSkip() {
-	// Si rien à cacher, on se contente d'appeler OnTurnEnd (le reset du timer est géré ailleurs)
+	// Si rien à cacher, on se contente d'appeler endTurn (le reset du timer est géré ailleurs)
 	if len(h.revealedTiles) == 0 {
-		if h.OnTurnEnd != nil {
-			h.OnTurnEnd()
-		}
-		h.isMovedThisTurn = false
+		h.endTurn()
 		return
 	}
 
@@ -941,10 +945,7 @@ func (h *Handler) processSkip() {
 	h.hideAllTilesInGrid()
 	h.ClearSelection()
 
-	if h.OnTurnEnd != nil {
-		h.OnTurnEnd()
-	}
-	h.isMovedThisTurn = false
+	h.endTurn()
 }
 
 // hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles (toute la pile).
@@ -1057,9 +1058,7 @@ func (h *Handler) processMergeAttempt() {
 			h.isProcessing = false
 			h.ClearSelection()
 
-			if h.OnTurnEnd != nil {
-				h.OnTurnEnd()
-			}
+			h.endTurn()
 		},
 		OnFailure: func() {
 			fmt.Printf("[MERGE] ❌ Échec !\n")
@@ -1067,9 +1066,7 @@ func (h *Handler) processMergeAttempt() {
 						h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
-			if h.OnTurnEnd != nil {
-				h.OnTurnEnd()
-			}
+			h.endTurn()
 		},
 	}
 
@@ -1166,9 +1163,7 @@ func (h *Handler) processMatchAttempt() {
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
-			if h.OnTurnEnd != nil {
-				h.OnTurnEnd()
-			}
+			h.endTurn()
 		},
 		OnFailure: func() {
 			fmt.Printf("[MATCH] ❌ Échec ! %s et %s ne correspondent pas.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
@@ -1176,9 +1171,7 @@ func (h *Handler) processMatchAttempt() {
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
-			if h.OnTurnEnd != nil {
-				h.OnTurnEnd()
-			}
+			h.endTurn()
 		},
 	}
 
@@ -1487,16 +1480,12 @@ func (h *Handler) tryMatchSelected() {
 				OnSuccess: func() {
 					fmt.Println("[MATCH] ✅ Succès !")
 					h.ClearSelection()
-					if h.OnTurnEnd != nil {
-						h.OnTurnEnd()
-					}
+					h.endTurn()
 				},
 				OnFailure: func() {
 					fmt.Println("[MATCH] ❌ Échec !")
 					h.ClearSelection()
-					if h.OnTurnEnd != nil {
-						h.OnTurnEnd()
-					}
+					h.endTurn()
 				},
 			}
 
@@ -1774,10 +1763,7 @@ func (h *Handler) ResetTimerSkip() {
 	}
 	h.isProcessing = false
 	h.ClearSelection()
-	if h.OnTurnEnd != nil {
-		h.OnTurnEnd()
-	}
-	h.isMovedThisTurn = false
+	h.endTurn()
 }
 
 // ResetGameState réinitialise l'état du jeu (pour retour au menu)
@@ -1793,6 +1779,7 @@ func (h *Handler) ResetGameState() {
 	h.isMovedThisTurn = false
 	h.ClearFootsteps()
 	if h.world != nil {
+		h.world.SetPlayerOnBoard(false)
 		h.world.ActiveAnimationCount = 0
 	}
 }
@@ -1940,6 +1927,9 @@ func (h *Handler) spawnFootstepTrack(clickX, clickY int, tilePos board.Position,
 // spawnFootstepAtArrival crée une empreinte de pas sur le bord de la tuile d'arrivée
 // quand le joueur entre dans une nouvelle zone.
 func (h *Handler) spawnFootstepAtArrival(arrivalDir entity.Direction) {
+	if !h.world.IsPlayerOnBoard() {
+		return
+	}
 	pos := h.world.GetPlayerPosition()
 	grid, ok := h.world.GetGrid(h.world.CurrentGridID)
 	if !ok || grid == nil {

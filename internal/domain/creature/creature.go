@@ -121,6 +121,7 @@ type AI interface {
 // WorldState interface pour que l'IA puisse observer le monde
 type WorldState interface {
 	GetPlayerPosition() entity.Position
+	IsPlayerOnBoard() bool
 	GetNearbyCreatures(pos entity.Position, radius int) []*Creature
 	GetResources(pos entity.Position, radius int) []string
 	IsValidMove(pos entity.Position) bool
@@ -186,6 +187,9 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 		return Action{Type: "idle"}
 
 	case "fleeing":
+		if !world.IsPlayerOnBoard() {
+			return Action{Type: "idle"}
+		}
 		playerPos := world.GetPlayerPosition()
 		creaturePos := c.GetPosition()
 
@@ -206,6 +210,9 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 		return Action{Type: "move", Direction: bestMove}
 
 	case "hunting":
+		if !world.IsPlayerOnBoard() {
+			return Action{Type: "idle"}
+		}
 		playerPos := world.GetPlayerPosition()
 		creaturePos := c.GetPosition()
 
