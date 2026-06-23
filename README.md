@@ -319,7 +319,7 @@ Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il
 | **Burrower** | Désert | Auto | Relatif | Under | Phase (terre) | 20 | Créature fouisseuse qui se cache sous terre (Exclusif). |
 | **Specter** | Grotte | Echo | Errance | Under | Phase (murs) | 60 | Fantôme qui traverse les murs (Exclusif). |
 | **Stonewarden** | Global | Vue | Orientation | Normal | Stop | 40 | Gardien immobile qui patrouille si révélé. Son attaque déclenche un séisme de rotation (90°) avec un effet visuel de ghost shader. |
-| **Echo Hound** | Marais | Echo | Attraction (baie) | Normal | Glisse | 50 | Chien rapide qui réagit aux révélations (Exclusif). |
+| **Echo Hound** | Marais | Auto | Relatif | Swap | Rebond | 50 | Chien rapide qui avance et rebondit 180° quand bloqué (Exclusif). |
 | **Moss Monkey** | Forêt | Proximité (4) | Target Empty | Normal | Glisse | 0 (dynamique) | Saboteur qui rebouche les cases vides. Agressivité = % cases vides. Fuit si saturé. |
 | **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | 0 | Créature timide dont l'essence apaise l'esprit. |
 | **Fleeing Sprite** | Global | Proximité (3) | Répulsion joueur | Normal | Glisse | 0 | Étincelle d'énergie vive révélant les dangers. |

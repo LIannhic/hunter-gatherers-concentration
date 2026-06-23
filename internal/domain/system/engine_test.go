@@ -15,8 +15,8 @@ func TestNewEngine(t *testing.T) {
 		t.Error("Engine should reference world")
 	}
 
-	if len(engine.systems) != 9 {
-		t.Errorf("Engine should have 9 systems, got %d", len(engine.systems))
+	if len(engine.systems) != 10 {
+		t.Errorf("Engine should have 10 systems, got %d", len(engine.systems))
 	}
 }
 

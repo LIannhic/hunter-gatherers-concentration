@@ -338,8 +338,10 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 		switch modeStr {
 		case "under":
 			layer = LayerUnder
-		case "over", "earthquake": // Le séisme est un rendu Over, tout simplement.
+		case "over", "earthquake", "swap":
 			layer = LayerOver
+		case "swap_under":
+			layer = LayerNormal
 		default:
 			layer = LayerNormal
 		}
@@ -349,7 +351,7 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 			if modeStr == "earthquake" {
 				flipDir = r.computeFlipDirection(board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y})
 			}
-			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 60, layer, modeStr, flipDir)
+			r.AnimManager.StartTileMove(world, world.CurrentGridID, entityID, board.Position{X: from.X, Y: from.Y}, board.Position{X: to.X, Y: to.Y}, 45, layer, modeStr, flipDir)
 		}
 	})
 
@@ -409,7 +411,7 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 				newID,
 				board.Position{X: from.X, Y: from.Y},
 				board.Position{X: to.X, Y: to.Y},
-				50,
+				45,
 				LayerNormal,
 				"propagate",
 				entity.FlipRight,

@@ -414,7 +414,7 @@ func TestCreatureWithMovementProfile(t *testing.T) {
 		expectedMode    MoveMode
 	}{
 		{"specter", TriggerOnEcho, ModeUnder},
-		{"echo_hound", TriggerOnEcho, ModeNormal},
+		{"echo_hound", TriggerAuto, ModeSwap},
 		{"fleeing_sprite", TriggerProximity, ModeNormal},
 	}
 

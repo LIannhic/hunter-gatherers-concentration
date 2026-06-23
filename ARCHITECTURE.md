@@ -566,7 +566,7 @@ type MovementProfile struct {
 |----------|------------------|------------------------|------------|------|----------------|
 | **Lumifly** | Auto             | Attraction (baie)      | Manifest | Over | 0 |
 | **Shadowstalker** | Proximité (4)    | Attraction (Player)    | Cloaked | Swap | 80 |
-| **Echo Hound** | Echo             | Attraction (baie)      | Manifest | Normal | 50 |
+| **Echo Hound** | Auto             | Relatif                | Manifest | Swap | 50 | avance et rebondit 180° quand bloqué |
 | **Burrower** | Auto             | Relatif                | Manifest | Under | 20 |
 | **Specter** | Echo             | Errance                | Cloaked | Under | 60 |
 | **Stonewarden** | OnReveal         | Orientation            | Manifest | Normal | 40 | attaque = rotation grille 90° + shader quake |

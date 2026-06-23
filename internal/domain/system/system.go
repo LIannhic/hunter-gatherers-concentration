@@ -708,8 +708,6 @@ func (s *CreatureMovementSystem) Update(world *World) {
 			case "stonewarden":
 				profile.Trigger.Type = creature.TriggerAuto
 				profile.Navigation.Type = creature.NavOrientation
-			case "echo_hound":
-				profile.Navigation.Target = creature.TargetResource
 			}
 		}
 
@@ -915,12 +913,28 @@ func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *cr
 					plotNew.EntitiesID = append(plotNew.EntitiesID, idStr)
 				}
 
-				swappedEntity.SetPosition(oldPos)
-				c.SetPosition(newPos)
-				world.Entities.UpdatePosition(swappedEntity.GetID(), oldPos)
-				world.Entities.UpdatePosition(c.GetID(), newPos)
+			swappedEntity.SetPosition(oldPos)
+			c.SetPosition(newPos)
+			world.Entities.UpdatePosition(swappedEntity.GetID(), oldPos)
+			world.Entities.UpdatePosition(c.GetID(), newPos)
 
-				return true
+			isCloaked := false
+			if c.MovementProfile != nil {
+				isCloaked = c.MovementProfile.Perception.Stealth == creature.StealthCloaked
+			}
+			world.EventBus.Publish(event.NewCreatureMovedEvent(
+				idStr, oldPos, newPos, "swap", isCloaked, false,
+			))
+
+			otherHidden := false
+			if otherCreature, ok := swappedEntity.(*creature.Creature); ok && otherCreature.MovementProfile != nil {
+				otherHidden = otherCreature.MovementProfile.Perception.Stealth == creature.StealthCloaked
+			}
+			world.EventBus.Publish(event.NewCreatureMovedEvent(
+				topID, newPos, oldPos, "swap_under", otherHidden, false,
+			))
+
+			return true
 			}
 		}
 	}
