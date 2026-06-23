@@ -8,15 +8,23 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 )
 
-// FillGridRandomly remplit un grid avec des paires d'entités et des pièges
-// en respectant un équilibre strict par grille : 40% Ressources, 40% Créatures, 20% Pièges.
+type gridEntity struct {
+	name       string
+	isCreature bool
+	exclusive  bool
+	drawCount  int
+}
+
+// FillGridRandomly remplit un grid avec des paires d'entités et des pièges.
+// Pool commun créatures + ressources, tirage aléatoire, retrait après 2 paires (4 tuiles).
+// Priorité aux exclusives du biome. 2 paires de pièges fixes.
 func (w *World) FillGridRandomly(gridID string) {
 	grid, ok := w.GetGrid(gridID)
 	if !ok {
 		return
 	}
 
-	fmt.Printf("[DOMAIN-POP] Filling grid %s (Biome: %s) with strict ratios...\n", gridID, grid.Biome)
+	fmt.Printf("[DOMAIN-POP] Filling grid %s (Biome: %s)...\n", gridID, grid.Biome)
 
 	// 1. Liste toutes les positions libres
 	var positions []entity.Position
@@ -31,55 +39,22 @@ func (w *World) FillGridRandomly(gridID string) {
 	}
 
 	totalSlots := len(positions)
-	totalPairs := totalSlots / 2
-	if totalPairs == 0 {
+	if totalSlots == 0 {
 		return
 	}
 
-	// 2. Calcul des quotas par grille (Ratios 40/40/20 avec ajustement pour 3x3)
-	resourcePairsQuota := (totalPairs * 40) / 100
-	creaturePairsQuota := (totalPairs * 40) / 100
+	rand.Shuffle(len(positions), func(i, j int) {
+		positions[i], positions[j] = positions[j], positions[i]
+	})
 
-	// AJUSTEMENT POUR PETITES GRILLES (ex: 3x3 = 4 paires max) :
-	// On veut au moins 3 ou 4 paires pour ne pas avoir une grille vide.
-	if totalPairs <= 4 {
-		resourcePairsQuota = 2
-		creaturePairsQuota = 2
-		if totalPairs < 4 { // Cas 3x3 standard sans obstacle = 4 paires. Si obstacle, on réduit.
-			resourcePairsQuota = 1
-			creaturePairsQuota = 1
-		}
-	}
+	// 2. Construire le pool commun créatures + ressources
+	var pool []gridEntity
 
-	trapPairsQuota := totalPairs - resourcePairsQuota - creaturePairsQuota
-	if trapPairsQuota < 0 {
-		trapPairsQuota = 0
-	}
-
-	fmt.Printf("  - Quotas for %d pairs: Resources=%d, Creatures=%d, Traps=%d\n",
-		totalPairs, resourcePairsQuota, creaturePairsQuota, trapPairsQuota)
-
-	// 3. Configuration des pools d'entités (incluant l'exclusivité par biome)
-	globalResources := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
-
-	var exclusiveResource string
-	switch grid.Biome {
-	case board.BiomeForest:
-		exclusiveResource = "moss_truffle"
-	case board.BiomeCave:
-		exclusiveResource = "void_bloom"
-	case board.BiomeDesert:
-		exclusiveResource = "sand_core"
-	case board.BiomeSwamp:
-		exclusiveResource = "echo_crystal"
-	}
-
-	resourcePool := append([]string{}, globalResources...)
-
-	// Créatures globales (partout)
+	// Créatures
 	globalCreatures := []string{"lumifly", "shadowstalker", "fleeing_sprite", "flutterwing", "stonewarden"}
-
-	// Créature exclusive selon le biome
+	for _, c := range globalCreatures {
+		pool = append(pool, gridEntity{name: c, isCreature: true})
+	}
 	var exclusiveCreature string
 	switch grid.Biome {
 	case board.BiomeForest:
@@ -91,59 +66,86 @@ func (w *World) FillGridRandomly(gridID string) {
 	case board.BiomeSwamp:
 		exclusiveCreature = "echo_hound"
 	}
-
-	// Pool final pour cette grille
-	creaturePool := append([]string{}, globalCreatures...)
 	if exclusiveCreature != "" {
-		creaturePool = append(creaturePool, exclusiveCreature)
+		pool = append(pool, gridEntity{name: exclusiveCreature, isCreature: true, exclusive: true})
 	}
 
-	// 4. Mélange les positions pour une répartition spatiale aléatoire
-	rand.Shuffle(len(positions), func(i, j int) {
-		positions[i], positions[j] = positions[j], positions[i]
-	})
+	// Ressources
+	globalResources := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
+	for _, r := range globalResources {
+		pool = append(pool, gridEntity{name: r, isCreature: false})
+	}
+	var exclusiveResource string
+	switch grid.Biome {
+	case board.BiomeForest:
+		exclusiveResource = "moss_truffle"
+	case board.BiomeCave:
+		exclusiveResource = "void_bloom"
+	case board.BiomeDesert:
+		exclusiveResource = "sand_core"
+	case board.BiomeSwamp:
+		exclusiveResource = "echo_crystal"
+	}
+	if exclusiveResource != "" {
+		pool = append(pool, gridEntity{name: exclusiveResource, isCreature: false, exclusive: true})
+	}
 
+	// 3. Séparer exclusives et non-exclusives, mélanger, puis concaténer
+	var exclusives, commons []gridEntity
+	for _, e := range pool {
+		if e.exclusive {
+			exclusives = append(exclusives, e)
+		} else {
+			commons = append(commons, e)
+		}
+	}
+	rand.Shuffle(len(exclusives), func(i, j int) { exclusives[i], exclusives[j] = exclusives[j], exclusives[i] })
+	rand.Shuffle(len(commons), func(i, j int) { commons[i], commons[j] = commons[j], commons[i] })
+	pool = append(exclusives, commons...)
+
+	// 4. Pièges : 2 paires fixes
+	trapPairs := 2
+	trapTiles := trapPairs * 2
+	remainingSlots := totalSlots - trapTiles
+	if remainingSlots < 0 {
+		remainingSlots = 0
+	}
+
+	fmt.Printf("  - Total: %d slots, Traps: %d, Entities: %d\n",
+		totalSlots, trapTiles, remainingSlots)
+
+	// 5. Tirage aléatoire du pool, spawn 2 tuiles à chaque tirage, retrait après 2 paires
 	posIdx := 0
+	for remainingSlots >= 2 && len(pool) > 0 {
+		idx := rand.Intn(len(pool))
+		e := pool[idx]
 
-	// 5. Spawn des Ressources
-	exclusiveResSpawned := false
-	for i := 0; i < resourcePairsQuota; i++ {
-		var resType string
-		// Limite à UNE SEULE paire de ressource exclusive par grille
-		if exclusiveResource != "" && !exclusiveResSpawned && rand.Float32() < 0.5 {
-			resType = exclusiveResource
-			exclusiveResSpawned = true
+		if e.isCreature {
+			w.SpawnCreature(gridID, e.name, positions[posIdx])
+			w.SpawnCreature(gridID, e.name, positions[posIdx+1])
 		} else {
-			resType = resourcePool[rand.Intn(len(resourcePool))]
+			w.SpawnResource(gridID, e.name, positions[posIdx])
+			w.SpawnResource(gridID, e.name, positions[posIdx+1])
 		}
-		w.SpawnResource(gridID, resType, positions[posIdx])
-		w.SpawnResource(gridID, resType, positions[posIdx+1])
 		posIdx += 2
+		remainingSlots -= 2
+
+		e.drawCount++
+		if e.drawCount >= 2 {
+			pool = append(pool[:idx], pool[idx+1:]...)
+		} else {
+			pool[idx] = e
+		}
 	}
 
-	// 6. Spawn des Créatures
-	for i := 0; i < creaturePairsQuota; i++ {
-		// On donne une plus grande chance de spawn à la créature exclusive (50% de chance si elle existe)
-		var creType string
-		if exclusiveCreature != "" && rand.Float32() < 0.5 {
-			creType = exclusiveCreature
-		} else {
-			creType = creaturePool[rand.Intn(len(creaturePool))]
-		}
-
-		w.SpawnCreature(gridID, creType, positions[posIdx])
-		w.SpawnCreature(gridID, creType, positions[posIdx+1])
-		posIdx += 2
-	}
-
-	// 7. Spawn des Pièges
-	for i := 0; i < trapPairsQuota; i++ {
+	// 6. Spawn des Pièges
+	for i := 0; i < trapPairs; i++ {
 		w.SpawnTrap(gridID, positions[posIdx])
 		w.SpawnTrap(gridID, positions[posIdx+1])
 		posIdx += 2
 	}
 
-	// 8. Gestion de la tuile orpheline si nombre impair
+	// 7. Tuile orpheline si nombre impair
 	if posIdx < totalSlots {
 		w.SpawnTrap(gridID, positions[posIdx])
 	}

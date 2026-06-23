@@ -27,12 +27,14 @@ Enfin, l'environnement est rendu vivant et menaçant par la présence de créatu
 
 ### Équilibre de la Population
 
-Chaque zone (grille) respecte désormais une répartition équilibrée et déterministe de sa population :
-- **40% de Ressources** : Objectifs principaux de récolte.
-- **40% de Créatures** : Menaces et opportunités (incluant l'espèce exclusive du biome).
-- **20% de Pièges** : Obstacles à la progression.
+Chaque zone (grille) est remplie selon un pool commun de créatures et de ressources :
+- **Pool commun** : 6 espèces de créatures (5 globales + 1 exclusive au biome) et 5 types de ressources (4 globaux + 1 exclusif au biome), soit 11 variétés au total.
+- **Priorité aux exclusives** : Les entités exclusives du biome sont placées en premier.
+- **Tirage aléatoire** : Les variétés restantes sont tirées au hasard dans le pool commun.
+- **Max 4 tuiles par variété** : Chaque espèce ou type de ressource ne peut apparaître que 2 paires (4 tuiles) maximum dans une zone.
+- **Pièges** : 2 paires fixes (4 tuiles) + une tuile orpheline si le nombre de cases est impair.
 
-Cette répartition est calculée individuellement pour chaque grille lors de sa génération, garantissant un défi constant quelle que soit la zone explorée.
+Cette répartition garantit une diversité maximale tout en laissant la part belle au hasard.
 
 ### Système d'Agressivité Modulaire (Nouveau)
 
