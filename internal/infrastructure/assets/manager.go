@@ -181,18 +181,38 @@ func (m *Manager) generateAllAssets() {
 	// Par défaut pour compatibilité
 	m.images["resource_whispering_herb"] = m.images["resource_whispering_herb_mature"]
 
+	// Void Bloom (avec stades)
+	voidBloomStages := []string{"graine", "éclosion", "pleine"}
+	for _, stage := range voidBloomStages {
+		m.images[fmt.Sprintf("resource_void_bloom_%s", stage)] = generateVoidBloom(size, VoidBloomPalette, stage)
+	}
+	m.images["resource_void_bloom"] = m.images["resource_void_bloom_pleine"]
+
+	// Moss Truffle (avec stades)
+	mossTruffleStages := []string{"bourgeon", "pousse", "mature"}
+	for _, stage := range mossTruffleStages {
+		m.images[fmt.Sprintf("resource_moss_truffle_%s", stage)] = generateMossTruffle(size, MossTrufflePalette, stage)
+	}
+	m.images["resource_moss_truffle"] = m.images["resource_moss_truffle_mature"]
+
+	// Echo Crystal (avec stades)
+	echoCrystalStages := []string{"vibrant", "résonnant"}
+	for _, stage := range echoCrystalStages {
+		m.images[fmt.Sprintf("resource_echo_crystal_%s", stage)] = generateEchoCrystal(size, EchoCrystalPalette, stage)
+	}
+	m.images["resource_echo_crystal"] = m.images["resource_echo_crystal_résonnant"]
+
+	// Sand Core (avec stades)
+	sandCoreStages := []string{"instable", "stable"}
+	for _, stage := range sandCoreStages {
+		m.images[fmt.Sprintf("resource_sand_core_%s", stage)] = generateSandCore(size, SandCorePalette, stage)
+	}
+	m.images["resource_sand_core"] = m.images["resource_sand_core_stable"]
+
 	// Shadow Essence
 	m.images["resource_shadow_essence"] = generateShadowEssence(size, ShadowEssencePalette)
 	// Crystal Shard
 	m.images["resource_crystal_shard"] = generateCrystalShard(size, CrystalShardPalette)
-	// Moss Truffle
-	m.images["resource_moss_truffle"] = generateMossTruffle(size, MossTrufflePalette)
-	// Void Bloom
-	m.images["resource_void_bloom"] = generateVoidBloom(size, VoidBloomPalette)
-	// Echo Crystal
-	m.images["resource_echo_crystal"] = generateEchoCrystal(size, EchoCrystalPalette)
-	// Sand Core
-	m.images["resource_sand_core"] = generateSandCore(size, SandCorePalette)
 
 	// === CRÉATURES ===
 	// Lumifly

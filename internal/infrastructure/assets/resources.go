@@ -107,6 +107,15 @@ func generateDreamberry(size int, p ResourcePalette, stage string) *ebiten.Image
 	centerX := float32(size / 2)
 	centerY := float32(size / 2)
 
+	// Échelle selon le stade
+	scale := float32(1.0)
+	switch stage {
+	case "bourgeon":
+		scale = 0.8
+	case "fleur":
+		scale = 0.9
+	}
+
 	// Ajuste la couleur selon le stade
 	bodyColor := p.Primary
 	switch stage {
@@ -120,20 +129,20 @@ func generateDreamberry(size int, p ResourcePalette, stage string) *ebiten.Image
 
 	// Feuilles
 	leafColor := p.Secondary
-	vector.DrawFilledCircle(img, centerX-12, centerY-15, 8, leafColor, true)
-	vector.DrawFilledCircle(img, centerX+12, centerY-15, 8, leafColor, true)
-	vector.DrawFilledCircle(img, centerX, centerY-20, 10, leafColor, true)
+	vector.DrawFilledCircle(img, centerX-12*scale, centerY-15*scale, 8*scale, leafColor, true)
+	vector.DrawFilledCircle(img, centerX+12*scale, centerY-15*scale, 8*scale, leafColor, true)
+	vector.DrawFilledCircle(img, centerX, centerY-20*scale, 10*scale, leafColor, true)
 
 	// Baie principale
-	berryRadius := float32(size / 3)
-	vector.DrawFilledCircle(img, centerX, centerY+5, berryRadius, bodyColor, true)
+	berryRadius := float32(size/3) * scale
+	vector.DrawFilledCircle(img, centerX, centerY+5*scale, berryRadius, bodyColor, true)
 
 	// Reflet brillant
-	vector.DrawFilledCircle(img, centerX-8, centerY-2, berryRadius/3, p.Accent, true)
+	vector.DrawFilledCircle(img, centerX-8*scale, centerY-2*scale, berryRadius/3, p.Accent, true)
 
 	// Petites baies secondaires
-	vector.DrawFilledCircle(img, centerX-18, centerY+15, 6, p.Secondary, true)
-	vector.DrawFilledCircle(img, centerX+18, centerY+15, 6, p.Secondary, true)
+	vector.DrawFilledCircle(img, centerX-18*scale, centerY+15*scale, 6*scale, p.Secondary, true)
+	vector.DrawFilledCircle(img, centerX+18*scale, centerY+15*scale, 6*scale, p.Secondary, true)
 
 	return img
 }
@@ -177,6 +186,15 @@ func generateWhisperingHerb(size int, p ResourcePalette, stage string) *ebiten.I
 	centerX := float32(size / 2)
 	baseY := float32(size - 10)
 
+	// Échelle selon le stade
+	scale := float32(1.0)
+	switch stage {
+	case "graine":
+		scale = 0.8
+	case "pousse":
+		scale = 0.9
+	}
+
 	// Ajuste la couleur selon le stade
 	leafColor := p.Primary
 	switch stage {
@@ -188,23 +206,25 @@ func generateWhisperingHerb(size int, p ResourcePalette, stage string) *ebiten.I
 
 	// Tige principale
 	stemColor := p.Secondary
-	vector.DrawFilledRect(img, centerX-2, baseY-30, 4, 30, stemColor, true)
+	vector.DrawFilledRect(img, centerX-2*scale, baseY-30*scale, 4*scale, 30*scale, stemColor, true)
 
 	// Feuilles ondulantes
 	// Feuille gauche
-	vector.DrawFilledCircle(img, centerX-12, baseY-20, 10, leafColor, true)
-	vector.DrawFilledCircle(img, centerX-8, baseY-20, 6, p.Bg, true) // Masque
+	vector.DrawFilledCircle(img, centerX-12*scale, baseY-20*scale, 10*scale, leafColor, true)
+	vector.DrawFilledCircle(img, centerX-8*scale, baseY-20*scale, 6*scale, p.Bg, true) // Masque
 	// Feuille droite
-	vector.DrawFilledCircle(img, centerX+12, baseY-25, 10, leafColor, true)
-	vector.DrawFilledCircle(img, centerX+8, baseY-25, 6, p.Bg, true) // Masque
+	vector.DrawFilledCircle(img, centerX+12*scale, baseY-25*scale, 10*scale, leafColor, true)
+	vector.DrawFilledCircle(img, centerX+8*scale, baseY-25*scale, 6*scale, p.Bg, true) // Masque
 	// Feuille haute
-	vector.DrawFilledCircle(img, centerX, baseY-40, 10, leafColor, true)
-	vector.DrawFilledCircle(img, centerX, baseY-35, 6, p.Bg, true) // Masque
+	vector.DrawFilledCircle(img, centerX, baseY-40*scale, 10*scale, leafColor, true)
+	vector.DrawFilledCircle(img, centerX, baseY-35*scale, 6*scale, p.Bg, true) // Masque
 
 	// Effet de "murmure" (ondes sonores)
-	soundColor := p.Accent
-	vector.StrokeLine(img, centerX+20, baseY-45, centerX+28, baseY-50, 2, soundColor, true)
-	vector.StrokeLine(img, centerX+22, baseY-42, centerX+30, baseY-45, 2, soundColor, true)
+	if stage == "mature" {
+		soundColor := p.Accent
+		vector.StrokeLine(img, centerX+20, baseY-45, centerX+28, baseY-50, 2, soundColor, true)
+		vector.StrokeLine(img, centerX+22, baseY-42, centerX+30, baseY-45, 2, soundColor, true)
+	}
 
 	return img
 }
@@ -266,67 +286,103 @@ func generateCrystalShard(size int, p ResourcePalette) *ebiten.Image {
 }
 
 // generateMossTruffle crée l'icône d'une truffe de mousse
-func generateMossTruffle(size int, p ResourcePalette) *ebiten.Image {
+func generateMossTruffle(size int, p ResourcePalette, stage string) *ebiten.Image {
 	img := ebiten.NewImage(size, size)
 	img.Fill(p.Bg)
 	centerX, centerY := float32(size/2), float32(size/2)
+
+	scale := float32(1.0)
+	switch stage {
+	case "bourgeon":
+		scale = 0.8
+	case "pousse":
+		scale = 0.9
+	}
+
 	// Forme bosselée
-	vector.DrawFilledCircle(img, centerX, centerY, float32(size/4), p.Primary, true)
-	vector.DrawFilledCircle(img, centerX-10, centerY-8, float32(size/6), p.Primary, true)
-	vector.DrawFilledCircle(img, centerX+8, centerY+5, float32(size/6), p.Primary, true)
+	vector.DrawFilledCircle(img, centerX, centerY, float32(size/4)*scale, p.Primary, true)
+	vector.DrawFilledCircle(img, centerX-10*scale, centerY-8*scale, float32(size/6)*scale, p.Primary, true)
+	vector.DrawFilledCircle(img, centerX+8*scale, centerY+5*scale, float32(size/6)*scale, p.Primary, true)
 	// Points de mousse
-	vector.DrawFilledCircle(img, centerX-5, centerY+10, 4, p.Secondary, true)
-	vector.DrawFilledCircle(img, centerX+12, centerY-5, 3, p.Accent, true)
+	vector.DrawFilledCircle(img, centerX-5*scale, centerY+10*scale, 4*scale, p.Secondary, true)
+	vector.DrawFilledCircle(img, centerX+12*scale, centerY-5*scale, 3*scale, p.Accent, true)
 	return img
 }
 
 // generateVoidBloom crée l'icône d'une fleur du vide
-func generateVoidBloom(size int, p ResourcePalette) *ebiten.Image {
+func generateVoidBloom(size int, p ResourcePalette, stage string) *ebiten.Image {
 	img := ebiten.NewImage(size, size)
 	img.Fill(p.Bg)
 	centerX, centerY := float32(size/2), float32(size/2)
+
+	scale := float32(1.0)
+	switch stage {
+	case "graine":
+		scale = 0.8
+	case "éclosion":
+		scale = 0.9
+	}
+
 	// Pétales éthérés
 	for i := 0; i < 6; i++ {
 		angle := float64(i) * 3.14159 * 2 / 6
-		px := centerX + float32(math.Cos(angle))*20
-		py := centerY + float32(math.Sin(angle))*20
-		vector.DrawFilledCircle(img, px, py, 12, p.Primary, true)
+		px := centerX + float32(math.Cos(angle))*20*scale
+		py := centerY + float32(math.Sin(angle))*20*scale
+		vector.DrawFilledCircle(img, px, py, 12*scale, p.Primary, true)
 	}
 	// Noyau sombre
-	vector.DrawFilledCircle(img, centerX, centerY, 10, p.Secondary, true)
+	vector.DrawFilledCircle(img, centerX, centerY, 10*scale, p.Secondary, true)
 	// Aura
-	vector.DrawFilledCircle(img, centerX, centerY, 6, p.Accent, true)
+	if stage == "pleine" {
+		vector.DrawFilledCircle(img, centerX, centerY, 6*scale, p.Accent, true)
+	}
 	return img
 }
 
 // generateEchoCrystal crée l'icône d'un cristal d'écho
-func generateEchoCrystal(size int, p ResourcePalette) *ebiten.Image {
+func generateEchoCrystal(size int, p ResourcePalette, stage string) *ebiten.Image {
 	img := ebiten.NewImage(size, size)
 	img.Fill(p.Bg)
 	centerX, centerY := float32(size/2), float32(size/2)
+
+	scale := float32(1.0)
+	if stage == "vibrant" {
+		scale = 0.85
+	}
+
 	// Prismes
-	vector.DrawFilledRect(img, centerX-10, centerY-20, 20, 40, p.Primary, true)
-	vector.DrawFilledRect(img, centerX-22, centerY-5, 15, 25, p.Secondary, true)
-	vector.DrawFilledRect(img, centerX+7, centerY-15, 15, 30, p.Secondary, true)
+	vector.DrawFilledRect(img, centerX-10*scale, centerY-20*scale, 20*scale, 40*scale, p.Primary, true)
+	vector.DrawFilledRect(img, centerX-22*scale, centerY-5*scale, 15*scale, 25*scale, p.Secondary, true)
+	vector.DrawFilledRect(img, centerX+7*scale, centerY-15*scale, 15*scale, 30*scale, p.Secondary, true)
 	// Brillance
-	vector.DrawFilledCircle(img, centerX, centerY-10, 5, p.Accent, true)
+	vector.DrawFilledCircle(img, centerX, centerY-10*scale, 5*scale, p.Accent, true)
 	// Ondes
-	vector.StrokeCircle(img, centerX, centerY, 30, 2, p.Accent, true)
+	if stage == "résonnant" {
+		vector.StrokeCircle(img, centerX, centerY, 30*scale, 2*scale, p.Accent, true)
+	}
 	return img
 }
 
 // generateSandCore crée l'icône d'un noyau de sable
-func generateSandCore(size int, p ResourcePalette) *ebiten.Image {
+func generateSandCore(size int, p ResourcePalette, stage string) *ebiten.Image {
 	img := ebiten.NewImage(size, size)
 	img.Fill(p.Bg)
 	centerX, centerY := float32(size/2), float32(size/2)
+
+	scale := float32(1.0)
+	if stage == "instable" {
+		scale = 0.85
+	}
+
 	// Sphère centrale
-	vector.DrawFilledCircle(img, centerX, centerY, float32(size/5), p.Primary, true)
+	vector.DrawFilledCircle(img, centerX, centerY, float32(size/5)*scale, p.Primary, true)
 	// Anneau de sable
-	vector.StrokeCircle(img, centerX, centerY, 25, 4, p.Secondary, true)
+	vector.StrokeCircle(img, centerX, centerY, 25*scale, 4*scale, p.Secondary, true)
 	// Étincelles de chaleur
-	vector.DrawFilledRect(img, centerX-25, centerY-25, 4, 4, p.Accent, true)
-	vector.DrawFilledRect(img, centerX+20, centerY+20, 4, 4, p.Accent, true)
+	if stage == "stable" {
+		vector.DrawFilledRect(img, centerX-25*scale, centerY-25*scale, 4*scale, 4*scale, p.Accent, true)
+		vector.DrawFilledRect(img, centerX+20*scale, centerY+20*scale, 4*scale, 4*scale, p.Accent, true)
+	}
 	return img
 }
 
