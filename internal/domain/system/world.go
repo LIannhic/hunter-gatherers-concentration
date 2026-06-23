@@ -73,6 +73,7 @@ type DebugState struct {
 	Difficulty         meta.DifficultySettings
 	AllowedCreatures   map[string]bool
 	ActiveShaders      map[string]bool
+	MessageSpeed       float64
 }
 
 // NewWorld initialise un nouveau monde avec les réglages par défaut
@@ -98,6 +99,7 @@ func NewWorld() *World {
 		TurnTimer:            NewTurnTimer(meta.GetSettings(meta.LevelNormal).TurnTimerDuration),
 		Debug: DebugState{
 			Difficulty: meta.GetSettings(meta.LevelNormal),
+			MessageSpeed: 1.0,
 			AllowedCreatures: map[string]bool{
 				"lumifly":         true,
 				"shadowstalker":   true,
