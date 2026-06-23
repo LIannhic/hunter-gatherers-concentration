@@ -32,8 +32,9 @@ type TranslationAnim struct {
 	TargetGridX   int
 	TargetGridY   int
 	Layer         Layer
-	Mode          string // <--- Stocke "earthquake", "slide", etc.
+	Mode          string // <--- Stocke "earthquake", "slide", "swap", etc.
 	FlipDirection entity.FlipDirection
+	ArcSign       float64 // +1.0 ou -1.0, direction de l'arc perpendiculaire au mouvement (pour swap)
 }
 
 // AttackAnim représente un lunge visuel (brusque aller, lent retour)
@@ -85,6 +86,8 @@ func (m *AnimationManager) StartTileMove(world *domain.World, gridID string, ent
 	}
 	world.Components.Add(entityID, ma)
 
+	arcSign := 1.0
+
 	m.animes[entityID] = &TranslationAnim{
 		EntityID:      entityID,
 		GridID:        gridID,
@@ -101,6 +104,7 @@ func (m *AnimationManager) StartTileMove(world *domain.World, gridID string, ent
 		Layer:         layer,
 		Mode:          mode,
 		FlipDirection: flipDirection,
+		ArcSign:       arcSign,
 	}
 
 	world.EventBus.PublishImmediate(event.NewAnimationStartedEvent(mode, entityID))
@@ -157,8 +161,30 @@ func (m *AnimationManager) Update(world *domain.World) {
 		}
 		et := smoothstep(t)
 
-		curX := a.FromX + (a.ToX-a.FromX)*et
-		curY := a.FromY + (a.ToY-a.FromY)*et
+		var curX, curY float64
+		if a.Mode == "swap" || a.Mode == "swap_under" {
+			dx := a.ToX - a.FromX
+			dy := a.ToY - a.FromY
+			dist := math.Sqrt(dx*dx + dy*dy)
+			if dist < 1 {
+				dist = 1
+			}
+
+			arcHeight := dist * 0.3 * a.ArcSign
+
+			nx := -dy / dist
+			ny := dx / dist
+
+			midX := (a.FromX + a.ToX) / 2 + nx*arcHeight
+			midY := (a.FromY + a.ToY) / 2 + ny*arcHeight
+
+			omt := 1.0 - et
+			curX = omt*omt*a.FromX + 2*omt*et*midX + et*et*a.ToX
+			curY = omt*omt*a.FromY + 2*omt*et*midY + et*et*a.ToY
+		} else {
+			curX = a.FromX + (a.ToX-a.FromX)*et
+			curY = a.FromY + (a.ToY-a.FromY)*et
+		}
 
 		if comp, ok := world.Components.Get(id, "moving_animation"); ok {
 			ma := comp.(*component.MovingAnimation)
