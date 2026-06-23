@@ -22,6 +22,8 @@ var (
 	waveShaderSource []byte
 	//go:embed shader/vortex.kage
 	vortexShaderSource []byte
+	//go:embed shader/quake.kage
+	quakeShaderSource []byte
 )
 
 type EffectRenderer struct {
@@ -45,6 +47,7 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 		"heat":    heatShaderSource,
 		"wave":    waveShaderSource,
 		"vortex":  vortexShaderSource,
+		"quake":   quakeShaderSource,
 	}
 
 	for name, src := range sources {
@@ -85,6 +88,34 @@ func (r *EffectRenderer) DrawScannerEffect(dst, src *ebiten.Image, x, y int, pro
 			float32(cb) / 0xffff,
 			float32(ca) / 0xffff,
 		},
+	}
+
+	dst.DrawRectShader(w, h, shader, op)
+}
+
+// DrawQuakeEffect dessine l'effet de séisme de rotation du Stonewarden.
+// currentSrc/ghostSrc = le playmat ghost (990×990)
+// Le shader tourne le ghost et le recadre en 700×700 (taille de resolution)
+func (r *EffectRenderer) DrawQuakeEffect(dst, currentSrc, ghostSrc *ebiten.Image, x, y int, progress, rotationAngle, intensity float32, center []float32, resolution []float32, ghostSize []float32) {
+	shader, ok := r.shaders["quake"]
+	if !ok {
+		return
+	}
+
+	w, h := int(resolution[0]), int(resolution[1])
+
+	op := &ebiten.DrawRectShaderOptions{}
+	op.GeoM.Translate(float64(x), float64(y))
+	op.Images[0] = currentSrc
+	op.Images[1] = ghostSrc
+	op.Uniforms = map[string]interface{}{
+		"Time":           float32(r.count) / 60.0,
+		"Intensity":      intensity,
+		"Resolution":     resolution,
+		"Center":         center,
+		"RotationAngle":  rotationAngle,
+		"Progress":       progress,
+		"GhostSize":      ghostSize,
 	}
 
 	dst.DrawRectShader(w, h, shader, op)

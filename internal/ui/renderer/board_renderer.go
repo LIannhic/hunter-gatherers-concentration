@@ -3,6 +3,7 @@ package renderer
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"strings"
@@ -45,6 +46,9 @@ type BoardRenderer struct {
 	// Effets de scanner en cours: clé = gridID
 	activeScannerEffects map[string]*ScannerEffect
 
+	// Effets de séisme en cours: clé = gridID
+	activeQuakeEffects map[string]*QuakeEffect
+
 	// États de survol et rebond pour les animations avancées
 	hoverStates  map[string]*HoverState  // Clé: EntityID
 	bounceStates map[string]*BounceState // Clé: EntityID
@@ -55,6 +59,12 @@ type BoardRenderer struct {
 
 	// Hits en attente d'être affichés (creatureID -> position)
 	pendingHits map[string]entity.Position
+
+	// Snapshot du playmat de la frame précédente (pour le fantôme de rotation)
+	playmatSnapshot *ebiten.Image
+
+	// Frame buffer pour le shader quake (700×700, taille du playmat)
+	quakeFrameBuffer *ebiten.Image
 }
 
 // HoverState suit le progrès du survol pour une tuile
@@ -91,6 +101,16 @@ type ScannerEffect struct {
 	Elapsed   float64 // Temps écoulé en secondes
 }
 
+// QuakeEffect représente l'état d'un effet de séisme (Stonewarden)
+type QuakeEffect struct {
+	GridID         string
+	Progress       float64 // 0.0 à 1.0
+	Duration       float64 // Durée totale en secondes
+	Elapsed        float64 // Temps écoulé en secondes
+	RotationAngle  float32 // Angle de rotation de l'ancienne orientation (radians)
+	Clockwise      bool    // Sens de la rotation (true = horaire, false = antihoraire)
+}
+
 // IsActive retourne true si l'animation est en cours
 func (a *FlipAnimation) IsActive() bool {
 	return a.Progress < 1.0
@@ -114,6 +134,7 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		flipAnimations:       make(map[string]*FlipAnimation),
 		effectRenderer:       effectRenderer,
 		activeScannerEffects: make(map[string]*ScannerEffect),
+		activeQuakeEffects:  make(map[string]*QuakeEffect),
 		hoverStates:          make(map[string]*HoverState),
 		bounceStates:         make(map[string]*BounceState),
 		trackRenderer:        NewTrackRenderer(ui.TileSize),
@@ -145,6 +166,21 @@ func (r *BoardRenderer) RotateBoard(delta float64) {
 	r.SetBoardRotation(r.boardRotation + delta)
 }
 
+// TriggerQuakeEffect déclenche manuellement l'effet séisme (debug)
+func (r *BoardRenderer) TriggerQuakeEffect(gridID string, clockwise bool, angle float32) {
+	if gridID == "" {
+		return
+	}
+	r.activeQuakeEffects[gridID] = &QuakeEffect{
+		GridID:        gridID,
+		Progress:      0.0,
+		Duration:      0.75,
+		Elapsed:       0.0,
+		RotationAngle: angle,
+		Clockwise:     clockwise,
+	}
+}
+
 // ClearAnimations arrête toutes les animations de flip en cours
 func (r *BoardRenderer) ClearAnimations() {
 	r.flipAnimations = make(map[string]*FlipAnimation)
@@ -153,6 +189,7 @@ func (r *BoardRenderer) ClearAnimations() {
 // StartFlipAnimation démarre une animation de flip pour une tuile
 func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir entity.FlipDirection, entityID string, finalState entity.TileState, startTrans, endTrans entity.Transformation) {
 	key := fmt.Sprintf("%s:%d,%d:%s", gridID, pos.X, pos.Y, entityID)
+	fmt.Printf("[ANIM-DEBUG] StartFlipAnimation: Key=%s, Dir=%v, State=%s\n", key, flipDir, finalState.String())
 	r.flipAnimations[key] = &FlipAnimation{
 		GridID:         gridID,
 		Position:       pos,
@@ -253,6 +290,15 @@ func (r *BoardRenderer) UpdateEffects(deltaTime float64) {
 			delete(r.activeScannerEffects, gridID)
 		}
 	}
+
+	for gridID, effect := range r.activeQuakeEffects {
+		effect.Elapsed += deltaTime
+		effect.Progress = effect.Elapsed / effect.Duration
+		if effect.Progress >= 1.0 {
+			effect.Progress = 1.0
+			delete(r.activeQuakeEffects, gridID)
+		}
+	}
 }
 
 // SubscribeToEvents inscrit le renderer aux événements du monde
@@ -307,7 +353,7 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 		}
 	})
 
-	// Déclenche l'animation d'attaque (lunge)
+	// Déclenche l'animation d'attaque (lunge) et l'effet séisme (Stonewarden)
 	world.EventBus.SubscribeFunc(event.CreatureAttacked, func(e event.Event) {
 		ent, ok := world.Entities.Get(entity.ID(e.SourceID))
 		if !ok || ent.GetType() != entity.TypeCreature {
@@ -324,6 +370,18 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 
 		if r.AnimManager != nil {
 			r.AnimManager.StartAttack(world, e.SourceID, dx, dy, hitTarget)
+		}
+
+		// Effet de séisme pour le Stonewarden (uniquement si l'attaque touche)
+		if creature.Species == "stonewarden" && world.CurrentGridID != "" && hitTarget != nil {
+			r.activeQuakeEffects[world.CurrentGridID] = &QuakeEffect{
+				GridID:        world.CurrentGridID,
+				Progress:      0.0,
+				Duration:      0.75,
+				Elapsed:       0.0,
+				RotationAngle: math.Pi / 2, // 90 degrés
+				Clockwise:     true,
+			}
 		}
 	})
 
@@ -485,6 +543,22 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 
 	// 6. On dessine l'interface utilisateur tout en haut
 	r.renderActionButtons(screen)
+
+	// 7. Capture du playmat À LA FIN (pour le fantôme de la prochaine frame)
+	//    Le snapshot contient l'état de cette frame, qui sera le "ancien" lors de la prochaine rotation
+	//    Le snapshot est plus grand que le playmat (QuakePadding sur chaque côté) pour éviter
+	//    les espaces vides quand le shader tourne le ghost de 90°.
+	if world.CurrentGridID != "" && r.effectRenderer != nil {
+		snapW, snapH := int(ui.QuakeSnapW), int(ui.QuakeSnapH)
+		if r.playmatSnapshot == nil || r.playmatSnapshot.Bounds().Dx() != snapW || r.playmatSnapshot.Bounds().Dy() != snapH {
+			r.playmatSnapshot = ebiten.NewImage(snapW, snapH)
+		}
+		r.playmatSnapshot.Clear()
+		subImg := screen.SubImage(image.Rect(int(ui.PlaymatX), int(ui.PlaymatY), int(ui.PlaymatX)+int(ui.PlaymatW), int(ui.PlaymatY)+int(ui.PlaymatH))).(*ebiten.Image)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(ui.QuakePadding), float64(ui.QuakePadding))
+		r.playmatSnapshot.DrawImage(subImg, op)
+	}
 }
 
 // =========================================================================
@@ -1506,6 +1580,65 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 	r.effectRenderer.DrawScannerEffect(screen, srcImg, int(ui.PlaymatX), int(ui.PlaymatY), progress, erase, thickness, revealColor)
 }
 
+func (r *BoardRenderer) renderQuakeEffects(screen *ebiten.Image, gridID string, world *domain.World) {
+	effect, ok := r.activeQuakeEffects[gridID]
+	if !ok || r.effectRenderer == nil {
+		return
+	}
+
+	snapW, snapH := int(ui.QuakeSnapW), int(ui.QuakeSnapH)
+
+	// Image source : snapshot de la frame précédente (ancienne orientation) — 990×990
+	src := r.playmatSnapshot
+	if src == nil {
+		src = ebiten.NewImage(snapW, snapH)
+	}
+
+	// Frame buffer 990×990 pour le shader
+	if r.quakeFrameBuffer == nil || r.quakeFrameBuffer.Bounds().Dx() != snapW || r.quakeFrameBuffer.Bounds().Dy() != snapH {
+		r.quakeFrameBuffer = ebiten.NewImage(snapW, snapH)
+	}
+	r.quakeFrameBuffer.Clear()
+
+	// Sens de rotation : horaire = angle positif, antihoraire = angle négatif
+	angle := effect.RotationAngle
+	if !effect.Clockwise {
+		angle = -angle
+	}
+
+	centerX := float32(0.5)
+	centerY := float32(0.5)
+	resolution := []float32{float32(snapW), float32(snapH)}
+	ghostSize := []float32{float32(snapW), float32(snapH)}
+
+	// Le shader tourne le ghost 990×990 dans le frame buffer 990×990
+	r.effectRenderer.DrawQuakeEffect(
+		r.quakeFrameBuffer, src, src,
+		0, 0,
+		float32(effect.Progress),
+		angle,
+		1.0,
+		[]float32{centerX, centerY},
+		resolution,
+		ghostSize,
+	)
+
+	// Cropper le centre 700×700 du frame buffer (spritesheet style)
+	pad := ui.QuakePadding
+	centerCrop := r.quakeFrameBuffer.SubImage(image.Rect(pad, pad, pad+int(ui.PlaymatW), pad+int(ui.PlaymatH))).(*ebiten.Image)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(ui.PlaymatX), float64(ui.PlaymatY))
+	screen.DrawImage(centerCrop, op)
+}
+
+// RenderQuakeOverlay ré-affiche l'effet quake au-dessus de tout (après les shaders globaux).
+func (r *BoardRenderer) RenderQuakeOverlay(screen *ebiten.Image, world *domain.World) {
+	if world.CurrentGridID == "" {
+		return
+	}
+	r.renderQuakeEffects(screen, world.CurrentGridID, world)
+}
+
 func (r *BoardRenderer) RenderInventoryLoot(target *ebiten.Image, world *domain.World, selectedIdx int, selection map[int]bool, confirmAll bool) {
 	inv := &world.Player.Inventory
 	grid, ok := world.GetGrid(board.InventoryGridID)
@@ -1553,12 +1686,31 @@ func (r *BoardRenderer) RenderInventoryLoot(target *ebiten.Image, world *domain.
 		// Détermine l'image de la face selon le type d'objet
 		faceImg := r.getEntityRevealedImage(ent, "default")
 
-		// On dessine le slot
-		r.drawGeometryPart(target, geo.V, geo.I[6:12], r.assets.GetImage("tile_hidden_default")) // Dos
-		r.drawGeometryPart(target, geo.V, geo.I[:6], faceImg)                                    // Face
+		// --- GESTION DES ANIMATIONS (FLIP) ---
+		var animation *FlipAnimation
+		for _, anim := range r.flipAnimations {
+			if anim.EntityID == entityID && anim.GridID == board.InventoryGridID {
+				animation = anim
+				break
+			}
+		}
 
-		// Icône de l'entité (Loot)
-		r.renderFlippingEntityTriangles(target, geo.V[:4], ent, entity.TransIdentity)
+		if animation != nil && animation.IsActive() {
+			r.renderFlippingTile(target, sx, sy, animation, ent, "default", theme.HiddenBorder)
+			continue
+		}
+
+		// --- LOGIQUE D'INVENTAIRE CACHÉ (Amnésie / Difficulté Insane) ---
+		isHidden := world.Difficulty.ForceHiddenInventory || world.Player.AmnesiaTurns > 0
+
+		// On dessine le dos (toujours pour l'épaisseur/ombre si besoin)
+		r.drawGeometryPart(target, geo.V, geo.I[6:12], r.assets.GetImage("tile_hidden_default"))
+
+		if !isHidden {
+			// Révélé : Face + Icône
+			r.drawGeometryPart(target, geo.V, geo.I[:6], faceImg)
+			r.renderFlippingEntityTriangles(target, geo.V[:4], ent, entity.TransIdentity)
+		}
 
 		// Highlights persistants (Usage / Suppression)
 		// On les dessine inclinés par dessus la face

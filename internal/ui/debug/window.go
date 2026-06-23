@@ -113,6 +113,11 @@ func (dw *DebugWindow) renderDifficulty(screen *ebiten.Image) {
 	text.Draw(screen, fmt.Sprintf("Nav Threshold: %.0f%%", settings.NavThreshold*100), basicfont.Face7x13, int(startX), int(y)+15, color.White)
 	dw.drawButton(screen, startX+150, y, "-", "nav-")
 	dw.drawButton(screen, startX+180, y, "+", "nav+")
+
+	y += 30
+	text.Draw(screen, fmt.Sprintf("Msg Speed: %.1f", dw.world.Debug.MessageSpeed), basicfont.Face7x13, int(startX), int(y)+15, color.White)
+	dw.drawButton(screen, startX+150, y, "-", "msgspd-")
+	dw.drawButton(screen, startX+180, y, "+", "msgspd+")
 }
 
 func (dw *DebugWindow) renderCreatures(screen *ebiten.Image) {
@@ -145,7 +150,7 @@ func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
 	startY := dw.y + 70
 	text.Draw(screen, "ENVIRONMENT SHADERS", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
-	shaders := []string{"blur", "bubble", "heat", "wave"}
+	shaders := []string{"blur", "bubble", "heat", "quake", "wave"}
 	sort.Strings(shaders)
 
 	for i, s := range shaders {
@@ -273,6 +278,12 @@ func (dw *DebugWindow) handleClickDifficulty(mx, my float32) {
 	if settings.PreviewDuration < 0 { settings.PreviewDuration = 0 }
 	if settings.NavThreshold < 0 { settings.NavThreshold = 0 }
 	if settings.NavThreshold > 1 { settings.NavThreshold = 1 }
+
+	y += 30
+	if dw.isInside(mx, my, startX+150, y, 20, 20) { dw.world.Debug.MessageSpeed -= 0.2 }
+	if dw.isInside(mx, my, startX+180, y, 20, 20) { dw.world.Debug.MessageSpeed += 0.2 }
+	if dw.world.Debug.MessageSpeed < 0.2 { dw.world.Debug.MessageSpeed = 0.2 }
+	if dw.world.Debug.MessageSpeed > 5.0 { dw.world.Debug.MessageSpeed = 5.0 }
 }
 
 func (dw *DebugWindow) handleClickCreatures(mx, my float32) {
@@ -300,7 +311,7 @@ func (dw *DebugWindow) handleClickCreatures(mx, my float32) {
 func (dw *DebugWindow) handleClickShaders(mx, my float32) {
 	startX := dw.x + 750
 	startY := dw.y + 70
-	shaders := []string{"blur", "bubble", "heat", "wave"}
+	shaders := []string{"blur", "bubble", "heat", "quake", "wave"}
 	sort.Strings(shaders)
 
 	for i, s := range shaders {
@@ -318,6 +329,7 @@ func (dw *DebugWindow) isInside(mx, my, x, y, w, h float32) bool {
 func (dw *DebugWindow) ResetDefaults() {
 	dw.world.Debug.OverrideDifficulty = false
 	dw.world.Debug.ActiveShaders = make(map[string]bool)
+	dw.world.Debug.MessageSpeed = 1.0
 	dw.world.Debug.AllowedCreatures = map[string]bool{
 		"lumifly":         true,
 		"shadowstalker":   true,

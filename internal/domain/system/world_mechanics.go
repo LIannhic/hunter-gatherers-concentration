@@ -11,9 +11,18 @@ import (
 
 // FlipTile bascule une entité entre caché et révélé et applique la transformation géométrique
 func (w *World) FlipTile(gridID string, pos board.Position, flipDir entity.FlipDirection, reason string) (entity.Entity, error) {
+	fmt.Printf("[WORLD-DEBUG] FlipTile appelé: Grid=%s, Pos=%v, Reason=%s\n", gridID, pos, reason)
 	grid, ok := w.Grids[gridID]
 	if !ok {
-		return nil, ErrGridNotFound
+		// Tentative de récupération via InventoryGrid si c'est l'ID réservé
+		if gridID == board.InventoryGridID {
+			grid = w.InventoryGrid
+		}
+
+		if grid == nil {
+			fmt.Printf("[WORLD-DEBUG] FlipTile ERREUR: Grid %s non trouvé\n", gridID)
+			return nil, ErrGridNotFound
+		}
 	}
 
 	// 1. Récupération du Plot (Parcelle)
@@ -68,6 +77,43 @@ func (w *World) FlipTile(gridID string, pos board.Position, flipDir entity.FlipD
 	))
 
 	return ent, nil
+}
+
+// HideInventory retourne toutes les tuiles de l'inventaire face cachée.
+func (w *World) HideInventory(flipDir entity.FlipDirection) {
+	fmt.Printf("[WORLD] HideInventory déclenché avec direction %v\n", flipDir)
+	for i, item := range w.Player.Inventory.Items {
+		if item.GetState()&entity.Revealed != 0 {
+			pos := board.Position{X: i % 3, Y: i / 3}
+			// On utilise le tilt spécifique de la parcelle d'inventaire si disponible
+			finalFlipDir := flipDir
+			if w.InventoryGrid != nil {
+				if plot, err := w.InventoryGrid.Get(pos); err == nil {
+					finalFlipDir = plot.Tilt.ToFlipDirection()
+				}
+			}
+			fmt.Printf("[WORLD] Retournement de l'item %d (%s) en %v via direction %v\n", i, item.Name, pos, finalFlipDir)
+			_, _ = w.FlipTile(board.InventoryGridID, pos, finalFlipDir, "penalty")
+		}
+	}
+}
+
+// RevealInventory retourne toutes les tuiles de l'inventaire face visible avec animation.
+func (w *World) RevealInventory(flipDir entity.FlipDirection) {
+	fmt.Printf("[WORLD] RevealInventory déclenché avec direction %v\n", flipDir)
+	for i, item := range w.Player.Inventory.Items {
+		if item.GetState()&entity.Revealed == 0 {
+			pos := board.Position{X: i % 3, Y: i / 3}
+			finalFlipDir := flipDir
+			if w.InventoryGrid != nil {
+				if plot, err := w.InventoryGrid.Get(pos); err == nil {
+					finalFlipDir = plot.Tilt.ToFlipDirection()
+				}
+			}
+			fmt.Printf("[WORLD] Révélation de l'item %d (%s) en %v via direction %v\n", i, item.Name, pos, finalFlipDir)
+			_, _ = w.FlipTile(board.InventoryGridID, pos, finalFlipDir, "amnesia_end")
+		}
+	}
 }
 
 // RevealTile force une entité à l'état Revealed sans faire de toggle inverse

@@ -89,12 +89,29 @@ func (e *Engine) Update() {
 	e.world.EventBus.ProcessQueue()
 	e.world.Turn++
 
+	if e.world.Player != nil {
+		fmt.Printf("[TURN-END] Fin du tour %d. Position finale du joueur : %v sur %s\n", e.world.Turn-1, e.world.GetPlayerPosition(), e.world.CurrentGridID)
+	}
+
 	// Rafraîchit l'état de navigation à la fin du tour pour détecter les changements de population
 	e.world.IsNavigationOpen(e.world.CurrentGridID)
 
 	// Diminue la santé mentale à chaque tour
 	if e.world.Player != nil {
+		wasAmnesiac := e.world.Player.AmnesiaTurns > 0
 		e.world.Player.ConsumeSanity(1)
+
+		// Détection de fin d'amnésie : révèle l'inventaire avec animation
+		if wasAmnesiac && e.world.Player.AmnesiaTurns == 0 {
+			fmt.Println("[AMNESIA] L'amnésie se dissipe - révélation de l'inventaire")
+			flipDir := entity.FlipTop
+			if e.world.Player != nil {
+				flipDir = e.world.Player.GetAnchor().GetFlipDirection()
+			}
+			e.world.RevealInventory(flipDir)
+			e.world.EventBus.Publish(event.NewAmnesiaEndedEvent("amnesia_system"))
+			e.world.EventBus.Publish(event.NewItemMessageEvent("La mémoire revient..."))
+		}
 
 		// Décrémente la grâce (Flutterwing)
 		if e.world.Player.GraceTurns > 0 {

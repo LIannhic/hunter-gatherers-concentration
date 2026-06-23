@@ -125,7 +125,9 @@ func NewHUD(world *domain.World) *HUD {
 		} else if reason == "invalid_match" {
 			msg = "MATCH INVALIDE !"
 		} else if reason == "skipped_valid_match" {
-			msg = "MATCH VALIDE IGNORE !"
+			msg = "MATCH IGNORE !"
+		} else if reason == "toxicity" {
+			msg = fmt.Sprintf("TOXICITÉ ! -%d HP", damage)
 		}
 		if msg != "" {
 			h.AddMessage(msg, "right")
@@ -136,6 +138,12 @@ func NewHUD(world *domain.World) *HUD {
 	world.EventBus.SubscribeFunc(event.LevelUp, func(e event.Event) {
 		level, _ := e.Payload["level"].(int)
 		h.AddMessage(fmt.Sprintf("NIVEAU %d ATTEINT !", level), "left")
+	})
+
+	// S'abonne au début d'amnésie pour afficher l'effet à droite
+	world.EventBus.SubscribeFunc(event.AmnesiaStarted, func(e event.Event) {
+		duration, _ := e.Payload["duration"].(int)
+		h.AddMessage(fmt.Sprintf("AMNÉSIE ! %d tours.", duration), "right")
 	})
 
 	return h
@@ -170,6 +178,13 @@ func (h *HUD) Update() {
 	h.pulseFrame++
 }
 
+// UpdateMessageAreas met à jour les zones de messages après le ProcessQueue.
+// Doit être appelé après Engine.UpdateFrame() pour traiter les événements fraîchement dispatchés.
+func (h *HUD) UpdateMessageAreas() {
+	h.updateMessageArea("left")
+	h.updateMessageArea("right")
+}
+
 func (h *HUD) updateMessageArea(area string) {
     var active **NotificationMessage
     var queue *[]string
@@ -192,7 +207,7 @@ func (h *HUD) updateMessageArea(area string) {
           Text:     msgText,
           X:        boxWidth,
           BoxWidth: boxWidth,
-          Speed:    2.0,
+          Speed:    h.world.Debug.MessageSpeed,
        }
     }
 
@@ -392,8 +407,8 @@ func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
     // Calcul de la position Y centrée (relative à l'écran, donc on ajoute 'y')
     ty := y + (hBox / 2) + 5
 
-    // On dessine sur msgImg, mais en utilisant 'x + active.X' pour rester dans le repère
-    text.Draw(msgImg, active.Text, basicfont.Face7x13, int(x + active.X), int(ty), color.RGBA{255, 255, 230, 255})
+    // On dessine sur msgImg en coordonnées absolues (repère screen)
+    text.Draw(msgImg, active.Text, basicfont.Face7x13, int(x+active.X), int(ty), color.RGBA{255, 255, 230, 255})
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés

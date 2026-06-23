@@ -17,6 +17,15 @@ func (w *World) CreateGrid(id string, width, height int, biome board.BiomeType) 
 	grid := board.NewGrid(id, width, height, biome)
 	if id == board.InventoryGridID {
 		w.InventoryGrid = grid
+		// Ajoute une inclinaison par défaut (SlopeTop) à toutes les parcelles de l'inventaire pour les animations
+		for x := 0; x < width; x++ {
+			for y := 0; y < height; y++ {
+				pos := board.Position{X: x, Y: y}
+				if plot, err := grid.Get(pos); err == nil {
+					plot.Tilt = board.SlopeTop
+				}
+			}
+		}
 		return grid
 	}
 

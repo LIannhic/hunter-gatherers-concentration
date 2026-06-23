@@ -426,6 +426,10 @@ func (app *Application) setupDebugCallbacks() {
 		app.Engine.Update()
 	}
 
+	app.Input.OnTriggerQuake = func(gridID string, clockwise bool, angle float32) {
+		app.Renderer.TriggerQuakeEffect(gridID, clockwise, angle)
+	}
+
 	// F5 : Révéler instantanément toutes les tuiles cachées du monde
 	app.Input.OnRevealAll = func(gridID string) {
 		fmt.Println("[CHEAT] Révélation instantanée de TOUTES les tuiles")
@@ -527,6 +531,8 @@ func (app *Application) setupEventSubscriptions() {
 		entityID, ok3 := e.Payload["entity_id"].(string)
 		gridID, ok4 := e.Payload["grid_id"].(string)
 		flipDir, ok5 := e.Payload["flip_direction"].(entity.FlipDirection)
+
+		fmt.Printf("[EVENT-DEBUG] TileRevealed reçu: ID=%s, Grid=%s, Pos=%v, Dir=%v\n", entityID, gridID, position, flipDir)
 
 		if ok1 && ok3 && ok4 && ok5 {
 			// On ne tracke la révélation pour l'IA que si c'est une action du joueur
@@ -760,6 +766,9 @@ func (app *Application) updatePlaying() error {
 	}
 
 	app.Engine.UpdateFrame(dt)
+
+	// Met à jour les messages HUD après le ProcessQueue pour traiter les événements fraîchement dispatchés
+	app.HUD.UpdateMessageAreas()
 
 	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
@@ -1086,6 +1095,9 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 
 		app.EffectRenderer.ProcessGlobalEffects(screen, params)
 	}
+
+	// Ré-affiche le quake effect au-dessus des shaders globaux
+	app.Renderer.RenderQuakeOverlay(screen, app.World)
 
 	if app.World.Entities.Count() == 0 {
 		text.Draw(screen, "Appuyez sur S pour spawner des entites", basicfont.Face7x13, 200, 300, color.RGBA{255, 255, 0, 255})

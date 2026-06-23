@@ -341,7 +341,7 @@ func (s *AggressionSystem) triggerExceededAttack(c *creature.Creature) {
 			string(c.GetID()),
 			damage,
 			"physical",
-			"aggression_exceeded",
+			"confrontation",
 			map[string]interface{}{"position": playerPos},
 		))
 	}

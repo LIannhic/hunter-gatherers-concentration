@@ -49,6 +49,11 @@ const (
 	PlaymatW = 700
 	PlaymatH = 700
 
+	// Quake effect : le snapshot est plus grand pour éviter les espaces vides lors de la rotation
+	QuakePadding = 145 // 700 * sqrt(2) ≈ 990, padding = (990-700)/2 = 145
+	QuakeSnapW   = PlaymatW + QuakePadding*2 // 990
+	QuakeSnapH   = PlaymatH + QuakePadding*2 // 990
+
 	ActionButtonW = 219.67
 	ActionButtonH = 39.17
 
