@@ -109,7 +109,7 @@ func NewApplication() (*Application, error) {
 
 	// 5.1 Configuration du gestionnaire réactif des boutons d'action
 	btnManager := actionbuttons.NewManager(
-		func() int { return len(app.Input.GetRevealedTiles()) },
+		func() int { return app.Input.GetRevealedTiles() },
 		func() *player.Player { return app.World.Player },
 		func() float64 {
 			if app.World.TurnTimer != nil {
@@ -535,11 +535,6 @@ func (app *Application) setupEventSubscriptions() {
 		fmt.Printf("[EVENT-DEBUG] TileRevealed reçu: ID=%s, Grid=%s, Pos=%v, Dir=%v\n", entityID, gridID, position, flipDir)
 
 		if ok1 && ok3 && ok4 && ok5 {
-			// On ne tracke la révélation pour l'IA que si c'est une action du joueur
-			if reason, ok := e.Payload["reason"].(string); ok && reason == "player_action" {
-				app.Engine.TrackTileReveal(board.Position{X: position.X, Y: position.Y}, gridID)
-			}
-
 			var entState entity.TileState
 			var startTrans, endTrans entity.Transformation
 

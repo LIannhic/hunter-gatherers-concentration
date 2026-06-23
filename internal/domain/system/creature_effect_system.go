@@ -37,7 +37,11 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 	// Logique d'effets spécifiques par espèce
 	switch c.Species {
 	case "stonewarden":
-		fmt.Println("[STONEWARDEN] L'attaque provoque un séisme de rotation !")
+		hitTarget, hasHit := e.Payload["hit_target"].(*entity.Position)
+		if !hasHit || hitTarget == nil {
+			return
+		}
+		fmt.Println("[STONEWARDEN] L'attaque touche et provoque un séisme de rotation !")
 		s.world.RotateGrid(c.GetGridID())
 		s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vous êtes déboussolé."))
 

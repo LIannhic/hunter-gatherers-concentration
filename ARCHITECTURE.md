@@ -86,14 +86,14 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Permet la recherche rapide des entités par position.
   - **Inventory Grid** : L'inventaire est désormais une grille logicielle (`InventoryGridID`), permettant un traitement spatial uniforme (hover, highlights).
   - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles. Les transformations sont cumulatives (`apply * current`).
-  - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2). Cela influence les règles de match et le rendu (échelle x1.15 par niveau si révélé).
+  - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2+). Cela influence les règles de match et le rendu (échelle x1.15 par niveau + bordures concentriques colorées si révélé).
 
 - **Systems** : Mettent à jour l'état du monde via l'**Engine** (`engine.go`).
   - **Engine** : Chef d'orchestre du domaine. Il sépare la logique en deux cycles :
     - `Update()` : Cycle par tour (IA, maturation, fin de tour).
     - `UpdateFrame(dt)` : Cycle temps réel à 60 FPS (Timers, évènements UI, prévisualisation).
   - **CreatureAISystem** : Gère les comportements de base des créatures
-  - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes). **Filtre par grille** : stocke les révélations dans `RevealedTile{Position, GridID}`. `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature.
+  - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes). **Filtre par grille** : stocke les révélations dans `RevealedTile{Position, GridID}`. `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature. **Wandering fallback** : les créatures avec `NavAttraction`/`NavRepulsion` errent aléatoirement quand leur trigger ne se déclenche pas ET que leur cible n'existe pas sur la grille.
   - **ResourcePropagationSystem** : Gère la multiplication des ressources sur les cases adjacentes. Émet l'événement `ResourcePropagated` enrichi des positions `from` et `to` pour l'UI.
   - **ResourceLifecycleSystem** : Gère la maturation des ressources. Émet des logs détaillés sur les transitions de stade.
   - **ToxicitySystem** : Calcule les dégâts de poison cumulés et dégressifs infligés au joueur par les ressources révélées (ex: Dreamberry stade 4). **Ne vérifie que la grille actuelle** (`world.CurrentGridID`).
@@ -101,7 +101,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **TrackSystem** : Gère la décomposition temporelle des traces
   - **AggressionSystem** : Calcule l'agressivité modulaire des créatures (Priority 1, avant mouvement). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `CreatureMoved` pour gérer la "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité totale ≥ 100 à la fin de l'animation de flip.
 
-- **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden).
+- **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden — uniquement si `hit_target` présent dans le payload, i.e. attaque qui touche le joueur).
 
 - **Animations Organiques** :
   - **Propagation (Division Cellulaire)** : Lorsqu'une ressource se multiplie, une animation de type `propagate` est déclenchée. Elle simule une division organique en deux phases :
@@ -141,7 +141,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - `TypeCreature` : Créatures avec IA. Supporte **8 directions cardinales et ordinales** pour la détection de menace précise.
   - `TypeStructure` : Structures fixes (terriers, etc.)
   - `TypeArtefact` : Objets spéciaux
-  - `TypeTrap` : Pièges / tuiles vides
+  - `TypeTrap` : Pièges / tuiles vides. Tirés aléatoirement dans le pool global de population (plus de paires fixes).
 
 ```go
 // Exemple: Créer un monde et spawner des entités
@@ -313,9 +313,9 @@ Le jeu supporte maintenant l'appariement de tuiles situées sur **grilles diffé
 
 #### Architecture
 
-- **Handler** : `revealedGridIDs []string` parallèle à `revealedTiles []board.Position` — stocke la grille d'origine par tuile révélée.
+- **Handler** : `revealedEntities []string` stocke les **entity IDs** (stables à travers les rotations de grille) au lieu de positions. `revealedGridIDs []string` parallèle stocke la grille d'origine par tuile révélée.
 - **Commande** : `MatchTilesCommand` a un champ `GridID2` (optionnel, défaut = `GridID`).
-- **Exécution** : `processMatchAttempt()` utilise `revealedGridIDs[0]` et `revealedGridIDs[1]` pour résoudre chaque tuile sur sa grille respective.
+- **Exécution** : `processMatchAttempt()` résout les positions depuis les entity IDs via `h.world.Entities.Get()` au moment de l'usage.
 - **Événements** : `TileRevealed` et `TileMatched` incluent `grid_id` pour le rendu.
 
 #### Skip Inter-Zones
@@ -582,8 +582,8 @@ type MovementProfile struct {
 | `NavPatrol` | Suit un itinéraire prédéfini |
 | `NavRelative` | Par rapport à son orientation absolue (saute si bloqué) |
 | `NavOrientation` | Selon la direction du regard |
-| `NavAttraction` | Vise une cible spécifique (Ressource par nom, Joueur, etc.) |
-| `NavRepulsion` | S'éloigne de la cible |
+| `NavAttraction` | Vise une cible spécifique (Ressource par nom, Joueur, etc.). **Fallback** : errance aléatoire si pas de cible. |
+| `NavRepulsion` | S'éloigne de la cible. **Fallback** : errance aléatoire si pas de cible. |
 
 #### Ciblage par stade (Lifecycle Filtering)
 

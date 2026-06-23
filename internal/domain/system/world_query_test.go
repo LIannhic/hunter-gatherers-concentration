@@ -105,3 +105,39 @@ func TestWorldAdapter(t *testing.T) {
 		t.Errorf("Expected 'empty', got '%s'", state)
 	}
 }
+
+func TestPlayerOnBoard(t *testing.T) {
+	w := NewWorld()
+
+	// Default: player is on board (true)
+	if !w.IsPlayerOnBoard() {
+		t.Error("Player should be on board by default")
+	}
+
+	w.SetPlayerOnBoard(false)
+	if w.IsPlayerOnBoard() {
+		t.Error("Player should not be on board after SetPlayerOnBoard(false)")
+	}
+
+	w.SetPlayerOnBoard(true)
+	if !w.IsPlayerOnBoard() {
+		t.Error("Player should be on board after SetPlayerOnBoard(true)")
+	}
+}
+
+func TestWorldAdapter_IsPlayerOnBoard(t *testing.T) {
+	w := NewWorld()
+	w.CreateGrid("test", 4, 4, board.BiomeForest)
+	grid, _ := w.GetGrid("test")
+	adapter := &worldAdapter{world: w, grid: grid}
+
+	// Default: true
+	if !adapter.IsPlayerOnBoard() {
+		t.Error("IsPlayerOnBoard should return true by default")
+	}
+
+	w.SetPlayerOnBoard(false)
+	if adapter.IsPlayerOnBoard() {
+		t.Error("IsPlayerOnBoard should return false after SetPlayerOnBoard(false)")
+	}
+}

@@ -679,6 +679,10 @@ func (s *CreatureMovementSystem) Update(world *World) {
 
 		profile := c.MovementProfile
 		if !s.shouldTrigger(profile.Trigger, c) {
+			if s.shouldWander(profile, c, world) && !profile.Frequency.HasMovedThisTurn(world.Turn) && profile.Frequency.CanMove() {
+				s.executeWander(c, profile, world, grid)
+				profile.Frequency.MarkMoved(world.Turn)
+			}
 			continue
 		}
 
@@ -754,6 +758,49 @@ func (s *CreatureMovementSystem) shouldTrigger(trigger creature.MovementTrigger,
 		return false
 	}
 	return false
+}
+
+// shouldWander vérifie si une créature devrait errer en fallback
+// quand le trigger ne se déclenche pas et que la cible n'existe pas.
+func (s *CreatureMovementSystem) shouldWander(profile *creature.MovementProfile, c *creature.Creature, world *World) bool {
+	switch profile.Navigation.Type {
+	case creature.NavAttraction, creature.NavRepulsion:
+		return !s.hasTarget(profile, c, world)
+	default:
+		return false
+	}
+}
+
+// hasTarget vérifie si la cible de navigation de la créature existe sur la grille.
+func (s *CreatureMovementSystem) hasTarget(profile *creature.MovementProfile, c *creature.Creature, world *World) bool {
+	grid, ok := world.Grids[c.GetGridID()]
+	if !ok {
+		return false
+	}
+	wa := &worldAdapter{world: world, grid: grid}
+	target := wa.FindNearestTarget(c.GetPosition(), profile.Navigation.Target, profile.Navigation.TargetName, profile.Navigation.ExcludedStages)
+	return target != nil
+}
+
+// executeWander déplace une créature dans une direction aléatoire valide.
+func (s *CreatureMovementSystem) executeWander(c *creature.Creature, profile *creature.MovementProfile, world *World, grid *board.Grid) {
+	directions := []entity.Position{
+		{X: 0, Y: -1}, {X: 0, Y: 1},
+		{X: -1, Y: 0}, {X: 1, Y: 0},
+	}
+	rand.Shuffle(len(directions), func(i, j int) {
+		directions[i], directions[j] = directions[j], directions[i]
+	})
+
+	currentPos := c.GetPosition()
+	for _, dir := range directions {
+		newPos := entity.Position{X: currentPos.X + dir.X, Y: currentPos.Y + dir.Y}
+		wa := &worldAdapter{world: world, grid: grid}
+		if wa.IsWalkable(c, newPos) {
+			s.applyMoveMode(profile.Mode, c, currentPos, newPos, world, grid)
+			return
+		}
+	}
 }
 
 func sign(val int) int {
