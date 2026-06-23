@@ -27,12 +27,13 @@ Enfin, l'environnement est rendu vivant et menaçant par la présence de créatu
 
 ### Équilibre de la Population
 
-Chaque zone (grille) est remplie selon un pool commun de créatures et de ressources :
-- **Pool commun** : 6 espèces de créatures (5 globales + 1 exclusive au biome) et 5 types de ressources (4 globaux + 1 exclusif au biome), soit 11 variétés au total.
+Chaque zone (grille) est remplie selon un pool commun de créatures, ressources et pièges :
+- **Pool commun** : 6 espèces de créatures (5 globales + 1 exclusive au biome), 5 types de ressources (4 globaux + 1 exclusif au biome), et des pièges — soit 12 variétés au total.
 - **Priorité aux exclusives** : Les entités exclusives du biome sont placées en premier.
-- **Tirage aléatoire** : Les variétés restantes sont tirées au hasard dans le pool commun.
+- **Tirage aléatoire** : Toutes les variétés (dont pièges) sont tirées au hasard dans le pool commun.
 - **Max 4 tuiles par variété** : Chaque espèce ou type de ressource ne peut apparaître que 2 paires (4 tuiles) maximum dans une zone.
-- **Pièges** : 2 paires fixes (4 tuiles) + une tuile orpheline si le nombre de cases est impair.
+- **Pièges dans le pool** : Les pièges font partie du pool global et sont tirés aléatoirement comme n'importe quelle autre entité (plus de paires fixes).
+- **Tuile orpheline** : Si le nombre de cases est impair, la dernière tuile est tirée aléatoirement dans le pool (pas systématiquement un piège).
 
 Cette répartition garantit une diversité maximale tout en laissant la part belle au hasard.
 
@@ -205,7 +206,7 @@ La progression du joueur est quantifiée par l'expérience (XP) acquise lors de 
 L'interface assiste le joueur dans sa gestion des ressources via un système de **feedback dynamique au survol** :
 - **Jauges Clignotantes** : Survoler un bouton d'action (**Match**, **Merge**, **Skip**, **Turn**) fait clignoter un segment blanc sur les jauges (Mana, Santé, Sanité) correspondant au coût ou au risque maximum de l'action.
 - **Anti-Triche** : Aucun feedback de coût n'est affiché au survol des tuiles cachées pour éviter de divulguer des informations sur leur nature (créature vs ressource).
-- **Rendu Sélectif** : Les tuiles cumulées n'apparaissent plus grandes et dorées que lorsqu'elles sont **Révélées**. À l'état caché, elles sont identiques aux tuiles normales.
+- **Rendu Sélectif** : Les tuiles cumulées n'apparaissent plus grandes et dorées que lorsqu'elles sont **Révélées**. À l'état caché, elles sont identiques aux tuiles normales. **Bordures de cumul** : Les tuiles cumulées affichent des bordures concentriques fines dont la couleur évolue avec le niveau (vert → jaune → orange → rouge).
 
 ### Notifications Défilantes (HUD)
 

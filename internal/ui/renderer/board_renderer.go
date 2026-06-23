@@ -1171,6 +1171,31 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 
 	r.drawGeometryPart(screen, geo.V, geo.I[:6], faceImg)
 
+	// 2b. Bordures fines pour tuiles cumulées
+	if (visualState&entity.Revealed != 0 || visualState&entity.Matched != 0) && ent.GetCumulationLevel() > 0 {
+		level := ent.GetCumulationLevel()
+		var borderColor color.Color
+		switch {
+		case level >= 4:
+			borderColor = color.RGBA{200, 50, 50, 255}   // Rouge profond
+		case level == 3:
+			borderColor = color.RGBA{200, 120, 20, 255}  // Orange ambré
+		case level == 2:
+			borderColor = color.RGBA{180, 160, 30, 255}  // Jaune doré
+		default:
+			borderColor = color.RGBA{120, 200, 80, 255}  // Vert doux
+		}
+		// Dessiner `level` bordures concentriques fines
+		for b := 0; b < level; b++ {
+			inset := float32(2 + b*3)
+			strokeW := float32(1)
+			vector.StrokeRect(screen,
+				float32(x)+inset, float32(y)+inset,
+				float32(r.tileSize)-inset*2, float32(r.tileSize)-inset*2,
+				strokeW, borderColor, true)
+		}
+	}
+
 	// 3. Dessin de l'Overlay (si présent)
 	if overlayImg != nil {
 		r.drawGeometryPart(screen, geo.V, geo.I[:6], overlayImg)
@@ -1711,6 +1736,30 @@ func (r *BoardRenderer) RenderInventoryLoot(target *ebiten.Image, world *domain.
 		if !isHidden {
 			// Révélé : Face + Icône
 			r.drawGeometryPart(target, geo.V, geo.I[:6], faceImg)
+
+			// Bordures fines pour tuiles cumulées dans l'inventaire
+			if ent.GetCumulationLevel() > 0 {
+				level := ent.GetCumulationLevel()
+				var borderColor color.Color
+				switch {
+				case level >= 4:
+					borderColor = color.RGBA{200, 50, 50, 255}
+				case level == 3:
+					borderColor = color.RGBA{200, 120, 20, 255}
+				case level == 2:
+					borderColor = color.RGBA{180, 160, 30, 255}
+				default:
+					borderColor = color.RGBA{120, 200, 80, 255}
+				}
+				for b := 0; b < level; b++ {
+					inset := float32(2 + b*3)
+					vector.StrokeRect(target,
+						float32(sx)+inset, float32(sy)+inset,
+						float32(r.tileSize)-inset*2, float32(r.tileSize)-inset*2,
+						1, borderColor, true)
+				}
+			}
+
 			r.renderFlippingEntityTriangles(target, geo.V[:4], ent, entity.TransIdentity)
 		}
 
