@@ -76,7 +76,7 @@ type Handler struct {
 	isLongPressFired  bool
 
 	// Gestion du tour de jeu memory
-	revealedTiles    []board.Position // Liste des tuiles révélées ce tour
+	revealedEntities []string         // Entity IDs des tuiles révélées ce tour
 	revealedGridIDs  []string         // GridID associé à chaque tuile révélée (pour cross-zone)
 	isProcessing     bool             // Évite les clics pendant l'animation / verrouille la grille quand 2 tuiles sont retournées
 	footstepTrackIDs []string         // FIFO des empreintes de pas (max 2 visibles)
@@ -250,31 +250,22 @@ func (h *Handler) updateButtonHover() {
 	mana, hp, sanity := 0, 0, 0
 
 	// Calcul du coût potentiel basé sur l'état actuel (2 tuiles révélées)
-	if len(h.revealedTiles) == 2 {
-		grid, _ := h.world.GetGrid(h.GetCurrentGridID())
-		if grid != nil {
-			tile1, _ := grid.Get(h.revealedTiles[0])
-			tile2, _ := grid.Get(h.revealedTiles[1])
-			if tile1 != nil && tile2 != nil && len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
-				id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
-				id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
-				e1, _ := h.world.Entities.Get(entity.ID(id1))
-				e2, _ := h.world.Entities.Get(entity.ID(id2))
+	if len(h.revealedEntities) == 2 {
+		e1, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[0]))
+		e2, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[1]))
 
-				if e1 != nil && e2 != nil {
-					level := e1.GetCumulationLevel()
+		if e1 != nil && e2 != nil {
+			level := e1.GetCumulationLevel()
 
-					switch btnID {
-					case actionbuttons.BtnMatch:
-						mana = 1
-					case actionbuttons.BtnMerge:
-						mana = 3 * (level + 1)
-					case actionbuttons.BtnSkip, actionbuttons.BtnEndTurn:
-						// Estimation du risque maximum (les deux tuiles sont des créatures ou ressources)
-						hp = 20     // 2 créatures x 10
-						mana = 10   // 2 ressources x 5
-					}
-				}
+			switch btnID {
+			case actionbuttons.BtnMatch:
+				mana = 1
+			case actionbuttons.BtnMerge:
+				mana = 3 * (level + 1)
+			case actionbuttons.BtnSkip, actionbuttons.BtnEndTurn:
+				// Estimation du risque maximum (les deux tuiles sont des créatures ou ressources)
+				hp = 20     // 2 créatures x 10
+				mana = 10   // 2 ressources x 5
 			}
 		}
 	} else if btnID == actionbuttons.BtnEndTurn {
@@ -632,7 +623,7 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 	state := ent.GetState()
 	if state&entity.Hidden != 0 {
 		// Vérifie si on a déjà révélé 2 tuiles ce tour
-		if len(h.revealedTiles) >= 2 {
+		if len(h.revealedEntities) >= 2 {
 			fmt.Println("[INPUT] Déjà 2 tuiles révélées ce tour. Veuillez attendre la fin du traitement.")
 			return nil
 		}
@@ -654,11 +645,12 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 		}
 		if err := cmd.Execute(); err == nil {
 			h.isMovedThisTurn = true
+			entityID := string(ent.GetID())
 			fmt.Printf("[INPUT] Clic en %v sur %s. Position logique du joueur : %v\n", pos, gridID, h.world.GetPlayerPosition())
 			info := h.getEntityInfo(ent)
-			num := len(h.revealedTiles) + 1
+			num := len(h.revealedEntities) + 1
 			fmt.Printf("[SÉLECTION] Choix #%d : Tuile révélée en %v sur %s -> %s\n", num, pos, gridID, info)
-			h.revealedTiles = append(h.revealedTiles, pos)
+			h.revealedEntities = append(h.revealedEntities, entityID)
 			h.revealedGridIDs = append(h.revealedGridIDs, gridID)
 			// Action volontaire : reset du compte à rebours temps réel
 			if h.world.TurnTimer != nil {
@@ -676,7 +668,7 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 		h.selectedTile = &pos
 
 		// Si on a révélé 2 tuiles, verrouille la grille et active les boutons Match/Skip
-		if len(h.revealedTiles) == 2 {
+		if len(h.revealedEntities) == 2 {
 			h.isProcessing = true
 			fmt.Println("[MATCH] 2 tuiles révélées. Grille verrouillée. Choisissez Match ou Skip.")
 		}
@@ -688,15 +680,15 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 		}
 
 		if ent.GetType() == entity.TypeTrap {
-			// NOUVELLE LOGIQUE : Si c'est le seul révélé, on peut s'en débarrasser (Match)
-			if len(h.revealedTiles) == 1 && h.revealedTiles[0] == pos {
+			// Si c'est le seul révélé, on peut s'en débarrasser (compte comme un match)
+			if len(h.revealedEntities) == 1 && h.revealedEntities[0] == string(ent.GetID()) {
 				fmt.Printf("[ACTION] Défausse du piège en %v (Compte comme un match)\n", pos)
 				cmd := &usecase.DiscardTrapCommand{
 					World:    h.world,
 					GridID:   gridID,
 					Position: pos,
 					OnSuccess: func() {
-					h.revealedTiles = nil
+					h.revealedEntities = nil
 					h.revealedGridIDs = nil
 					h.isProcessing = false
 					h.ClearSelection()
@@ -709,29 +701,7 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 				return nil
 			}
 
-			// Sinon (si 0 ou 2 déjà révélés, ou clic sur un autre), flip normal pour recacher
-			flipDir := h.calculateFlipDirectionAt(x, y, gridID)
-			cmd := &usecase.RevealTileCommand{
-				World:         h.world,
-				GridID:        gridID,
-				Position:      pos,
-				FlipDirection: flipDir,
-			}
-			if err := cmd.Execute(); err == nil {
-				fmt.Printf("[ACTION] Piège en %v recaché\n", pos)
-				for i, p := range h.revealedTiles {
-					if p == pos {
-						h.revealedTiles = append(h.revealedTiles[:i], h.revealedTiles[i+1:]...)
-						if i < len(h.revealedGridIDs) {
-							h.revealedGridIDs = append(h.revealedGridIDs[:i], h.revealedGridIDs[i+1:]...)
-						}
-						break
-					}
-				}
-				if h.selectedTile != nil && *h.selectedTile == pos {
-					h.ClearSelection()
-				}
-			}
+			// Sinon (0 révélés ou 2+ déjà révélés) : on ne fait rien sur un piège déjà révélé
 			return nil
 		}
 
@@ -844,98 +814,77 @@ func (h *Handler) endTurn() {
 
 // processSkip recache les tuiles révélées et termine le tour.
 func (h *Handler) processSkip() {
-	// Si rien à cacher, on se contente d'appeler endTurn (le reset du timer est géré ailleurs)
-	if len(h.revealedTiles) == 0 {
+	// Si rien à cacher, on balance quand même TOUTES les tuiles de la grille avant la fin de tour
+	if len(h.revealedEntities) == 0 {
+		h.hideAllTilesInGrid()
 		h.endTurn()
 		return
 	}
 
 	// --- NOUVEAU : Logique de Skip (Pénalité si Match Valide manqué) ---
-	if len(h.revealedTiles) == 2 {
-		pos1 := h.revealedTiles[0]
-		pos2 := h.revealedTiles[1]
-		gridID1 := h.revealedGridIDs[0]
-		gridID2 := h.revealedGridIDs[1]
-		if gridID1 == "" {
-			gridID1 = h.world.CurrentGridID
-		}
-		if gridID2 == "" {
-			gridID2 = h.world.CurrentGridID
-		}
+	if len(h.revealedEntities) == 2 {
+		e1, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[0]))
+		e2, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[1]))
 
-		grid1, _ := h.world.GetGrid(gridID1)
-		grid2, _ := h.world.GetGrid(gridID2)
-		if grid1 != nil && grid2 != nil {
-			tile1, _ := grid1.Get(pos1)
-			tile2, _ := grid2.Get(pos2)
+		if e1 != nil && e2 != nil {
+			// On vérifie si c'était un match valide
+			isMatch := false
+			res1, isRes1 := e1.(*domain.Resource)
+			res2, isRes2 := e2.(*domain.Resource)
+			cre1, isCre1 := e1.(*domain.Creature)
+			cre2, isCre2 := e2.(*domain.Creature)
 
-			if len(tile1.EntitiesID) > 0 && len(tile2.EntitiesID) > 0 {
-				id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
-				id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
-				e1, _ := h.world.Entities.Get(entity.ID(id1))
-				e2, _ := h.world.Entities.Get(entity.ID(id2))
+			if isRes1 && isRes2 {
+				res, err := h.assocEngine.TryAssociate(res1, res2)
+				if err == nil && res.Success {
+					isMatch = true
+				}
+			} else if isCre1 && isCre2 && cre1.Species == cre2.Species {
+				isMatch = true
+			}
 
-				if e1 != nil && e2 != nil {
-					// On vérifie si c'était un match valide
-					isMatch := false
-					res1, isRes1 := e1.(*domain.Resource)
-					res2, isRes2 := e2.(*domain.Resource)
-					cre1, isCre1 := e1.(*domain.Creature)
-					cre2, isCre2 := e2.(*domain.Creature)
+			if isMatch {
+				creatureCount := 0
+				if isCre1 {
+					creatureCount++
+				}
+				if isCre2 {
+					creatureCount++
+				}
 
-					if isRes1 && isRes2 {
-						res, err := h.assocEngine.TryAssociate(res1, res2)
-						if err == nil && res.Success {
-							isMatch = true
-						}
-					} else if isCre1 && isCre2 && cre1.Species == cre2.Species {
-						isMatch = true
-					}
+				resourceCount := 0
+				if isRes1 {
+					resourceCount++
+				}
+				if isRes2 {
+					resourceCount++
+				}
 
-					if isMatch {
-						creatureCount := 0
-						if isCre1 {
-							creatureCount++
-						}
-						if isCre2 {
-							creatureCount++
-						}
+				if creatureCount > 0 {
+					fmt.Printf("[DEBUG] SKIP d'une paire valide contenant des créatures (%s, %s)\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
+					damage := creatureCount * 10
+					fmt.Printf("[COMBAT] Skip d'un match VALIDE avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
+					h.world.Player.TakeDamage(damage, "creature_fail")
 
-						resourceCount := 0
-						if isRes1 {
-							resourceCount++
-						}
-						if isRes2 {
-							resourceCount++
-						}
+					h.world.EventBus.Publish(event.NewPlayerDamagedEvent(
+						"system",
+						damage,
+						"creature_fail",
+						"skipped_valid_match",
+					))
+				}
 
-						if creatureCount > 0 {
-							fmt.Printf("[DEBUG] SKIP d'une paire valide contenant des créatures (Pos: %v, %v)\n", pos1, pos2)
-							damage := creatureCount * 10
-							fmt.Printf("[COMBAT] Skip d'un match VALIDE avec %d créature(s) ! Dégâts : %d\n", creatureCount, damage)
-							h.world.Player.TakeDamage(damage, "creature_fail")
+				if resourceCount > 0 {
+					manaLoss := resourceCount * 5
+					fmt.Printf("[ALCHIMIE] Skip d'un match VALIDE avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
+					h.world.Player.ConsumeMana(manaLoss)
 
-							h.world.EventBus.Publish(event.NewPlayerDamagedEvent(
-								"system",
-								damage,
-								"creature_fail",
-								"skipped_valid_match",
-							))
-						}
-
-						if resourceCount > 0 {
-							manaLoss := resourceCount * 5
-							fmt.Printf("[ALCHIMIE] Skip d'un match VALIDE avec %d ressource(s) ! Mana : -%d\n", resourceCount, manaLoss)
-							h.world.Player.ConsumeMana(manaLoss)
-
-							h.world.EventBus.Publish(event.NewPlayerDamagedEvent(
-								"system",
-								manaLoss,
-								"resource_fail",
-								"skipped_valid_match",
-							))
-						}
-					}
+					h.world.EventBus.Publish(event.NewPlayerDamagedEvent(
+						"system",
+						manaLoss,
+						"resource_fail",
+						"skipped_valid_match",
+					))
 				}
 			}
 		}
@@ -948,9 +897,14 @@ func (h *Handler) processSkip() {
 	h.endTurn()
 }
 
-// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedTiles (toute la pile).
+// hideRevealedTiles remet l'état Hidden sur toutes les tuiles de revealedEntities (toute la pile).
 func (h *Handler) hideRevealedTiles() {
-	for i, pos := range h.revealedTiles {
+	for i, eid := range h.revealedEntities {
+		ent, ok := h.world.Entities.Get(entity.ID(eid))
+		if !ok {
+			continue
+		}
+		pos := ent.GetPosition()
 		gridID := h.revealedGridIDs[i]
 		if gridID == "" {
 			gridID = h.world.CurrentGridID
@@ -976,9 +930,6 @@ func (h *Handler) hideRevealedTiles() {
 
 					if id == topID {
 						_, _ = h.world.FlipTile(gridID, pos, flipDir, "system_hide")
-						h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-							entity.Position(pos), id, gridID, flipDir,
-							map[string]interface{}{"reason": "system_hide"}))
 					} else {
 						ent.SetState(entity.Hidden)
 					}
@@ -986,7 +937,7 @@ func (h *Handler) hideRevealedTiles() {
 			}
 		}
 	}
-	h.revealedTiles = nil
+	h.revealedEntities = nil
 	h.revealedGridIDs = nil
 }
 
@@ -1016,9 +967,6 @@ func (h *Handler) hideAllTilesInGrid() {
 
 					if id == topID {
 						_, _ = h.world.FlipTile(gridID, plot.Position, flipDir, "system_hide")
-						h.world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-							entity.Position(plot.Position), id, gridID, flipDir,
-							map[string]interface{}{"reason": "system_hide"}))
 					} else {
 						ent.SetState(entity.Hidden)
 					}
@@ -1030,18 +978,26 @@ func (h *Handler) hideAllTilesInGrid() {
 
 // processMergeAttempt tente de fusionner les 2 tuiles révélées
 func (h *Handler) processMergeAttempt() {
-	if len(h.revealedTiles) != 2 {
+	if len(h.revealedEntities) != 2 {
 		h.isProcessing = false
 		return
 	}
-
-	pos1 := h.revealedTiles[0]
-	pos2 := h.revealedTiles[1]
 
 	gridID := h.selectedGridID
 	if gridID == "" {
 		gridID = h.world.CurrentGridID
 	}
+
+	e1, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[0]))
+	e2, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[1]))
+	if e1 == nil || e2 == nil {
+		h.revealedEntities = nil
+		h.revealedGridIDs = nil
+		h.isProcessing = false
+		return
+	}
+	pos1 := e1.GetPosition()
+	pos2 := e2.GetPosition()
 
 	cmd := &usecase.MergeTilesCommand{
 		World:    h.world,
@@ -1051,19 +1007,16 @@ func (h *Handler) processMergeAttempt() {
 		Pos2:     pos2,
 		OnSuccess: func() {
 			fmt.Printf("[MERGE] ✅ Succès !\n")
-			// Après fusion, la commande UseCase a déjà refermé les tuiles logiquement.
-			// On vide la mémoire tampon de l'input handler.
-			h.revealedTiles = nil
-						h.revealedGridIDs = nil
+			h.revealedEntities = nil
+			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
-
 			h.endTurn()
 		},
 		OnFailure: func() {
 			fmt.Printf("[MERGE] ❌ Échec !\n")
-			h.revealedTiles = nil
-						h.revealedGridIDs = nil
+			h.revealedEntities = nil
+			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
 			h.endTurn()
@@ -1072,21 +1025,30 @@ func (h *Handler) processMergeAttempt() {
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Printf("[MERGE] %v\n", err)
-		h.revealedTiles = nil
-						h.revealedGridIDs = nil
+		h.revealedEntities = nil
+		h.revealedGridIDs = nil
 		h.isProcessing = false
 	}
 }
 
 // processMatchAttempt tente d'associer les 2 tuiles révélées
 func (h *Handler) processMatchAttempt() {
-	if len(h.revealedTiles) != 2 {
+	if len(h.revealedEntities) != 2 {
 		h.isProcessing = false
 		return
 	}
 
-	pos1 := h.revealedTiles[0]
-	pos2 := h.revealedTiles[1]
+	// Résoudre les positions depuis les entity IDs
+	e1, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[0]))
+	e2, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[1]))
+	if e1 == nil || e2 == nil {
+		h.revealedEntities = nil
+		h.revealedGridIDs = nil
+		h.isProcessing = false
+		return
+	}
+	pos1 := e1.GetPosition()
+	pos2 := e2.GetPosition()
 
 	// Grid IDs par tuile (supporte le cross-zone matching)
 	gridID1 := h.revealedGridIDs[0]
@@ -1098,51 +1060,17 @@ func (h *Handler) processMatchAttempt() {
 		gridID2 = h.world.CurrentGridID
 	}
 
-	grid1, ok1 := h.world.GetGrid(gridID1)
-	grid2, ok2 := h.world.GetGrid(gridID2)
-	if !ok1 || !ok2 {
-		fmt.Printf("[MATCH] Erreur : Grid %s ou %s non trouvé\n", gridID1, gridID2)
-		h.revealedTiles = nil
-		h.revealedGridIDs = nil
-		h.isProcessing = false
-		return
-	}
-
-	tile1, _ := grid1.Get(pos1)
-	tile2, _ := grid2.Get(pos2)
-
-	if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
-		h.revealedTiles = nil
-		h.revealedGridIDs = nil
-		h.isProcessing = false
-		return
-	}
-
-	id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
-	id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
-	e1, _ := h.world.Entities.Get(entity.ID(id1))
-	e2, _ := h.world.Entities.Get(entity.ID(id2))
-
-	if e1 == nil || e2 == nil {
-		h.revealedTiles = nil
-		h.revealedGridIDs = nil
-		h.isProcessing = false
-		return
-	}
-
 	// CAS VICTOIRE PAR MATCH : Tout duo de portails révélés (Même grille)
 	isP1Portal := e1.HasTag("finish_portal") || e1.HasTag("portable_portal")
 	isP2Portal := e2.HasTag("finish_portal") || e2.HasTag("portable_portal")
 
 	if isP1Portal && isP2Portal {
-		// On autorise : Finish + Portable OU Finish + Finish (si duplicata) OU Portable + Portable (si duplicata)
-		// L'important est d'avoir deux portails "actifs" ensemble.
 		fmt.Println("[MATCH] ✅ La paire de portails est réunie ! VICTOIRE.")
 		if h.OnVictory != nil {
 			h.OnVictory()
 		}
-		h.revealedTiles = nil
-						h.revealedGridIDs = nil
+		h.revealedEntities = nil
+		h.revealedGridIDs = nil
 		h.isProcessing = false
 		h.ClearSelection()
 		return
@@ -1159,7 +1087,7 @@ func (h *Handler) processMatchAttempt() {
 		Pos2:     pos2,
 		OnSuccess: func() {
 			fmt.Printf("[MATCH] ✅ Succès ! Paire de %s trouvée.\n", h.getEntityInfo(e1))
-			h.revealedTiles = nil
+			h.revealedEntities = nil
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
@@ -1167,7 +1095,7 @@ func (h *Handler) processMatchAttempt() {
 		},
 		OnFailure: func() {
 			fmt.Printf("[MATCH] ❌ Échec ! %s et %s ne correspondent pas.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
-			h.revealedTiles = nil
+			h.revealedEntities = nil
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
@@ -1177,8 +1105,8 @@ func (h *Handler) processMatchAttempt() {
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Printf("[MATCH] %v\n", err)
-		h.revealedTiles = nil
-						h.revealedGridIDs = nil
+		h.revealedEntities = nil
+		h.revealedGridIDs = nil
 		h.isProcessing = false
 	}
 }
@@ -1223,7 +1151,7 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
-		if len(h.revealedTiles) == 2 {
+		if len(h.revealedEntities) == 2 {
 			fmt.Println("[ACTION] Raccourci clavier : Match")
 			h.processMatchAttempt()
 			if h.world.TurnTimer != nil {
@@ -1653,10 +1581,10 @@ func (h *Handler) GetCurrentGridID() string {
 	return h.world.CurrentGridID
 }
 
-// GetRevealedTiles retourne les tuiles révélées pendant le tour courant.
+// GetRevealedTiles retourne les tuiles révélées pendant le tour courant (nombre d'entités révélées).
 // Utilisé par le gestionnaire de boutons d'action pour le calcul réactif.
-func (h *Handler) GetRevealedTiles() []board.Position {
-	return h.revealedTiles
+func (h *Handler) GetRevealedTiles() int {
+	return len(h.revealedEntities)
 }
 
 func (h *Handler) ClearSelection() {
@@ -1758,9 +1686,7 @@ func (h *Handler) formatState(state entity.TileState) string {
 // ResetTimerSkip est appelé par l'app quand le timer temps réel expire.
 // Il simule un Skip sans reset du timer (le reset est fait côté app).
 func (h *Handler) ResetTimerSkip() {
-	if len(h.revealedTiles) > 0 {
-		h.hideRevealedTiles()
-	}
+	h.hideAllTilesInGrid()
 	h.isProcessing = false
 	h.ClearSelection()
 	h.endTurn()
@@ -1770,7 +1696,7 @@ func (h *Handler) ResetTimerSkip() {
 func (h *Handler) ResetGameState() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
-	h.revealedTiles = nil
+	h.revealedEntities = nil
 	h.revealedGridIDs = nil
 	h.isProcessing = false
 	h.victoryTimer = nil
