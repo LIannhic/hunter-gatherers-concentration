@@ -1,0 +1,59 @@
+//kage:unit pixels
+
+package main
+
+var Time float
+var Intensity float
+var Resolution vec2
+var Center vec2
+var RotationAngle float
+var Progress float
+var GhostSize vec2
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	center := Center * Resolution
+
+	// Lissage de la progression
+	easedProgress := Progress * Progress * (3.0 - 2.0 * Progress)
+
+	// 1. Image courante (nouvelle orientation)
+	currentColor := imageSrc0At(srcPos)
+
+	// 2. Fantôme (ancienne orientation) : rotation qui diminue pour s'aligner sur la nouvelle
+	pos := srcPos - center
+	ghostAngle := RotationAngle * (1.0 - easedProgress) * Intensity
+	s := sin(ghostAngle)
+	c := cos(ghostAngle)
+
+	rotatedPos := vec2(
+		pos.x*c - pos.y*s,
+		pos.x*s + pos.y*c,
+	)
+
+	rotatedSrc := rotatedPos + center
+	if rotatedSrc.x < 0.0 || rotatedSrc.x > GhostSize.x || rotatedSrc.y < 0.0 || rotatedSrc.y > GhostSize.y {
+		return currentColor
+	}
+
+	ghostColor := imageSrc1At(rotatedSrc)
+
+	// 3. Opacité du fantôme : fort au début, disparaît à la fin
+	ghostAlpha := (1.0 - easedProgress) * 0.75 * Intensity
+
+	// 4. Vignette radiale
+	dist := length(pos)
+	maxDist := length(Resolution) * 0.5
+	vignette := smoothstep(maxDist*0.3, maxDist, dist)
+	vignette = 1.0 - vignette*0.5
+
+	// 5. Teinte sismique — onde de choc subtile
+	waveRadius := easedProgress * length(Resolution) * 0.7
+	waveDist := abs(dist - waveRadius)
+	waveWidth := 50.0 * (1.0 - easedProgress) * Intensity
+	shockwave := smoothstep(waveWidth, 0.0, waveDist) * 0.3 * Intensity
+	tint := vec4(0.5, 0.5, 0.55, shockwave)
+
+	// 6. Mix final : courante + fantôme roté
+	mixed := mix(currentColor, ghostColor, ghostAlpha*vignette)
+	return mixed + tint*vignette
+}

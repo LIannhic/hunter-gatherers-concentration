@@ -61,6 +61,7 @@ type Handler struct {
 	OnUsePortablePortal   func(gridID string, center board.Position) // P / grid placement: Déployer le portail portable
 	OnVictory             func()                                     // Callback déclenché lors de l'activation du portail final
 	OnForceTurn           func()                                     // KeySpace: Forcer le prochain tour
+	OnTriggerQuake        func(gridID string, clockwise bool, angle float32) // Debug: déclencher l'effet séisme
 	OnHoverButton         func(mana, health, sanity int)             // Feedback de coût au survol
 	OnLongPress           func(pos board.Position, gridID string)    // Appui long tactile
 
@@ -648,6 +649,7 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 			FlipDirection: flipDir,
 		}
 		if err := cmd.Execute(); err == nil {
+			fmt.Printf("[INPUT] Clic en %v sur %s. Position logique du joueur : %v\n", pos, gridID, h.world.GetPlayerPosition())
 			info := h.getEntityInfo(ent)
 			num := len(h.revealedTiles) + 1
 			fmt.Printf("[SÉLECTION] Choix #%d : Tuile révélée en %v sur %s -> %s\n", num, pos, gridID, info)
@@ -1343,10 +1345,16 @@ func (h *Handler) handleKeyboard() {
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		fmt.Println("[ACTION] Réinitialisation de la rotation")
+		rotations := 0
 		if grid, ok := h.world.GetCurrentGrid(); ok {
 			for int(grid.MainBearing) != 0 {
 				_ = h.world.RotateGrid(grid.ID)
+				rotations++
 			}
+		}
+		if h.OnTriggerQuake != nil && rotations > 0 {
+			angle := float32(rotations) * float32(math.Pi/2)
+			h.OnTriggerQuake(h.GetCurrentGridID(), true, angle)
 		}
 	}
 
@@ -1354,6 +1362,9 @@ func (h *Handler) handleKeyboard() {
 		fmt.Println("[ACTION] Rotation horaire (+90°)")
 		cmd := &usecase.RotateGridCommand{World: h.world, GridID: h.GetCurrentGridID()}
 		_ = cmd.Execute()
+		if h.OnTriggerQuake != nil {
+			h.OnTriggerQuake(h.GetCurrentGridID(), true, float32(math.Pi/2))
+		}
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyMinus) || inpututil.IsKeyJustPressed(ebiten.KeyKPSubtract) {
@@ -1362,6 +1373,9 @@ func (h *Handler) handleKeyboard() {
 		for i := 0; i < 3; i++ {
 			cmd := &usecase.RotateGridCommand{World: h.world, GridID: h.GetCurrentGridID()}
 			_ = cmd.Execute()
+		}
+		if h.OnTriggerQuake != nil {
+			h.OnTriggerQuake(h.GetCurrentGridID(), false, float32(math.Pi/2))
 		}
 	}
 
