@@ -135,6 +135,13 @@ func generateTileHidden(size int, theme TileTheme) *ebiten.Image {
 	vector.DrawFilledCircle(img, cornerSize, float32(size)-cornerSize, cornerSize/2, theme.HiddenBorder, true)
 	vector.DrawFilledCircle(img, float32(size)-cornerSize, float32(size)-cornerSize, cornerSize/2, theme.HiddenBorder, true)
 
+	// Croix (X) dans le coin haut-gauche (DEBUG - à activer pour débogage)
+	// crossOffset := float32(size) * 0.10
+	// crossLen := float32(size) * 0.12
+	// crossColor := theme.HiddenBorder
+	// vector.StrokeLine(img, crossOffset, crossOffset, crossOffset+crossLen, crossOffset+crossLen, 2, crossColor, true)
+	// vector.StrokeLine(img, crossOffset+crossLen, crossOffset, crossOffset, crossOffset+crossLen, 2, crossColor, true)
+
 	return img
 }
 
@@ -159,6 +166,13 @@ func generateTileRevealed(size int, theme TileTheme) *ebiten.Image {
 	// Bordure fine
 	borderColor := theme.HiddenBorder
 	vector.StrokeRect(img, 1, 1, float32(size-2), float32(size-2), 2, borderColor, true)
+
+	// Croix (X) dans le coin haut-gauche (même position que le dos) (DEBUG - à activer pour débogage)
+	// crossOffset := float32(size) * 0.10
+	// crossLen := float32(size) * 0.12
+	// crossColor := theme.HiddenBorder
+	// vector.StrokeLine(img, crossOffset, crossOffset, crossOffset+crossLen, crossOffset+crossLen, 2, crossColor, true)
+	// vector.StrokeLine(img, crossOffset+crossLen, crossOffset, crossOffset, crossOffset+crossLen, 2, crossColor, true)
 
 	return img
 }
