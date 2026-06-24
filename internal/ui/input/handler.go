@@ -645,7 +645,12 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 		}
 		if err := cmd.Execute(); err == nil {
 			h.isMovedThisTurn = true
-			entityID := string(ent.GetID())
+			// Relecture après mouvement des créatures (shadowstalker swap)
+			newPlot, _ := grid.Get(pos)
+			entityID := topID
+			if len(newPlot.EntitiesID) > 0 {
+				entityID = newPlot.EntitiesID[len(newPlot.EntitiesID)-1]
+			}
 			fmt.Printf("[INPUT] Clic en %v sur %s. Position logique du joueur : %v\n", pos, gridID, h.world.GetPlayerPosition())
 			info := h.getEntityInfo(ent)
 			num := len(h.revealedEntities) + 1
