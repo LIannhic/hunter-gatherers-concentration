@@ -232,9 +232,14 @@ func (c *MatchTilesCommand) Execute() error {
 			}
 		}
 
-		name := "unknown"
+		typeName := "unknown"
 		if r := entity1.GetMatchID(); r != "" {
-			name = r
+			typeName = r
+		}
+
+		assocTypeStrings := make([]string, len(result.Types))
+		for i, t := range result.Types {
+			assocTypeStrings[i] = t.String()
 		}
 
 		c.World.EventBus.Publish(event.Event{
@@ -246,9 +251,9 @@ func (c *MatchTilesCommand) Execute() error {
 				"other_id":    string(entity2.GetID()),
 				"grid_id":     gridID1,
 				"grid_id_2":   gridID2,
-				"name":        name,
+				"name":        typeName,
 				"entity_type": entity1.GetType(),
-				"assoc_type":  result.Type.String(),
+				"assoc_types": assocTypeStrings,
 				"level":       level,
 			},
 		})

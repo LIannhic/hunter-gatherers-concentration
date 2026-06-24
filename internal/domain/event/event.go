@@ -35,6 +35,7 @@ const (
 	NavigationClosed   Type = "navigation_closed"
 	LevelUp            Type = "level_up"
 	CreatureAttacked   Type = "creature_attacked"
+	ComboTriggered     Type = "combo_triggered"
 	// Animation events pour l'UI
 	AnimationStarted Type = "animation_started"
 	AnimationEnded   Type = "animation_ended"
@@ -401,6 +402,20 @@ func NewLevelUpEvent(newLevel int) Event {
 		SourceID: "player",
 		Payload: map[string]interface{}{
 			"level": newLevel,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewComboTriggeredEvent(text string, count int, score int, juiciness int) Event {
+	return Event{
+		Type:     ComboTriggered,
+		SourceID: "combo_system",
+		Payload: map[string]interface{}{
+			"text":      text,
+			"count":     count,
+			"score":     score,
+			"juiciness": juiciness,
 		},
 		Timestamp: time.Now(),
 	}

@@ -110,15 +110,23 @@ const (
 	FlipThickness = 4.0
 )
 
+// Combo Zone (above gauges)
+const (
+	ComboZoneX = 1000
+	ComboZoneY = 10
+	ComboZoneW = 270
+	ComboZoneH = 40
+)
+
 // Gauges Holder
 const (
 	GaugesX = 1000
-	GaugesY = 10
+	GaugesY = 60
 	GaugesW = 270
-	GaugesH = 370
+	GaugesH = 320
 
 	GaugeW = 76.67
-	GaugeH = 350
+	GaugeH = 300
 
 	HealthGaugeRelativeX = 10
 	HealthGaugeRelativeY = 10

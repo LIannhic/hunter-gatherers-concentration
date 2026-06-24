@@ -27,6 +27,7 @@ func NewEngine(world *World) *Engine {
 	moveSys := NewCreatureMovementSystem(world)
 	prevSys := NewPreviewSystem()
 	lootSys := NewLootSystem(world)
+	comboSys := NewComboSystem(world)
 
 	e := &Engine{
 		world: world,
@@ -41,6 +42,7 @@ func NewEngine(world *World) *Engine {
 			&ToxicitySystem{},
 			&TrackSystem{},
 			lootSys,
+			comboSys,
 		},
 		movementSystem: moveSys,
 		previewSystem:  prevSys,

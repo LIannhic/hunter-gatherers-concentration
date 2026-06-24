@@ -91,7 +91,11 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 	result, err := mm.engine.TryAssociate(matchA, matchB)
 
 	if result.Success {
-		fmt.Printf("[SUCCÈS] Type: %s | Message: %s\n", result.Type.String(), result.Message)
+		typeName := "unknown"
+		if len(result.Types) > 0 {
+			typeName = result.Types[0].String()
+		}
+		fmt.Printf("[SUCCÈS] Type: %s | Message: %s\n", typeName, result.Message)
 
 		level := ent.GetCumulationLevel()
 		maxLevel := 2
@@ -147,7 +151,11 @@ func (mm *MatchManager) AttemptMatch(pos board.Position) (*association.Result, e
 	}
 
 	mm.firstSelected = ""
-	mm.eventBus.PublishImmediate(event.NewAssociationMadeEvent("player", result.Type.String(), result.Success))
+	assocTypeStr := ""
+	if len(result.Types) > 0 {
+		assocTypeStr = result.Types[0].String()
+	}
+	mm.eventBus.PublishImmediate(event.NewAssociationMadeEvent("player", assocTypeStr, result.Success))
 
 	return &result, nil
 }

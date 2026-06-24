@@ -33,7 +33,7 @@ Chaque zone (grille) est remplie selon un pool commun de créatures, ressources 
 - **Tirage aléatoire** : Toutes les variétés (dont pièges) sont tirées au hasard dans le pool commun.
 - **Max 4 tuiles par variété** : Chaque espèce ou type de ressource ne peut apparaître que 2 paires (4 tuiles) maximum dans une zone.
 - **Pièges dans le pool** : Les pièges font partie du pool global et sont tirés aléatoirement comme n'importe quelle autre entité (plus de paires fixes).
-- **Tuile orpheline** : Si le nombre de cases est impair, la dernière tuile est tirée aléatoirement dans le pool (pas systématiquement un piège).
+- **Tuile orpheline** : Si le nombre de cases est impair, la dernière tuile est **systématiquement un piège** (neutralisé par `DiscardTrapCommand` pour 1 mana).
 
 Cette répartition garantit une diversité maximale tout en laissant la part belle au hasard.
 
@@ -201,6 +201,76 @@ La progression du joueur est quantifiée par l'expérience (XP) acquise lors de 
 - **Persistance** : Le score final (Total XP) est enregistré dans le profil du joueur, mettant à jour le "Dernier score" et le "Score Max".
 - **Level-up** : Accumuler assez d'XP augmente le niveau du personnage, améliorant sa Santé et son Mana maximum.
 
+### Système de Combo (Juicy Combo)
+
+Les associations consécutives déclenchent un système de combo qui récompense la précision et la mémoire. Le combo incrémente à chaque match réussi et se réinitialise en cas d'erreur.
+
+#### Messages et Progression
+
+| Combo Count | Message | Score Bonus |
+|-------------|---------|-------------|
+| 1 | GOOD! | 5 XP |
+| 2 | NICE! | 10 XP |
+| 3 | GREAT! | 15 XP |
+| 4 | SUPER! | 20 XP |
+| 5 | AWESOME! | 25 XP |
+| 6 | EXCELLENT! | 30 XP |
+| 7 | MARVELOUS! | 35 XP |
+| 8 | INCREDIBLE! | 40 XP |
+| 9 | UNSTOPPABLE! | 45 XP |
+| 10+ | GODLIKE!!! | 50 XP |
+
+- **Synergie** : Si le match implique plusieurs types d'association, le message est toujours `"SYNERGY!"` avec +50 XP bonus supplémentaires.
+- **Merge** : La fusion publie `"MERGE!"` sans incrémenter le combo (score fixe : 10 XP).
+
+#### Niveaux de Juiciness (1-5)
+
+La juiciness détermine l'intensité visuelle du message et évolue avec le combo :
+
+| Condition | Juiciness |
+|-----------|-----------|
+| comboCount >= 1 (défaut) | 1 |
+| comboCount > 2 | 2 |
+| comboCount > 4 | 3 |
+| comboCount > 7 | 4 |
+| comboCount > 10 | 5 |
+
+- **Bonus Synergie** : +1 à la juiciness (plafonné à 5).
+
+#### Effets Visuels par Juiciness
+
+| Juiciness | Fond | Couleur Texte | Animations |
+|-----------|------|---------------|------------|
+| 1 | Bleu-gris sombre | Blanc | — |
+| 2 | Olive | Jaune | — |
+| 3 | Orange foncé | Or | Tremblement léger (2px) |
+| 4 | Rouge sombre | Rouge corail | Tremblement (4px) + particules orbitales |
+| 5 | Violet sombre | Arc-en-ciel (HSV) | Tremblement fort (6px) + particules + text rainbow |
+
+- **Slide-in** : Le message glisse de droite vers le centre (offset initial 100px, décroissance exponentielle ×0.85).
+- **Outline** : Texte dessiné avec un contour noir 8-directions (1px) pour lisibilité.
+- **Durée** : Le message persiste jusqu'à la fin du tour en cours (basé sur `TurnCreated`).
+
+#### Conditions de Réinitialisation
+
+Le combo se remet à zéro si :
+- Le tour avance sans match valide (timeout ou tour forcé).
+- Un match invalide inflige des dégâts (`reason: "invalid_match"`).
+- Un skip de paire valide inflige des dégâts (`reason: "skipped_valid_match"`).
+
+#### Zone d'Affichage (ComboZone)
+
+Le message s'affiche dans une zone dédiée en haut à droite de l'écran :
+
+| Constante | Valeur | Description |
+|-----------|--------|-------------|
+| `ComboZoneX` | 1000 | Position X (px) |
+| `ComboZoneY` | 10 | Position Y (px) |
+| `ComboZoneW` | 270 | Largeur (px) |
+| `ComboZoneH` | 40 | Hauteur (px) |
+
+La zone est toujours rendue (fond sombre + bordure) même sans combo actif, au-dessus des jauges.
+
 ### Feedback Visuel et Prudence (Hover)
 
 L'interface assiste le joueur dans sa gestion des ressources via un système de **feedback dynamique au survol** :
@@ -328,11 +398,11 @@ Le joueur laisse des empreintes de pas sur le plateau de jeu lors de ses actions
 | Créature | Biome | Déclencheur | Navigation | Mode | Collision | Agressivité Base | Description |
 ----------|-------|-------------|------------|------|-----------|------------------|-------------|
 | **Lumifly** | Global | Auto | Attraction (baie) | Over | Glisse | 0 | Insecte lumineux qui vole au-dessus du plateau. S'énerve près de Dreamberries toxiques. |
-| **Shadowstalker** | Global | Proximité (4) | Attraction joueur | Swap | Rebond | 80 | Prédateur qui chasse discrètement le joueur. Très agressif de base. |
+| **Shadowstalker** | Global | Proximité (4) | Attraction joueur | Swap | Rebond | 80 | Prédateur qui chasse discrètement le joueur. Échange de place avec la cible (swap validé : pas de doublon créature/ressource). |
 | **Burrower** | Désert | Auto | Relatif | Under | Phase (terre) | 20 | Créature fouisseuse qui se cache sous terre (Exclusif). |
 | **Specter** | Grotte | Echo | Errance | Under | Phase (murs) | 60 | Fantôme qui traverse les murs (Exclusif). |
 | **Stonewarden** | Global | Vue | Orientation | Normal | Stop | 40 | Gardien immobile qui patrouille si révélé. Son attaque déclenche un séisme de rotation (90°) avec un effet visuel de ghost shader. |
-| **Echo Hound** | Marais | Auto | Relatif | Swap | Rebond | 50 | Chien rapide qui avance et rebondit 180° quand bloqué (Exclusif). |
+| **Echo Hound** | Marais | Auto | Relatif | Swap | Rebond | 50 | Chien rapide qui échange de place avec la cible et rebondit 180° quand bloqué (Exclusif). |
 | **Moss Monkey** | Forêt | Proximité (4) | Target Empty | Normal | Glisse | 0 (dynamique) | Saboteur qui rebouche les cases vides. Agressivité = % cases vides. Fuit si saturé. |
 | **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | 0 | Créature timide dont l'essence apaise l'esprit. |
 | **Fleeing Sprite** | Global | Proximité (3) | Répulsion joueur | Normal | Glisse | 0 | Étincelle d'énergie vive révélant les dangers. |

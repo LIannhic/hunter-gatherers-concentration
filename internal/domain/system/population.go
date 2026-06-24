@@ -135,20 +135,9 @@ func (w *World) FillGridRandomly(gridID string) {
 		}
 	}
 
-	// 5. Tuile orpheline si nombre impair
+	// 5. Tuile orpheline si nombre impair → toujours un piège
 	if posIdx < totalSlots {
-		if len(pool) > 0 {
-			e := pool[rand.Intn(len(pool))]
-			if e.isTrap {
-				w.SpawnTrap(gridID, positions[posIdx])
-			} else if e.isCreature {
-				w.SpawnCreature(gridID, e.name, positions[posIdx])
-			} else {
-				w.SpawnResource(gridID, e.name, positions[posIdx])
-			}
-		} else {
-			w.SpawnTrap(gridID, positions[posIdx])
-		}
+		w.SpawnTrap(gridID, positions[posIdx])
 	}
 
 	fmt.Printf("[DEBUG-POP] Grid %s population terminee. Cibles (Matchable): %d\n",

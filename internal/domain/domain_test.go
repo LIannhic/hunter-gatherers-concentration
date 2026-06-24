@@ -98,7 +98,7 @@ func TestAssociationIntegration(t *testing.T) {
 		t.Error("Association should succeed")
 	}
 
-	if result.Type != association.Identical {
+	if result.Types[0] != association.Identical {
 		t.Error("Should be identical association")
 	}
 }
