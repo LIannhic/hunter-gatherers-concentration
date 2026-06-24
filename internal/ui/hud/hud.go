@@ -38,6 +38,19 @@ type NotificationMessage struct {
 	Speed       float64
 }
 
+// ComboMessage représente un message de combo "juicy"
+type ComboMessage struct {
+	Text        string
+	Timer       int
+	MaxTimer    int
+	Juiciness   int
+	Count       int
+	Scale       float64
+	YOffset     float64
+	XOffset     float64
+	TurnCreated int
+}
+
 // HUD affiche les informations de jeu
 type HUD struct {
 	world                *domain.World
@@ -73,6 +86,9 @@ type HUD struct {
 	activeRight          *NotificationMessage
 	toxicIntensity       float64 // Intensité de la toxicité pour le feedback visuel
 	lastToxicTurn        int     // Dernier tour où on a reçu des dégâts de poison
+
+	// Combo Juicy
+	comboMsg *ComboMessage
 }
 
 // NewHUD crée un nouveau HUD
@@ -146,6 +162,26 @@ func NewHUD(world *domain.World) *HUD {
 		h.AddMessage(fmt.Sprintf("AMNÉSIE ! %d tours.", duration), "right")
 	})
 
+	// S'abonne aux combos juicy
+	world.EventBus.SubscribeFunc(event.ComboTriggered, func(e event.Event) {
+		txt, _ := e.Payload["text"].(string)
+		count, _ := e.Payload["count"].(int)
+		juiciness, _ := e.Payload["juiciness"].(int)
+
+		fmt.Printf("[HUD] ComboTriggered received! text=%q, count=%d, juiciness=%d\n", txt, count, juiciness)
+
+		h.comboMsg = &ComboMessage{
+			Text:        txt,
+			Count:       count,
+			Juiciness:   juiciness,
+			Timer:       120,
+			MaxTimer:    120,
+			Scale:       1.0,
+			XOffset:     100.0,
+			TurnCreated: h.world.Turn + 1, // +1 car Turn est incrémenté dans le même Engine.Update()
+		}
+	})
+
 	return h
 }
 
@@ -174,6 +210,30 @@ func (h *HUD) Update() {
 
 	h.updateMessageArea("left")
 	h.updateMessageArea("right")
+
+	// Update combo message
+	if h.comboMsg != nil {
+		// Efface si le tour a changé (fin de tour)
+		if h.world.Turn > h.comboMsg.TurnCreated {
+			h.comboMsg = nil
+		} else {
+			// Animation de slide vers le centre
+			h.comboMsg.XOffset *= 0.85
+			if math.Abs(h.comboMsg.XOffset) < 0.5 {
+				h.comboMsg.XOffset = 0
+			}
+
+			h.comboMsg.YOffset = 0
+
+			// Pulse initial
+			t := float64(h.comboMsg.MaxTimer - h.comboMsg.Timer)
+			if t < 20 {
+				h.comboMsg.Scale = 1.0 + (math.Sin(t*0.2) * 0.5 * float64(h.comboMsg.Juiciness) / 3.0)
+			} else {
+				h.comboMsg.Scale = 1.0
+			}
+		}
+	}
 
 	h.pulseFrame++
 }
@@ -354,6 +414,8 @@ func (h *HUD) Render(screen *ebiten.Image) {
 	h.renderMessageArea(screen, "left")
 	h.renderMessageArea(screen, "right")
 
+	h.renderJuicyCombo(screen)
+
 	if h.showDetails {
 		h.renderDetailWindow(screen)
 	}
@@ -409,6 +471,132 @@ func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
 
     // On dessine sur msgImg en coordonnées absolues (repère screen)
     text.Draw(msgImg, active.Text, basicfont.Face7x13, int(x+active.X), int(ty), color.RGBA{255, 255, 230, 255})
+}
+
+func (h *HUD) renderJuicyCombo(screen *ebiten.Image) {
+    // APRÈS (style message box)
+    vector.DrawFilledRect(screen, float32(ui.ComboZoneX), float32(ui.ComboZoneY),
+        float32(ui.ComboZoneW), float32(ui.ComboZoneH),
+        color.RGBA{20, 20, 30, 180}, true)
+    vector.StrokeRect(screen, float32(ui.ComboZoneX), float32(ui.ComboZoneY),
+        float32(ui.ComboZoneW), float32(ui.ComboZoneH),
+        1, color.RGBA{100, 100, 150, 100}, true)
+
+	if h.comboMsg == nil {
+		return
+	}
+
+	// Position dans la combo zone (au-dessus des jauges)
+	baseX := ui.ComboZoneX + ui.ComboZoneW/2
+	baseY := ui.ComboZoneY + ui.ComboZoneH/2 + h.comboMsg.YOffset
+
+	fmt.Printf("[HUD] renderJuicyCombo: text=%q, baseX=%.1f, baseY=%.1f, timer=%d, juiciness=%d\n",
+		h.comboMsg.Text, float64(baseX), baseY, h.comboMsg.Timer, h.comboMsg.Juiciness)
+
+	// Fond coloré selon juiciness
+	var bgClr color.RGBA
+	switch h.comboMsg.Juiciness {
+	case 1:
+		bgClr = color.RGBA{40, 40, 60, 220}
+	case 2:
+		bgClr = color.RGBA{60, 60, 20, 220}
+	case 3:
+		bgClr = color.RGBA{80, 50, 10, 220}
+	case 4:
+		bgClr = color.RGBA{100, 20, 20, 220}
+	case 5:
+		bgClr = color.RGBA{60, 20, 80, 220}
+	}
+	vector.DrawFilledRect(screen, float32(ui.ComboZoneX+2), float32(ui.ComboZoneY+2),
+		float32(ui.ComboZoneW-4), float32(ui.ComboZoneH-4), bgClr, true)
+
+	// Animation de tremblement (Shake)
+	shakeX := 0.0
+	shakeY := 0.0
+	if h.comboMsg.Juiciness >= 3 {
+		amp := float64(h.comboMsg.Juiciness-2) * 2.0
+		shakeX = math.Sin(float64(h.pulseFrame)*0.8) * amp
+		shakeY = math.Cos(float64(h.pulseFrame)*0.7) * amp
+	}
+
+	// Détermine la couleur en fonction du combo/juiciness
+	var clr color.RGBA
+	switch h.comboMsg.Juiciness {
+	case 1:
+		clr = color.RGBA{255, 255, 255, 255}
+	case 2:
+		clr = color.RGBA{255, 255, 100, 255}
+	case 3:
+		clr = color.RGBA{255, 200, 50, 255}
+	case 4:
+		clr = color.RGBA{255, 100, 100, 255}
+	case 5:
+		hue := float64(h.pulseFrame%60) / 60.0
+		clr = hsvToRgb(hue, 1.0, 1.0)
+	}
+
+	// Effet "Pop" initial
+	popScale := 0.0
+	if h.comboMsg.Timer > h.comboMsg.MaxTimer-10 {
+		popScale = float64(h.comboMsg.MaxTimer-h.comboMsg.Timer) * 2.0
+	}
+
+	// Particules décoratives pour juiciness élevée
+	if h.comboMsg.Juiciness >= 4 {
+		for i := 0; i < 4; i++ {
+			angle := float64(i)*math.Pi/2 + float64(h.pulseFrame)*0.1
+			dist := 30.0 + math.Sin(float64(h.pulseFrame)*0.2)*5.0
+			px := float64(baseX) + math.Cos(angle)*dist
+			py := float64(baseY) + math.Sin(angle)*dist
+			vector.DrawFilledRect(screen, float32(px-2), float32(py-2), 4, 4, clr, true)
+		}
+	}
+
+	// Texte avec outline noir (8 directions, 1px) pour lisibilité
+	textStr := h.comboMsg.Text
+	tw := float64(len(textStr) * 7)
+	tx := float64(baseX) - tw/2 + shakeX + h.comboMsg.XOffset
+	ty := float64(baseY) + shakeY
+	black := color.RGBA{0, 0, 0, 220}
+
+	// Outline noir
+	for _, d := range [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
+		text.Draw(screen, textStr, basicfont.Face7x13, int(tx)+d[0], int(ty)+d[1], black)
+	}
+
+	// Texte coloré par-dessus
+	text.Draw(screen, textStr, basicfont.Face7x13, int(tx), int(ty), clr)
+
+	// Affiche le multiplicateur
+	if h.comboMsg.Count > 1 {
+		countText := fmt.Sprintf("x%d", h.comboMsg.Count)
+		text.Draw(screen, countText, basicfont.Face7x13, int(tx+tw+5+popScale), int(ty+popScale), color.RGBA{255, 255, 255, 255})
+	}
+}
+
+// hsvToRgb conversion simple pour l'effet arc-en-ciel
+func hsvToRgb(h, s, v float64) color.RGBA {
+	i := math.Floor(h * 6)
+	f := h*6 - i
+	p := v * (1 - s)
+	q := v * (1 - f*s)
+	t := v * (1 - (1-f)*s)
+	var r, g, b float64
+	switch int(i) % 6 {
+	case 0:
+		r, g, b = v, t, p
+	case 1:
+		r, g, b = q, v, p
+	case 2:
+		r, g, b = p, v, t
+	case 3:
+		r, g, b = p, q, v
+	case 4:
+		r, g, b = t, p, v
+	case 5:
+		r, g, b = v, p, q
+	}
+	return color.RGBA{uint8(r * 255), uint8(g * 255), uint8(b * 255), 255}
 }
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
