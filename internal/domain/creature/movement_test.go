@@ -104,6 +104,8 @@ func (m *mockWorldQuery) GetPlayerPosition() entity.Position                    
 func (m *mockWorldQuery) IsPlayerOnBoard() bool                                         { return true }
 func (m *mockWorldQuery) GetNearbyCreatures(pos entity.Position, radius int) []*Creature { return nil }
 func (m *mockWorldQuery) GetResources(pos entity.Position, radius int) []string          { return nil }
+func (m *mockWorldQuery) GetResourceStage(id string) int                                { return 0 }
+func (m *mockWorldQuery) IsPlantResource(id string) bool                                { return false }
 func (m *mockWorldQuery) IsValidMove(pos entity.Position) bool                           { return true }
 func (m *mockWorldQuery) GetTileState(pos entity.Position) string                        { return "" }
 func (m *mockWorldQuery) GetEmptyPlots() []entity.Position                               { return nil }

@@ -51,6 +51,11 @@ func (s *LifecycleSystem) Update(world *World) {
 				stageName,
 			))
 		}
+
+		if lifecycle.ShouldCycle() {
+			lifecycle.Cycle()
+			fmt.Printf("[LIFECYCLE] Entité %s a cyclé au stade 0\n", entityID)
+		}
 	}
 }
 
@@ -520,6 +525,22 @@ func (w *World) TriggerScannerEffect(gridID string, level int) error {
 	return nil
 }
 
+func (w *World) TriggerLumiflyEffect(centers []entity.Position, radius, duration float64) {
+	turnDuration := w.TurnTimer.Remaining
+	fmt.Printf("[WORLD] %d Lumifly émettent une onde lumineuse (rayon=%.1f, durée=%.1fs, tourDuration=%.1fs)\n", len(centers), radius, duration, turnDuration)
+
+	w.EventBus.PublishImmediate(event.Event{
+		Type:     event.Type("lumifly_effect_triggered"),
+		SourceID: "lumifly",
+		Payload: map[string]interface{}{
+			"centers":        centers,
+			"radius":         radius,
+			"duration":       duration,
+			"turn_duration":  turnDuration,
+		},
+	})
+}
+
 // --- SYSTEM: CREATURE AI ---
 type CreatureAISystem struct{}
 
@@ -606,10 +627,20 @@ func (s *CreatureAISystem) Update(world *World) {
 
 		case "transform":
 			targetID := action.TargetID
-			if targetID != "" {
-				if comp, ok := world.Components.Get(targetID, "lifecycle"); ok {
-					if lifecycle, ok := comp.(*component.Lifecycle); ok {
-						lifecycle.CurrentStage++
+			if targetID == "" {
+				break
+			}
+			if ent, ok := world.Entities.Get(entity.ID(targetID)); ok {
+				if r, ok := ent.(*resource.Resource); ok {
+					if !r.IsPlant() {
+						break
+					}
+				}
+			}
+			if comp, ok := world.Components.Get(targetID, "lifecycle"); ok {
+				if lifecycle, ok := comp.(*component.Lifecycle); ok {
+					if lifecycle.CurrentStage > 0 {
+						lifecycle.CurrentStage--
 					}
 				}
 			}
@@ -1127,6 +1158,24 @@ func (wa *worldAdapter) GetResources(pos entity.Position, radius int) []string {
 		}
 	}
 	return result
+}
+
+func (wa *worldAdapter) GetResourceStage(id string) int {
+	if comp, ok := wa.world.Components.Get(id, "lifecycle"); ok {
+		if lifecycle, ok := comp.(*component.Lifecycle); ok {
+			return lifecycle.CurrentStage
+		}
+	}
+	return 0
+}
+
+func (wa *worldAdapter) IsPlantResource(id string) bool {
+	if ent, ok := wa.world.Entities.Get(entity.ID(id)); ok {
+		if r, ok := ent.(*resource.Resource); ok {
+			return r.IsPlant()
+		}
+	}
+	return false
 }
 
 func (wa *worldAdapter) GetEmptyPlots() []entity.Position {

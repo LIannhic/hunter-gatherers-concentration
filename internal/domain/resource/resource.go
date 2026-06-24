@@ -10,12 +10,17 @@ import (
 // Resource est une entité récoltable
 type Resource struct {
 	entity.BaseEntity
-	ResourceType string // "plant", "mineral", "organic", "ethereal"
+	ResourceType string // "dreamberry", "moonstone", etc.
+	Category     string // "plant", "mineral", "ethereal"
 	Lifecycle    component.Lifecycle
 	Value        component.Value
 	Visual       component.Visual
 	Matchable    component.Matchable
 	Hazard       component.Hazard
+}
+
+func (r *Resource) IsPlant() bool {
+	return r.Category == "plant"
 }
 
 func New(rtype string, pos entity.Position) *Resource {
@@ -109,11 +114,13 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 
 	switch rtype {
 	case "dreamberry":
+		r.Category = "plant"
 		r.SetLifecycle(component.Lifecycle{
 			CurrentStage:     0,
 			MaxStages:        4,
 			StageNames:       []string{"bourgeon", "fleur", "fruit", "gâté"},
 			TurnsToNext:      3,
+			Cyclic:           true,
 			CanPropagate:     true,
 			PropagationCount: 2,
 			MaxPropagations:  1,
@@ -138,6 +145,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 
 	case "moonstone":
+		r.Category = "mineral"
 		r.SetLifecycle(component.Lifecycle{
 			CurrentStage:     1,
 			MaxStages:        3,
@@ -159,6 +167,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 
 	case "whispering_herb":
+		r.Category = "plant"
 		r.SetLifecycle(component.Lifecycle{
 			CurrentStage:     0,
 			MaxStages:        3,
@@ -180,6 +189,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 
 	case "crystal_shard":
+		r.Category = "mineral"
 		r.SetLifecycle(component.Lifecycle{
 			CurrentStage:     0,
 			MaxStages:        2,
@@ -201,6 +211,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 
 	case "moss_truffle":
+		r.Category = "plant"
 		r.SetLifecycle(component.Lifecycle{
 			CurrentStage: 1,
 			MaxStages:    2,
@@ -214,6 +225,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 
 	case "void_bloom":
+		r.Category = "plant"
 		r.SetLifecycle(component.Lifecycle{
 			CurrentStage: 0,
 			MaxStages:    3,
@@ -235,6 +247,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 
 	case "echo_crystal":
+		r.Category = "ethereal"
 		r.SetLifecycle(component.Lifecycle{
 			CurrentStage: 0,
 			MaxStages:    2,
@@ -248,6 +261,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 		})
 
 	case "sand_core":
+		r.Category = "mineral"
 		r.SetLifecycle(component.Lifecycle{
 			CurrentStage: 0,
 			MaxStages:    2,

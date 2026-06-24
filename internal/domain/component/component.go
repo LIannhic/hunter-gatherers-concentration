@@ -81,7 +81,8 @@ type Lifecycle struct {
 	MaxStages        int
 	StageNames       []string // ex: ["bourgeon", "fruit", "gâté"]
 	TurnsInStage     int
-	TurnsToNext      int // -1 pour infini
+	TurnsToNext      int  // -1 pour infini
+	Cyclic           bool // Cycle circulaire : après le dernier stade, revient au stade 0
 	CanPropagate     bool
 	PropagationCount int // Nombre de nouvelles entités créées lors de la propagation par cycle
 	MaxPropagations  int // Nombre total de cycles de propagation possibles (-1 pour infini)
@@ -108,6 +109,15 @@ func (l *Lifecycle) GetCurrentStageName() string {
 		return l.StageNames[l.CurrentStage]
 	}
 	return "unknown"
+}
+
+func (l *Lifecycle) ShouldCycle() bool {
+	return l.Cyclic && l.CurrentStage == l.MaxStages-1 && l.TurnsInStage >= l.TurnsToNext
+}
+
+func (l *Lifecycle) Cycle() {
+	l.CurrentStage = 0
+	l.TurnsInStage = 0
 }
 
 // Hazard définit les propriétés toxiques ou dangereuses d'une entité
