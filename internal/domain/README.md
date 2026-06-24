@@ -94,7 +94,7 @@ func (s *LifecycleSystem) Update(world *World) {
 - **`engine.go`** : Orchestrateur des systèmes. Sépare le cycle par tour (`Update`) du cycle temps réel (`UpdateFrame`).
 - **`system.go`** : Implémentation des systèmes ECS qui traitent les données.
   - `CreatureAISystem` : Gère les comportements de base des créatures
-  - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes. **Filtre les déclencheurs par grille** : `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature. Stocke les révélations avec `RevealedTile{Position, GridID}`.
+  - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes. **Filtre les déclencheurs par grille** : `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature. Stocke les révélations avec `RevealedTile{Position, GridID}`. **Validation du swap** : Le mode `ModeSwap` est soumis à une validation bidirectionnelle avant exécution — retrait temporaire des deux entités, vérification `IsWalkable` (règles de cohabitation créature) et `HasResourceAt` (interdiction de doublon ressource). Si une validation échoue, le mouvement est annulé.
   - `LifecycleSystem` : Gère la maturation des ressources
   - `PropagationSystem` : Gère l'expansion organique des ressources
   - `ToxicitySystem` : Gère les dégâts de poison cumulés et dégressifs infligés par les ressources toxiques (ex: Dreamberry stade 4). Vérifie les entités au sommet des piles **sur la grille actuelle uniquement** avec hazard actif + `IsConstant`.
@@ -105,6 +105,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `TrackSystem` : Gère la durée de vie et la disparition progressive des traces au sol
   - `AggressionSystem` : **Nouveau** — Calcule l'agressivité totale des créatures (Base + Facteurs). S'abonne à `TileRevealed` (reason: "player_action") pour le facteur "reveals" et à `CreatureMoved` pour le facteur "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité ≥ 100 à la fin de l'animation de flip.
   - `CreatureAttackEffectSystem` : Centralise les effets mondiaux des attaques (ex: rotation de grille du Stonewarden).
+  - `ComboSystem` : Gère le système de combo (Priority 10). S'abonne à `TileMatched` pour incrémenter le compteur et calculer la juiciness (1-5). S'abonne à `TileMerged` pour publier un message sans incrémenter. S'abonne à `PlayerDamaged` pour réinitialiser le combo en cas d'erreur. Publie `ComboTriggered` via `PublishImmediate` (sinon perdu dans `ProcessQueue`).
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)
@@ -254,6 +255,7 @@ TurnEnded          // Fin de tour
 CreatureAttacked   // Attaque de créature (agressivité ≥ 100) — payload: hit_target (*Position)
 AmnesiaStarted     // Début d'amnésie (payload: turns int) — message droite "AMNÉSIE ! X tours."
 AmnesiaEnded       // Fin d'amnésie — message gauche "La mémoire revient..."
+ComboTriggered     // Combo actif — payload: text, count, score, juiciness (publié via PublishImmediate)
 ```
 
 ---

@@ -103,6 +103,8 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
 
 - **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden — uniquement si `hit_target` présent dans le payload, i.e. attaque qui touche le joueur).
 
+- **ComboSystem** (Priority 10) : Gère le système de combo (associations consécutives). S'abonne à `TileMatched` pour incrémenter le compteur et calculer la juiciness (1-5). S'abonne à `TileMerged` pour publier un message sans incrémenter. S'abonne à `PlayerDamaged` pour réinitialiser le combo en cas d'erreur (`invalid_match`, `skipped_valid_match`). Publie `ComboTriggered` via `PublishImmediate` (sinon perdu dans `ProcessQueue`). Le message est rendu par le HUD dans la `ComboZone` (270×40px, en haut à droite) avec un fond coloré par niveau, un outline noir 8-directions, et un slide-in depuis la droite.
+
 - **Animations Organiques** :
   - **Propagation (Division Cellulaire)** : Lorsqu'une ressource se multiplie, une animation de type `propagate` est déclenchée. Elle simule une division organique en deux phases :
     1. **Phase d'extension** (progress 0.0 à 0.5) : Les angles de "tête" de la nouvelle tuile s'élancent vers la destination tandis que la "traîne" reste ancrée.
@@ -424,7 +426,7 @@ eventBus.Publish(event.NewEntityRevealedEvent(position, entityID, gridID, flipDi
 
 **Piège `ProcessQueue`** : `ProcessQueue()` itère sur un snapshot du slice. Les événements publiés via `Publish()` pendant le traitement d'un handler sont perdus. **Tout handler qui publie un événement chaîné doit utiliser `PublishImmediate()`**.
 
-**Nouveau type d'événement** : `CreatureAttacked` — Publié par `AggressionSystem` quand l'agressivité ≥ 100 à la fin du flip. Payload : `hit_target` (*entity.Position, nil si joueur hors zone). Utilisé par le renderer pour déclencher l'animation de lunge. `AmnesiaStarted` (payload: `turns int`) et `AmnesiaEnded` — gèrent les messages HUD et l'inventaire.
+**Nouveau type d'événement** : `CreatureAttacked` — Publié par `AggressionSystem` quand l'agressivité ≥ 100 à la fin du flip. Payload : `hit_target` (*entity.Position, nil si joueur hors zone). Utilisé par le renderer pour déclencher l'animation de lunge. `AmnesiaStarted` (payload: `turns int`) et `AmnesiaEnded` — gèrent les messages HUD et l'inventaire. `ComboTriggered` — Publié par `ComboSystem` via `PublishImmediate` (sinon perdu dans `ProcessQueue`). Payload : `text`, `count`, `score`, `juiciness`.
 
 ## Lancer le jeu
 
@@ -565,8 +567,8 @@ type MovementProfile struct {
 | Créature | Déclencheur      | Navigation             | Perception | Mode | AggressionBase |
 |----------|------------------|------------------------|------------|------|----------------|
 | **Lumifly** | Auto             | Attraction (baie)      | Manifest | Over | 0 |
-| **Shadowstalker** | Proximité (4)    | Attraction (Player)    | Cloaked | Swap | 80 |
-| **Echo Hound** | Auto             | Relatif                | Manifest | Swap | 50 | avance et rebondit 180° quand bloqué |
+| **Shadowstalker** | Proximité (4)    | Attraction (Player)    | Cloaked | Swap | 80 | échange de place avec la cible (swap validé) |
+| **Echo Hound** | Auto             | Relatif                | Manifest | Swap | 50 | échange de place avec la cible et rebondit 180° quand bloqué |
 | **Burrower** | Auto             | Relatif                | Manifest | Under | 20 |
 | **Specter** | Echo             | Errance                | Cloaked | Under | 60 |
 | **Stonewarden** | OnReveal         | Orientation            | Manifest | Normal | 40 | attaque = rotation grille 90° + shader quake |
@@ -598,6 +600,19 @@ Exemple: Les Lumiflies ignorent les Dreamberries au stade 1 et 4.
 | `ModeSwap`   | Interversion physique de deux tuiles |
 | `ModeOver`   | Passe au-dessus des autres tuiles (Tag "flying") |
 | `ModeUnder`  | Passe en dessous des autres tuiles (Tag "burrowed") |
+
+#### Validation du Swap (ModeSwap)
+
+Le mode `ModeSwap` est soumis à une **validation bidirectionnelle** avant exécution pour respecter les règles de cohabitation :
+
+1. **Retrait temporaire** : Les deux entités (créature et cible) sont retirées de leur tuile respective.
+2. **Vérification créature → tuile cible** : `IsWalkable` vérifie les règles de cohabitation (même espèce interdite, taille/poids, max 3 créatures).
+3. **Vérification cible → tuile origine** :
+   - Si la cible est une créature : `IsWalkable` vérifie les mêmes règles.
+   - Si la cible est une ressource : `HasResourceAt` vérifie qu'aucune ressource n'existe déjà sur la tuile (interdiction de doublon).
+   - Si la cible est un piège : pas de restriction.
+4. **Échec** : Si une validation échoue, les entités sont restaurées et le mouvement est annulé.
+5. **Succès** : Les entités sont placées sur leurs nouvelles tuiles via manipulation directe des slices `EntitiesID`.
 
 #### NOUVEAU : Règles de Perception
 
@@ -690,6 +705,73 @@ profile := &creature.MovementProfile{
         Type: creature.CollideSlide,
     },
 }
+```
+
+### Système de Combo (ComboSystem)
+
+**Fichier** : `internal/domain/system/combo_system.go`  
+**Tests** : `internal/domain/system/combo_system_test.go`
+
+#### Architecture
+Le `ComboSystem` (Priority 10) récompense les associations consécutives. Il s'exécute après tous les autres systèmes pour traiter les événements `TileMatched` et `TileMerged`.
+
+#### Messages et Progression
+
+| Combo Count | Message | Score Bonus |
+|-------------|---------|-------------|
+| 1 | GOOD! | 5 XP |
+| 2 | NICE! | 10 XP |
+| 3 | GREAT! | 15 XP |
+| 4 | SUPER! | 20 XP |
+| 5 | AWESOME! | 25 XP |
+| 6 | EXCELLENT! | 30 XP |
+| 7 | MARVELOUS! | 35 XP |
+| 8 | INCREDIBLE! | 40 XP |
+| 9 | UNSTOPPABLE! | 45 XP |
+| 10+ | GODLIKE!!! | 50 XP |
+
+- **Synergie** : Si le match implique plusieurs types d'association (`assoc_types` > 1), le message est toujours `"SYNERGY!"` avec +50 XP bonus.
+- **Merge** : La fusion publie `"MERGE!"` sans incrémenter le combo (score fixe : 10 XP).
+
+#### Juiciness (1-5)
+
+La juiciness détermine l'intensité visuelle du message :
+
+| Condition | Juiciness |
+|-----------|-----------|
+| comboCount >= 1 | 1 |
+| comboCount > 2 | 2 |
+| comboCount > 4 | 3 |
+| comboCount > 7 | 4 |
+| comboCount > 10 | 5 |
+
+Bonus synergie : +1 (plafonné à 5).
+
+#### Effets Visuels
+
+| Juiciness | Fond | Texte | Animations |
+|-----------|------|-------|------------|
+| 1 | Bleu-gris | Blanc | — |
+| 2 | Olive | Jaune | — |
+| 3 | Orange foncé | Or | Tremblement 2px |
+| 4 | Rouge | Rouge corail | Tremblement 4px + particules |
+| 5 | Violet | Arc-en-ciel | Tremblement 6px + particules + rainbow |
+
+- **Slide-in** : Offset initial 100px, décroissance ×0.85/frame.
+- **Outline** : Texte avec contour noir 8-directions (1px).
+- **Durée** : Persiste jusqu'à la fin du tour (`TurnCreated`).
+
+#### Conditions de Réinitialisation
+
+- Tour avancé sans match invalide.
+- `PlayerDamaged` avec reason `"invalid_match"` ou `"skipped_valid_match"`.
+
+#### Événement ComboTriggered
+
+Publié via `PublishImmediate` (sinon perdu dans `ProcessQueue`) :
+
+```go
+ComboTriggered  // payload: text, count, score, juiciness
 ```
 
 ### 4. Nouveau système ECS
