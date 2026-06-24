@@ -13,6 +13,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/component"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
@@ -65,6 +66,23 @@ type BoardRenderer struct {
 
 	// Frame buffer pour le shader quake (700×700, taille du playmat)
 	quakeFrameBuffer *ebiten.Image
+
+	// Debug: entités révélées visuellement sans modifier l'état réel
+	debugRevealed map[entity.ID]bool
+
+	// Effet Lumifly actif (nil si aucun)
+	lumiflyEffect *LumiflyEffect
+
+	// Dernier tour rendu (pour détecter le changement de tour et clear les silhouettes)
+	lastRenderedTurn int
+}
+
+// LumiflyEffect représente l'onde lumineuse circulaire du Lumifly
+type LumiflyEffect struct {
+	Centers      []entity.Position // Positions des lumifly émetteurs (en cases)
+	Radius       float64           // Rayon maximal de l'onde (en cases)
+	WaveDuration float64           // Durée de l'onde animée (fixe, ~0.5s)
+	WaveElapsed  float64           // Temps écoulé pour l'onde
 }
 
 // HoverState suit le progrès du survol pour une tuile
@@ -186,6 +204,21 @@ func (r *BoardRenderer) ClearAnimations() {
 	r.flipAnimations = make(map[string]*FlipAnimation)
 }
 
+func (r *BoardRenderer) SetDebugReveal(entityID entity.ID, revealed bool) {
+	if r.debugRevealed == nil {
+		r.debugRevealed = make(map[entity.ID]bool)
+	}
+	r.debugRevealed[entityID] = revealed
+}
+
+func (r *BoardRenderer) SetDebugRevealAll(entities map[entity.ID]bool) {
+	r.debugRevealed = entities
+}
+
+func (r *BoardRenderer) ClearDebugReveal() {
+	r.debugRevealed = make(map[entity.ID]bool)
+}
+
 // StartFlipAnimation démarre une animation de flip pour une tuile
 func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir entity.FlipDirection, entityID string, finalState entity.TileState, startTrans, endTrans entity.Transformation) {
 	key := fmt.Sprintf("%s:%d,%d:%s", gridID, pos.X, pos.Y, entityID)
@@ -281,7 +314,7 @@ func (r *BoardRenderer) DecayHoverStates(activeThisFrame map[string]bool) {
 }
 
 // UpdateEffects met à jour tous les effets actifs
-func (r *BoardRenderer) UpdateEffects(deltaTime float64) {
+func (r *BoardRenderer) UpdateEffects(deltaTime float64, world *domain.World) {
 	for gridID, effect := range r.activeScannerEffects {
 		effect.Elapsed += deltaTime
 		effect.Progress = effect.Elapsed / effect.Duration
@@ -299,6 +332,16 @@ func (r *BoardRenderer) UpdateEffects(deltaTime float64) {
 			delete(r.activeQuakeEffects, gridID)
 		}
 	}
+
+	if r.lumiflyEffect != nil {
+		r.lumiflyEffect.WaveElapsed += deltaTime
+
+		// On coupe l'effet immédiatement si le tour a changé
+		if world.Turn > r.lastRenderedTurn {
+			r.lumiflyEffect = nil
+		}
+	}
+	r.lastRenderedTurn = world.Turn
 }
 
 // SubscribeToEvents inscrit le renderer aux événements du monde
@@ -314,6 +357,19 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 				Elapsed:   0.0,
 			}
 		}
+	})
+
+	world.EventBus.SubscribeFunc(event.Type("lumifly_effect_triggered"), func(e event.Event) {
+		centers, _ := e.Payload["centers"].([]entity.Position)
+		radius, _ := e.Payload["radius"].(float64)
+		waveDuration, _ := e.Payload["duration"].(float64)
+		r.lumiflyEffect = &LumiflyEffect{
+			Centers:      centers,
+			Radius:       radius,
+			WaveDuration: waveDuration,
+			WaveElapsed:  0.0,
+		}
+		fmt.Printf("[LUMIFLY] Onde dorée déclenchée: %d centre(s), rayon=%.1f, durée=%.1fs\n", len(centers), radius, waveDuration)
 	})
 
 	// Démarre les animations de translation quand une créature se déplace
@@ -499,7 +555,7 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 	r.renderPlaymat(screen, world)
 
 	r.UpdateAnimations(world)
-	r.UpdateEffects(1.0 / 60.0)
+	r.UpdateEffects(1.0/60.0, world)
 
 	if world.CurrentGridID != "" {
 		grid, _ := world.GetGrid(world.CurrentGridID)
@@ -641,6 +697,7 @@ func (r *BoardRenderer) renderMovementsOver(screen *ebiten.Image, world *domain.
 func (r *BoardRenderer) renderEffectsOver(screen *ebiten.Image, world *domain.World) {
 	if world.CurrentGridID != "" {
 		r.renderScannerEffects(screen, world.CurrentGridID, world)
+		r.renderLumiflyEffect(screen, world)
 
 		// Rendu des menaces d'attaque (Intensions d'attaque) au-dessus de tout
 		if r.trackRenderer != nil {
@@ -1052,7 +1109,7 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	}
 
 	visualState := ent.GetState()
-	if forceReveal {
+	if forceReveal || r.debugRevealed[ent.GetID()] {
 		visualState |= entity.Revealed
 		visualState &= ^entity.Hidden
 	}
@@ -1153,20 +1210,30 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 	faceImg := tileImg
 	backImg := r.assets.GetImage("tile_hidden")
 
-	// 1. Dessin du Dos
+	// 1. Transformation D4 du Dos (UVs miroirs horizontaux)
+	if ent != nil {
+		backW, backH := backImg.Size()
+		bw, bh := float32(backW), float32(backH)
+		backUv := GetTransformationGeometry(ent.GetTransformation())
+		for i := 0; i < 4; i++ {
+			geo.V[4+i].SrcX = (1.0 - backUv[i][0]) * bw
+			geo.V[4+i].SrcY = backUv[i][1] * bh
+		}
+	}
+
+	// 2. Dessin du Dos
 	r.drawGeometryPart(screen, geo.V, geo.I[6:12], backImg)
 
-	// 2. Dessin de la Face (avec rotation si c'est une structure ou un piège)
-	// Les créatures/ressources sont déjà gérées par renderFlippingEntityTriangles.
-	// Mais les structures/pièges sont souvent des "fonds de tuiles" complets.
-	if ent.GetType() == entity.TypeStructure || ent.GetType() == entity.TypeTrap {
-		w, h := faceImg.Size()
-		fw, fh := float32(w), float32(h)
-		uvCoords := GetTransformationGeometry(ent.GetTransformation())
-		for i := 0; i < 4; i++ {
-			geo.V[i].SrcX = uvCoords[i][0] * fw
-			geo.V[i].SrcY = uvCoords[i][1] * fh
-		}
+	// 1b. Silhouette sur le Dos (alpha très faible, pour effets shader/révélation)
+	r.renderSilhouetteOnBack(screen, geo, ent)
+
+	// 3. Dessin de la Face (UVs D4 pour toutes les entités)
+	w, h := faceImg.Size()
+	fw, fh := float32(w), float32(h)
+	uvCoords := GetTransformationGeometry(ent.GetTransformation())
+	for i := 0; i < 4; i++ {
+		geo.V[i].SrcX = uvCoords[i][0] * fw
+		geo.V[i].SrcY = uvCoords[i][1] * fh
 	}
 
 	r.drawGeometryPart(screen, geo.V, geo.I[:6], faceImg)
@@ -1551,6 +1618,7 @@ func (r *BoardRenderer) renderMovingEntities(screen *ebiten.Image, world *domain
 			EntitiesID: []string{id},
 		}
 
+		// On force l'alpha à 1.0 par défaut pour les translations normales
 		r.renderTileAt(screen, curX, curY, world.CurrentGridID, fakePlot, world, false, 1.0)
 	}
 }
@@ -1605,6 +1673,163 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 
 	// 4. Appel du shader via l'EffectRenderer
 	r.effectRenderer.DrawScannerEffect(screen, srcImg, int(ui.PlaymatX), int(ui.PlaymatY), progress, erase, thickness, revealColor)
+}
+
+func (r *BoardRenderer) renderLumiflyEffect(screen *ebiten.Image, world *domain.World) {
+	if r.lumiflyEffect == nil || world.TurnTimer == nil {
+		return
+	}
+
+	effect := r.lumiflyEffect
+	gridID := world.CurrentGridID
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	// L'effet doré persiste tant que le tour n'est pas terminé (timer du monde)
+	if !world.TurnTimer.IsExpired() && r.effectRenderer != nil {
+		playmatW, playmatH := ui.PlaymatW, ui.PlaymatH
+		srcImg := ebiten.NewImage(int(playmatW), int(playmatH))
+		srcImg.Fill(color.RGBA{0, 0, 0, 0})
+
+		isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+
+		for _, tile := range grid.Plots {
+			if len(tile.EntitiesID) == 0 {
+				continue
+			}
+			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
+			ent, ok := world.Entities.Get(entity.ID(topID))
+			if !ok || ent.GetState()&entity.Revealed != 0 {
+				continue
+			}
+
+			absX, absY := r.calculateTileScreenPos(tile.Position, grid, isPortalZone)
+			sx := absX - ui.PlaymatX
+			sy := absY - ui.PlaymatY
+
+			r.renderEntityIconOnly(srcImg, sx, sy, ent)
+		}
+
+		step := r.tileSize + float64(r.gridSpacing)
+		radius := float32(effect.Radius) * float32(step)
+
+		// Progrès de l'onde initiale (lueur blanche)
+		progress := float32(effect.WaveElapsed / effect.WaveDuration)
+
+		glowColor := color.RGBA{255, 220, 100, 255}
+
+		for _, center := range effect.Centers {
+			absX, absY := r.calculateTileScreenPos(center, grid, isPortalZone)
+			centerX := float32(absX + r.tileSize/2)
+			centerY := float32(absY + r.tileSize/2)
+
+			r.effectRenderer.DrawLumiflyEffect(screen, srcImg, int(ui.PlaymatX), int(ui.PlaymatY), centerX, centerY, radius, progress, float32(effect.WaveDuration), glowColor)
+		}
+	}
+}
+
+// renderEntityIconOnly dessine uniquement l'icône de l'entité (sans fond/bordure de tuile) avec rotation
+func (r *BoardRenderer) renderEntityIconOnly(screen *ebiten.Image, x, y float64, ent entity.Entity) {
+	iconSize := ui.FaceSize * 0.75
+
+	var icon *ebiten.Image
+	switch e := ent.(type) {
+	case *domain.Creature:
+		icon = r.assets.GetCreatureSilhouette(e.Species)
+	case *domain.Resource:
+		stageName := e.Lifecycle.GetCurrentStageName()
+		icon = r.assets.GetResourceSilhouette(e.ResourceType, stageName)
+	case *player.LootItem:
+		if e.OriginalType == entity.TypeCreature {
+			icon = r.assets.GetCreatureSilhouette(e.SourceID)
+		} else if e.OriginalType == entity.TypeResource {
+			icon = r.assets.GetResourceSilhouette(e.SourceID, "")
+		}
+	}
+
+	if icon == nil {
+		return
+	}
+
+	// Centrer l'icône dans la tuile avec prise en compte de la rotation
+	op := &ebiten.DrawImageOptions{}
+	w, h := icon.Size()
+
+	// 1. Centrer l'origine
+	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+
+	// 2. Appliquer la transformation de l'entité
+	r.ApplyTransformation(&op.GeoM, ent.GetTransformation())
+
+	// 3. Scale
+	op.GeoM.Scale(iconSize/float64(w), iconSize/float64(h))
+
+	// 4. Positionner (x,y sont déjà relatifs au coin haut-gauche de la tuile dans srcImg)
+	op.GeoM.Translate(x+r.tileSize/2, y+r.tileSize/2)
+
+	screen.DrawImage(icon, op)
+}
+
+// renderSilhouetteOnBack dessine la silhouette de l'entité sur le dos de la tuile
+// avec un alpha très faible. Le shader peut ensuite amplifier cette silhouette.
+func (r *BoardRenderer) renderSilhouetteOnBack(screen *ebiten.Image, geo thickGeometry, ent entity.Entity) {
+	if ent == nil {
+		return
+	}
+
+	var silhouette *ebiten.Image
+	switch e := ent.(type) {
+	case *domain.Creature:
+		silhouette = r.assets.GetCreatureSilhouette(e.Species)
+	case *domain.Resource:
+		stageName := e.Lifecycle.GetCurrentStageName()
+		silhouette = r.assets.GetResourceSilhouette(e.ResourceType, stageName)
+	case *player.LootItem:
+		if e.OriginalType == entity.TypeCreature {
+			silhouette = r.assets.GetCreatureSilhouette(e.SourceID)
+		} else if e.OriginalType == entity.TypeResource {
+			silhouette = r.assets.GetResourceSilhouette(e.SourceID, "")
+		}
+	}
+
+	if silhouette == nil {
+		return
+	}
+
+	// Copier les sommets du dos (V[4:8]) pour la silhouette
+	vSil := make([]ebiten.Vertex, 4)
+	for i := 0; i < 4; i++ {
+		vSil[i] = geo.V[4+i]
+	}
+
+	// Centrer et réduire à 75%
+	cx := (vSil[0].DstX + vSil[1].DstX + vSil[2].DstX + vSil[3].DstX) / 4
+	cy := (vSil[0].DstY + vSil[1].DstY + vSil[2].DstY + vSil[3].DstY) / 4
+	const silScale = 0.75
+	for i := 0; i < 4; i++ {
+		vSil[i].DstX = cx + (vSil[i].DstX-cx)*silScale
+		vSil[i].DstY = cy + (vSil[i].DstY-cy)*silScale
+	}
+
+	// UV coords : transformation de l'entité + miroir horizontal
+	sw, sh := silhouette.Size()
+	sfw, sfh := float32(sw), float32(sh)
+	silUvCoords := GetTransformationGeometry(ent.GetTransformation())
+	for i := 0; i < 4; i++ {
+		// Miroir horizontal : inverse l'axe U (1.0 - u)
+		vSil[i].SrcX = (1.0 - silUvCoords[i][0]) * sfw
+		vSil[i].SrcY = silUvCoords[i][1] * sfh
+	}
+
+	// Alpha très faible (10%) — silhouette basique
+	for i := range vSil {
+		vSil[i].ColorA *= 0.1
+	}
+
+	indices := []uint16{0, 1, 2, 0, 2, 3}
+	r.drawGeometryPart(screen, vSil, indices, silhouette)
 }
 
 func (r *BoardRenderer) renderQuakeEffects(screen *ebiten.Image, gridID string, world *domain.World) {

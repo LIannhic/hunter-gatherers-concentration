@@ -669,11 +669,15 @@ func (r *BoardRenderer) renderEarthquakeTile360(screen *ebiten.Image, x, y float
 	if isFrontVisible {
 		// On dessine d'abord l'arrière, puis la face avant.
 		r.drawGeometryPart(screen, g.V, g.I[6:12], backImg)
+		// Silhouette sur le Dos (si irradié)
+		r.renderSilhouetteOnBack(screen, g, ent)
 		r.drawGeometryPart(screen, g.V, g.I[:6], frontImg)
 	} else {
 		// On dessine d'abord la face avant, puis l'arrière.
 		r.drawGeometryPart(screen, g.V, g.I[:6], frontImg)
 		r.drawGeometryPart(screen, g.V, g.I[6:12], backImg)
+		// Silhouette sur le Dos (si irradié)
+		r.renderSilhouetteOnBack(screen, g, ent)
 	}
 
 	// Dessin des tranches
@@ -834,5 +838,11 @@ func (r *BoardRenderer) renderPropagatingChildTile(screen *ebiten.Image, x, y, p
 	}
 
 	r.drawGeometryPart(screen, geo.V, geo.I[6:12], backImg)
+
+	// Ajout de la silhouette irradiée pendant la propagation
+	if ent, ok := world.Entities.Get(entity.ID(entityID)); ok {
+		r.renderSilhouetteOnBack(screen, geo, ent)
+	}
+
 	r.drawGeometryPart(screen, geo.V, geo.I[:6], backImg)
 }

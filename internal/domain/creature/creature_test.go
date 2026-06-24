@@ -104,6 +104,14 @@ func (m *mockWorldState) GetResources(pos entity.Position, radius int) []string 
 	return nil
 }
 
+func (m *mockWorldState) GetResourceStage(id string) int {
+	return 0
+}
+
+func (m *mockWorldState) IsPlantResource(id string) bool {
+	return false
+}
+
 func (m *mockWorldState) IsValidMove(pos entity.Position) bool {
 	if m.validMoves == nil {
 		return true
@@ -205,8 +213,8 @@ func TestLumiflyProperties(t *testing.T) {
 	factory := NewFactory()
 	c, _ := factory.Create("lumifly", entity.Position{X: 0, Y: 0})
 	
-	if c.Behavior.State != "pollinating" {
-		t.Errorf("Lumifly should be pollinating, got %s", c.Behavior.State)
+	if c.Behavior.State != "regressing" {
+		t.Errorf("Lumifly should be regressing, got %s", c.Behavior.State)
 	}
 	
 	if !c.HasTag("flying") {

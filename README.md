@@ -397,7 +397,7 @@ Le joueur laisse des empreintes de pas sur le plateau de jeu lors de ses actions
 
 | Créature | Biome | Déclencheur | Navigation | Mode | Collision | Agressivité Base | Description |
 ----------|-------|-------------|------------|------|-----------|------------------|-------------|
-| **Lumifly** | Global | Auto | Attraction (baie) | Over | Glisse | 0 | Insecte lumineux qui vole au-dessus du plateau. S'énerve près de Dreamberries toxiques. |
+| **Lumifly** | Global | Auto | Attraction (baie) | Over | Glisse | 0 | Insecte lumineux qui vole au-dessus du plateau. Régresse les plantes (décrémente leur stade) au lieu de les polliniser. S'énerve près de Dreamberries toxiques. |
 | **Shadowstalker** | Global | Proximité (4) | Attraction joueur | Swap | Rebond | 80 | Prédateur qui chasse discrètement le joueur. Échange de place avec la cible (swap validé : pas de doublon créature/ressource). |
 | **Burrower** | Désert | Auto | Relatif | Under | Phase (terre) | 20 | Créature fouisseuse qui se cache sous terre (Exclusif). |
 | **Specter** | Grotte | Echo | Errance | Under | Phase (murs) | 60 | Fantôme qui traverse les murs (Exclusif). |
@@ -407,11 +407,42 @@ Le joueur laisse des empreintes de pas sur le plateau de jeu lors de ses actions
 | **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | 0 | Créature timide dont l'essence apaise l'esprit. |
 | **Fleeing Sprite** | Global | Proximité (3) | Répulsion joueur | Normal | Glisse | 0 | Étincelle d'énergie vive révélant les dangers. |
 
+### Système de Cycle Cyclique (Lifecycle)
+
+Les ressources peuvent désormais suivre un **cycle circulaire** au lieu d'un cycle linéaire :
+
+- **Cycle linéaire (défaut)** : Les ressources progressent de stade en stade jusqu'au stade maximum.
+- **Cycle circulaire** : Les ressources progressent normalement, mais atteignent le stade maximum, elles **reviennent au stade 0** (bourgeon) au lieu de rester bloquées. La propagation a lieu **avant** le reset du cycle.
+
+| Ressource | Cycle | Comportement |
+|-----------|-------|--------------|
+| **Dreamberry** | Circulaire | Bourgeon → Fleur → Fruit → Gâté → Bourgeon (reset) |
+| Autres ressources | Linéaire | Progression standard |
+
+### Effet Lumifly (Onde Lumineuse dorée)
+
+L'utilisation d'un butin Lumifly déclenche une **onde lumineuse dorée** depuis chaque créature Lumifly présente sur la grille :
+
+- **Rayon** : Calculé selon la diagonale d'une case (`√2`). Niveau 0 : ~1 diagonale, Niveau 3 : ~1.5 diagonales.
+- **Durée de l'onde animée** : 0.5s + 0.25s par niveau.
+- **Silhouettes dorées** : Les silhouettes des entités cachées révélées par l'onde persistent jusqu'à la **fin du tour restant** (pas la durée totale du tour).
+- **Transformation D4** : Les silhouettes et les croix des tuiles suivent la transformation géométrique de l'entité.
+- **Rendu** : Shader dédié (`lumifly.kage`) avec anneau lumineux, trail exponentiel et silhouettes dorées à 55% d'opacité.
+
+### Marques de Tuiles (Croix)
+
+Chaque tuile possède une **croix (X)** comme marque visuelle de repérage :
+
+- **Tuile cachée** : Croix en haut à gauche (même position sur tous les biomes).
+- **Tuile révélée** : Croix en haut à gauche (même position que le dos).
+- **Transformation D4** : Les croix suivent la rotation/miroir de l'entité via les UVs transformés.
+- **Silhouette sur le dos** : Chaque tuile affiche la silhouette de son entité en transparence sur le dos, utilisée par le shader Lumifly pour les effets de révélation.
+
 ### Botanique et Minéralogie
 
 | Ressource | Biome | Effet du Butin | Description |
 |-----------|-------|----------------|-------------|
-| **Dreamberry** | Global | +5 Mana | Baie onirique violette. Toxique au stade 4 (Poison). |
+| **Dreamberry** | Global | +5 Mana | Baie onirique violette. Toxique au stade 4 (Poison). Cycle cyclique : revient au bourgeon après le stade gâté. |
 | **Moonstone** | Global | +5 Sanité | Pierre de lune bleutée, stabilise l'esprit. |
 | **Whispering Herb** | Global | Lore | Herbe murmurante, révèle des secrets. |
 | **Crystal Shard** | Global | +5 Santé | Éclat de cristal, régénère les tissus. |

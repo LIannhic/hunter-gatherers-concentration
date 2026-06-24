@@ -124,11 +124,13 @@ type WorldState interface {
 	IsPlayerOnBoard() bool
 	GetNearbyCreatures(pos entity.Position, radius int) []*Creature
 	GetResources(pos entity.Position, radius int) []string
+	GetResourceStage(id string) int
+	IsPlantResource(id string) bool
 	IsValidMove(pos entity.Position) bool
 	GetTileState(pos entity.Position) string
-	GetEmptyPlots() []entity.Position                       // Retourne les positions des cases strictement vides
-	GetGridTotalPlots() int                                 // Nombre total de cases dans la grille
-	IsGridSaturatedWithTraps() bool                         // Vérifie si plus aucune ressource n'est présente
+	GetEmptyPlots() []entity.Position                     // Retourne les positions des cases strictement vides
+	GetGridTotalPlots() int                               // Nombre total de cases dans la grille
+	IsGridSaturatedWithTraps() bool                       // Vérifie si plus aucune ressource n'est présente
 	HasActivityNearby(pos entity.Position, radius int) bool // Détecte mouvement/révélation
 }
 
@@ -232,13 +234,16 @@ func (ai *SimpleAI) Decide(c *Creature, world WorldState) Action {
 		}
 		return Action{Type: "idle"}
 
-	case "pollinating":
+	case "regressing":
 		resources := world.GetResources(c.GetPosition(), 2)
-		if len(resources) > 0 {
-			return Action{
-				Type:     "transform",
-				TargetID: resources[0],
-				Metadata: map[string]interface{}{"effect": "pollinate"},
+		for _, id := range resources {
+			stage := world.GetResourceStage(id)
+			if stage > 0 && world.IsPlantResource(id) {
+				return Action{
+					Type:     "transform",
+					TargetID: id,
+					Metadata: map[string]interface{}{"effect": "regress"},
+				}
 			}
 		}
 		return randomMove(world, c.GetPosition())
@@ -277,8 +282,8 @@ func (f *Factory) Create(species string, pos entity.Position) (*Creature, error)
 	switch species {
 	case "lumifly":
 		c.SetBehavior(component.Behavior{
-			State:          "pollinating",
-			Transformation: "pollinize",
+			State:          "regressing",
+			Transformation: "regress",
 		})
 		c.SetMobility(component.Mobility{
 			CanMove: true,

@@ -234,6 +234,52 @@ func (m *Manager) generateAllAssets() {
 	// Fleeing Sprite
 	m.images["creature_fleeing_sprite"] = generateFleeingSprite(size, FleeingSpritePalette)
 
+	// === SILHOUETTES (icônes sans fond pour effets de révélation) ===
+	m.images["silhouette_creature_lumifly"] = generateLumiflySilhouette(size)
+	m.images["silhouette_creature_shadowstalker"] = generateShadowstalkerSilhouette(size)
+	m.images["silhouette_creature_burrower"] = generateBurrowerSilhouette(size)
+	m.images["silhouette_creature_flutterwing"] = generateFlutterwingSilhouette(size)
+	m.images["silhouette_creature_specter"] = generateSpecterSilhouette(size)
+	m.images["silhouette_creature_echo_hound"] = generateEchoHoundSilhouette(size)
+	m.images["silhouette_creature_moss_monkey"] = generateMossMonkeySilhouette(size)
+	m.images["silhouette_creature_stonewarden"] = generateStonewardenSilhouette(size)
+	m.images["silhouette_creature_fleeing_sprite"] = generateFleeingSpriteSilhouette(size)
+
+	for _, stage := range []string{"bourgeon", "fleur", "fruit", "gâté"} {
+		m.images[fmt.Sprintf("silhouette_resource_dreamberry_%s", stage)] = generateDreamberrySilhouette(size, stage)
+	}
+	m.images["silhouette_resource_dreamberry"] = m.images["silhouette_resource_dreamberry_fruit"]
+
+	m.images["silhouette_resource_moonstone"] = generateMoonstoneSilhouette(size)
+
+	for _, stage := range []string{"graine", "pousse", "mature"} {
+		m.images[fmt.Sprintf("silhouette_resource_whispering_herb_%s", stage)] = generateWhisperingHerbSilhouette(size, stage)
+	}
+	m.images["silhouette_resource_whispering_herb"] = m.images["silhouette_resource_whispering_herb_mature"]
+
+	for _, stage := range []string{"graine", "éclosion", "pleine"} {
+		m.images[fmt.Sprintf("silhouette_resource_void_bloom_%s", stage)] = generateVoidBloomSilhouette(size, stage)
+	}
+	m.images["silhouette_resource_void_bloom"] = m.images["silhouette_resource_void_bloom_pleine"]
+
+	for _, stage := range []string{"bourgeon", "pousse", "mature"} {
+		m.images[fmt.Sprintf("silhouette_resource_moss_truffle_%s", stage)] = generateMossTruffleSilhouette(size, stage)
+	}
+	m.images["silhouette_resource_moss_truffle"] = m.images["silhouette_resource_moss_truffle_mature"]
+
+	for _, stage := range []string{"vibrant", "résonnant"} {
+		m.images[fmt.Sprintf("silhouette_resource_echo_crystal_%s", stage)] = generateEchoCrystalSilhouette(size, stage)
+	}
+	m.images["silhouette_resource_echo_crystal"] = m.images["silhouette_resource_echo_crystal_résonnant"]
+
+	for _, stage := range []string{"instable", "stable"} {
+		m.images[fmt.Sprintf("silhouette_resource_sand_core_%s", stage)] = generateSandCoreSilhouette(size, stage)
+	}
+	m.images["silhouette_resource_sand_core"] = m.images["silhouette_resource_sand_core_stable"]
+
+	m.images["silhouette_resource_shadow_essence"] = generateShadowEssenceSilhouette(size)
+	m.images["silhouette_resource_crystal_shard"] = generateCrystalShardSilhouette(size)
+
 	// === EFFETS DE FLIP ===
 	m.images["flip_overlay_top"] = generateFlipEffectOverlay(size, "top")
 	m.images["flip_overlay_bottom"] = generateFlipEffectOverlay(size, "bottom")
@@ -359,6 +405,30 @@ func (m *Manager) GetTileImage(tileType string, themeName string) *ebiten.Image 
 	}
 	// Retourne l'image par défaut
 	return m.images["tile_"+tileType]
+}
+
+// GetCreatureSilhouette retourne la silhouette (sans fond) d'une créature
+func (m *Manager) GetCreatureSilhouette(species string) *ebiten.Image {
+	key := "silhouette_creature_" + species
+	if img, ok := m.images[key]; ok {
+		return img
+	}
+	return nil
+}
+
+// GetResourceSilhouette retourne la silhouette (sans fond) d'une ressource
+func (m *Manager) GetResourceSilhouette(resourceType string, stage string) *ebiten.Image {
+	key := "silhouette_resource_" + resourceType
+	if stage != "" {
+		stageKey := key + "_" + stage
+		if img, ok := m.images[stageKey]; ok {
+			return img
+		}
+	}
+	if img, ok := m.images[key]; ok {
+		return img
+	}
+	return nil
 }
 
 // GetFlipOverlay retourne l'overlay d'effet de flip pour une direction

@@ -41,6 +41,7 @@ var ItemAbilities = map[string]LootAbility{
 	player.EchoCrystalItemName:    &EchoCrystalAbility{},
 	player.VoidBloomItemName:      &VoidBloomAbility{},
 	player.SandCoreItemName:       &SandCoreAbility{},
+	player.LumiflyItemName:        &LumiflyAbility{},
 }
 
 // --- ABILITY : DREAMBERRY ---
@@ -395,4 +396,46 @@ func (a *SandCoreAbility) Execute(world *domain.World, level int) (string, error
 	world.Player.RestoreMana(amount)
 	world.Player.RestoreSanity(amount)
 	return fmt.Sprintf("Noyau de sable absorbé (Niv.%d) : une énergie équilibrée (+%d à toutes les stats).", level, amount), nil
+}
+
+// --- ABILITY : LUMIFLY ---
+type LumiflyAbility struct{}
+
+func (a *LumiflyAbility) CanExecute(world *domain.World) bool {
+	if world.CurrentGridID == "" {
+		return false
+	}
+	// Vérifie qu'au moins un lumifly est sur la grille
+	for _, e := range world.Entities.GetByType(entity.TypeCreature) {
+		if e.GetGridID() == world.CurrentGridID {
+			if c, ok := e.(*creature.Creature); ok && c.Species == "lumifly" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (a *LumiflyAbility) Execute(world *domain.World, level int) (string, error) {
+	duration := 0.5 + float64(level)*0.25
+	radius := (0.5 + float64(level)/6.0) * math.Sqrt(2)
+
+	// Trouve tous les lumifly sur la grille courante
+	centers := make([]entity.Position, 0)
+	for _, e := range world.Entities.GetByType(entity.TypeCreature) {
+		if e.GetGridID() != world.CurrentGridID {
+			continue
+		}
+		if c, ok := e.(*creature.Creature); ok && c.Species == "lumifly" {
+			centers = append(centers, e.GetPosition())
+		}
+	}
+
+	if len(centers) == 0 {
+		return "", fmt.Errorf("aucun lumifly sur la grille")
+	}
+
+	world.TriggerLumiflyEffect(centers, radius, duration)
+
+	return fmt.Sprintf("Lumifly libéré %d onde dorée (Niv.%d)", len(centers), level), nil
 }
