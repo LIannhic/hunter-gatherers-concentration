@@ -175,8 +175,15 @@ func TestAssocEngine(t *testing.T) {
 	if !result.Success {
 		t.Error("Should successfully associate identical cards")
 	}
-	if result.Type != Identical {
-		t.Error("Should be Identical association")
+	found := false
+	for _, t := range result.Types {
+		if t == Identical {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Should be Identical association in Types")
 	}
 }
 
@@ -208,8 +215,15 @@ func TestAssocEnginePriority(t *testing.T) {
 	
 	result, _ := engine.TryAssociate(a, b)
 	
-	// Should use the custom strategy (registered first = higher priority)
-	if result.Type != 999 {
+	// Should use the custom strategy
+	found := false
+	for _, t := range result.Types {
+		if t == Type(999) {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Error("Should use custom strategy")
 	}
 }
@@ -245,7 +259,7 @@ type alwaysMatchStrategy struct{}
 func (s *alwaysMatchStrategy) Type() Type { return Type(999) }
 func (s *alwaysMatchStrategy) CanAssociate(a, b Matchable) bool { return true }
 func (s *alwaysMatchStrategy) Resolve(a, b Matchable) (Result, error) {
-	return Result{Success: true, Type: Type(999)}, nil
+	return Result{Success: true, Types: []Type{Type(999)}}, nil
 }
 
 func TestGetStrategies(t *testing.T) {

@@ -41,9 +41,10 @@ func (t Type) String() string {
 // Resultat d'une association
 type Result struct {
 	Success    bool
-	Type       Type
-	ProducedID string // ID de l'entité créée (ressource, artefact)
-	CapturedID string // ID de la créature capturée (si applicable)
+	Types      []Type
+	TotalScore int
+	ProducedID string   // ID de l'entité créée (ressource, artefact)
+	CapturedID string   // ID de la créature capturée (si applicable)
 	Effects    []Effect
 	Message    string
 }
@@ -99,7 +100,7 @@ func (s *IdenticalStrategy) Resolve(a, b Matchable) (Result, error) {
 
 	return Result{
 		Success: true,
-		Type:    matchType,
+		Types:   []Type{matchType},
 		Message: fmt.Sprintf("Paire identique de %s trouvée !", a.GetCategory()),
 		Effects: []Effect{
 			{Type: "collect", Target: "player"},
@@ -145,7 +146,7 @@ func (s *LogicalStrategy) Resolve(a, b Matchable) (Result, error) {
 
 	return Result{
 		Success: true,
-		Type:    Logical,
+		Types:   []Type{Logical},
 		Message: fmt.Sprintf("Association logique: %s + %s", tool, target),
 		Effects: []Effect{
 			{Type: "unlock", Target: "board", Metadata: map[string]interface{}{"tool": tool}},
@@ -198,7 +199,7 @@ func (s *ElementalStrategy) Resolve(a, b Matchable) (Result, error) {
 
 	return Result{
 		Success: true,
-		Type:    Elemental,
+		Types:   []Type{Elemental},
 		Message: fmt.Sprintf("Réaction élémentaire: %s + %s", a.GetElement(), b.GetElement()),
 		Effects: []Effect{
 			{Type: "transform", Target: "board", Metadata: map[string]interface{}{
@@ -275,7 +276,7 @@ func (s *NarrativeStrategy) Resolve(a, b Matchable) (Result, error) {
 
 	return Result{
 		Success: true,
-		Type:    Narrative,
+		Types:   []Type{Narrative},
 		Message: fmt.Sprintf("Fragment d'histoire découvert: %s", storyName),
 		Effects: []Effect{
 			{Type: "lore", Target: "player", Metadata: map[string]interface{}{"story": storyName}},
@@ -324,7 +325,7 @@ func (s *OrientationStrategy) Resolve(a, b Matchable) (Result, error) {
 
 	return Result{
 		Success: true,
-		Type:    Orientation,
+		Types:   []Type{Orientation},
 		Message: fmt.Sprintf("Passage ouvert vers le %s", direction),
 		Effects: []Effect{
 			{Type: "unlock_navigation", Target: "board", Metadata: map[string]interface{}{"direction": direction}},
@@ -355,13 +356,52 @@ func (e *Engine) TryAssociate(a, b Matchable) (Result, error) {
 		return Result{Success: false}, fmt.Errorf("niveaux de cumul incompatibles (%d vs %d)", a.GetCumulationLevel(), b.GetCumulationLevel())
 	}
 
-	// Essaie chaque stratégie dans l'ordre de spécificité
+	finalResult := Result{
+		Success: false,
+		Types:   make([]Type, 0),
+		Effects: make([]Effect, 0),
+	}
+
+	scores := map[Type]int{
+		Identical:   10,
+		Logical:     30,
+		Elemental:   25,
+		Narrative:   40,
+		Orientation: 20,
+		Creature:    15,
+		Trap:        15,
+	}
+
+	// Essaie chaque stratégie et accumule les résultats
 	for _, strategy := range e.strategies {
 		if strategy.CanAssociate(a, b) {
-			return strategy.Resolve(a, b)
+			res, err := strategy.Resolve(a, b)
+			if err == nil && res.Success {
+				finalResult.Success = true
+				finalResult.Types = append(finalResult.Types, res.Types...)
+				finalResult.Effects = append(finalResult.Effects, res.Effects...)
+				if finalResult.Message != "" {
+					finalResult.Message += " + "
+				}
+				finalResult.Message += res.Message
+				for _, t := range res.Types {
+					finalResult.TotalScore += scores[t]
+				}
+			}
 		}
 	}
-	return Result{Success: false}, errors.New("aucune association possible")
+
+	if !finalResult.Success {
+		return Result{Success: false}, errors.New("aucune association possible")
+	}
+
+	// Bonus de Synergie si plusieurs types d'associations sont trouvés
+	if len(finalResult.Types) > 1 {
+		finalResult.TotalScore += 50
+		finalResult.Message = "SYNERGIE ! " + finalResult.Message
+	}
+
+	return finalResult, nil
 }
 
 func (e *Engine) RegisterStrategy(s Strategy) {
