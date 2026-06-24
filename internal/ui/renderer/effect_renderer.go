@@ -24,6 +24,8 @@ var (
 	vortexShaderSource []byte
 	//go:embed shader/quake.kage
 	quakeShaderSource []byte
+	//go:embed shader/lumifly.kage
+	lumiflyShaderSource []byte
 )
 
 type EffectRenderer struct {
@@ -48,6 +50,7 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 		"wave":    waveShaderSource,
 		"vortex":  vortexShaderSource,
 		"quake":   quakeShaderSource,
+		"lumifly": lumiflyShaderSource,
 	}
 
 	for name, src := range sources {
@@ -83,6 +86,38 @@ func (r *EffectRenderer) DrawScannerEffect(dst, src *ebiten.Image, x, y int, pro
 		"WaveErase":     erase,
 		"WaveThickness": thickness,
 		"RevealColor": []float32{
+			float32(cr) / 0xffff,
+			float32(cg) / 0xffff,
+			float32(cb) / 0xffff,
+			float32(ca) / 0xffff,
+		},
+	}
+
+	dst.DrawRectShader(w, h, shader, op)
+}
+
+// DrawLumiflyEffect dessine l'onde lumineuse circulaire du Lumifly.
+// src contient les icons des entités rendues sur le dos des tuiles.
+// centerXY = position du centre en pixels (coords srcImg), radius = rayon actuel, progress = 0..1
+func (r *EffectRenderer) DrawLumiflyEffect(dst, src *ebiten.Image, x, y int, centerX, centerY, radius, progress, duration float32, clr color.Color) {
+	shader, ok := r.shaders["lumifly"]
+	if !ok {
+		return
+	}
+
+	w, h := src.Bounds().Dx(), src.Bounds().Dy()
+	cr, cg, cb, ca := clr.RGBA()
+
+	op := &ebiten.DrawRectShaderOptions{}
+	op.GeoM.Translate(float64(x), float64(y))
+	op.Images[0] = src
+	op.Uniforms = map[string]interface{}{
+		"CenterX":  centerX,
+		"CenterY":  centerY,
+		"Radius":   radius,
+		"Progress": progress,
+		"Duration": duration,
+		"GlowColor": []float32{
 			float32(cr) / 0xffff,
 			float32(cg) / 0xffff,
 			float32(cb) / 0xffff,

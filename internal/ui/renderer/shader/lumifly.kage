@@ -1,0 +1,68 @@
+//kage:unit pixels
+package main
+
+var CenterX float
+var CenterY float
+var Radius float
+var Progress float
+var GlowColor vec4
+var Duration float
+
+func Fragment(dstPos vec4, srcPos vec2, srcColor vec4) vec4 {
+	dx := dstPos.x - CenterX
+	dy := dstPos.y - CenterY
+	dist := sqrt(dx*dx + dy*dy)
+
+	// Rayon actuel de l'onde (bloqué au rayon max après la propagation)
+	waveEdge := Radius * min(Progress, 1.0)
+
+	// Largeur du bord lumineux de l'onde
+	edgeWidth := 40.0
+
+	// Hors de l'onde : transparent
+	if dist > waveEdge {
+		return vec4(0.0)
+	}
+
+	// L'image source contient les icons des entités rendues sur le dos des tuiles
+	currentPixel := imageSrc0At(srcPos)
+
+	hasEntity := currentPixel.a > 0.01
+
+	// === ONDE LUMINEUSE (visible partout, même entre les tuiles) ===
+	distToEdge := waveEdge - dist
+	inEdge := 1.0 - smoothstep(0.0, edgeWidth, distToEdge)
+
+	// Traînée lumineuse derrière l'onde
+	trail := exp(-distToEdge * 0.015) * 0.6
+
+	// On estompe l'anneau lumineux (ring) une fois que Progress > 1.0
+	glowFade := 1.0
+	if Progress > 1.0 {
+		glowFade = max(0.0, 1.0 - (Progress - 1.0) * 5.0)
+	}
+
+	// Lueur au bord
+	glowIntensity := (inEdge * 1.2 + trail) * glowFade
+	glow := GlowColor * glowIntensity
+
+	if !hasEntity {
+		// Pas d'entité : on montre juste l'onde lumineuse sur le fond
+		return vec4(glow.rgb, glowIntensity * 0.8)
+	}
+
+	// === SILHOUETTE DORÉE (persiste derrière l'onde) ===
+	// On utilise l'alpha de l'icône originale (currentPixel.a) pour détourer proprement
+	goldenSilhouette := vec4(GlowColor.rgb, 0.55 * currentPixel.a)
+
+	// === RENDU FINAL ===
+	// Devant l'onde : la lueur domine
+	// Derrière l'onde : la silhouette dorée persiste
+	frontGlow := glow * inEdge
+	result := goldenSilhouette + frontGlow
+
+	// Opacité globale
+	result.a = max(goldenSilhouette.a, glow.a * inEdge)
+
+	return result
+}
