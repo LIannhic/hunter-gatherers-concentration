@@ -526,17 +526,15 @@ func (w *World) TriggerScannerEffect(gridID string, level int) error {
 }
 
 func (w *World) TriggerLumiflyEffect(centers []entity.Position, radius, duration float64) {
-	turnDuration := w.TurnTimer.Remaining
-	fmt.Printf("[WORLD] %d Lumifly émettent une onde lumineuse (rayon=%.1f, durée=%.1fs, tourDuration=%.1fs)\n", len(centers), radius, duration, turnDuration)
+	fmt.Printf("[WORLD] %d Lumifly émettent une onde dorée (rayon=%.1f, durée=%.1fs)\n", len(centers), radius, duration)
 
 	w.EventBus.PublishImmediate(event.Event{
 		Type:     event.Type("lumifly_effect_triggered"),
 		SourceID: "lumifly",
 		Payload: map[string]interface{}{
-			"centers":        centers,
-			"radius":         radius,
-			"duration":       duration,
-			"turn_duration":  turnDuration,
+			"centers":  centers,
+			"radius":   radius,
+			"duration": duration,
 		},
 	})
 }

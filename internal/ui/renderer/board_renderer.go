@@ -73,21 +73,16 @@ type BoardRenderer struct {
 	// Effet Lumifly actif (nil si aucun)
 	lumiflyEffect *LumiflyEffect
 
-	// Positions révélées par l'onde lumifly (persistent jusqu'au prochain tour)
-	revealedByLumifly map[[2]int]bool
-
 	// Dernier tour rendu (pour détecter le changement de tour et clear les silhouettes)
 	lastRenderedTurn int
 }
 
 // LumiflyEffect représente l'onde lumineuse circulaire du Lumifly
 type LumiflyEffect struct {
-	Centers       []entity.Position // Positions des lumifly émetteurs (en cases)
-	Radius        float64           // Rayon maximal de l'onde (en cases)
-	WaveDuration  float64           // Durée de l'onde animée (fixe, ~0.5s)
-	WaveElapsed   float64           // Temps écoulé pour l'onde
-	TurnDuration  float64           // Durée du tour (depuis difficulty) pour la persistance dorée
-	GoldenElapsed float64           // Temps écoulé depuis le déclenchement
+	Centers      []entity.Position // Positions des lumifly émetteurs (en cases)
+	Radius       float64           // Rayon maximal de l'onde (en cases)
+	WaveDuration float64           // Durée de l'onde animée (fixe, ~0.5s)
+	WaveElapsed  float64           // Temps écoulé pour l'onde
 }
 
 // HoverState suit le progrès du survol pour une tuile
@@ -340,13 +335,13 @@ func (r *BoardRenderer) UpdateEffects(deltaTime float64, world *domain.World) {
 
 	if r.lumiflyEffect != nil {
 		r.lumiflyEffect.WaveElapsed += deltaTime
-		r.lumiflyEffect.GoldenElapsed += deltaTime
-		// Clear les silhouettes dorées quand la durée du tour est écoulée
-		if r.lumiflyEffect.GoldenElapsed >= r.lumiflyEffect.TurnDuration {
+
+		// On coupe l'effet immédiatement si le tour a changé
+		if world.Turn > r.lastRenderedTurn {
 			r.lumiflyEffect = nil
-			r.revealedByLumifly = make(map[[2]int]bool)
 		}
 	}
+	r.lastRenderedTurn = world.Turn
 }
 
 // SubscribeToEvents inscrit le renderer aux événements du monde
@@ -368,17 +363,13 @@ func (r *BoardRenderer) SubscribeToEvents(world *domain.World) {
 		centers, _ := e.Payload["centers"].([]entity.Position)
 		radius, _ := e.Payload["radius"].(float64)
 		waveDuration, _ := e.Payload["duration"].(float64)
-		turnDuration, _ := e.Payload["turn_duration"].(float64)
 		r.lumiflyEffect = &LumiflyEffect{
-			Centers:       centers,
-			Radius:        radius,
-			WaveDuration:  waveDuration,
-			WaveElapsed:   0.0,
-			TurnDuration:  turnDuration,
-			GoldenElapsed: 0.0,
+			Centers:      centers,
+			Radius:       radius,
+			WaveDuration: waveDuration,
+			WaveElapsed:  0.0,
 		}
-		r.revealedByLumifly = make(map[[2]int]bool)
-		fmt.Printf("[LUMIFLY] Effet déclenché: %d centre(s), rayon=%.1f, durée=%.1fs, tourDurée=%.1fs\n", len(centers), radius, waveDuration, turnDuration)
+		fmt.Printf("[LUMIFLY] Onde dorée déclenchée: %d centre(s), rayon=%.1f, durée=%.1fs\n", len(centers), radius, waveDuration)
 	})
 
 	// Démarre les animations de translation quand une créature se déplace
@@ -1627,6 +1618,7 @@ func (r *BoardRenderer) renderMovingEntities(screen *ebiten.Image, world *domain
 			EntitiesID: []string{id},
 		}
 
+		// On force l'alpha à 1.0 par défaut pour les translations normales
 		r.renderTileAt(screen, curX, curY, world.CurrentGridID, fakePlot, world, false, 1.0)
 	}
 }
@@ -1684,7 +1676,7 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 }
 
 func (r *BoardRenderer) renderLumiflyEffect(screen *ebiten.Image, world *domain.World) {
-	if r.lumiflyEffect == nil {
+	if r.lumiflyEffect == nil || world.TurnTimer == nil {
 		return
 	}
 
@@ -1695,8 +1687,8 @@ func (r *BoardRenderer) renderLumiflyEffect(screen *ebiten.Image, world *domain.
 		return
 	}
 
-	// CHANGEMENT : On dessine tant que l'effet doré est actif pour le tour
-	if effect.GoldenElapsed < effect.TurnDuration && r.effectRenderer != nil {
+	// L'effet doré persiste tant que le tour n'est pas terminé (timer du monde)
+	if !world.TurnTimer.IsExpired() && r.effectRenderer != nil {
 		playmatW, playmatH := ui.PlaymatW, ui.PlaymatH
 		srcImg := ebiten.NewImage(int(playmatW), int(playmatH))
 		srcImg.Fill(color.RGBA{0, 0, 0, 0})
@@ -1723,7 +1715,7 @@ func (r *BoardRenderer) renderLumiflyEffect(screen *ebiten.Image, world *domain.
 		step := r.tileSize + float64(r.gridSpacing)
 		radius := float32(effect.Radius) * float32(step)
 
-		// CHANGEMENT : On ne cape plus à 1.0 ici, le shader s'en charge pour le fade
+		// Progrès de l'onde initiale (lueur blanche)
 		progress := float32(effect.WaveElapsed / effect.WaveDuration)
 
 		glowColor := color.RGBA{255, 220, 100, 255}
@@ -1734,18 +1726,6 @@ func (r *BoardRenderer) renderLumiflyEffect(screen *ebiten.Image, world *domain.
 			centerY := float32(absY + r.tileSize/2)
 
 			r.effectRenderer.DrawLumiflyEffect(screen, srcImg, int(ui.PlaymatX), int(ui.PlaymatY), centerX, centerY, radius, progress, float32(effect.WaveDuration), glowColor)
-
-			// Track revealed positions: tiles within the current wave radius
-			displayRadius := math.Min(float64(progress), 1.0) * effect.Radius
-			for _, tile := range grid.Plots {
-				dx := float64(tile.Position.X) - float64(center.X)
-				dy := float64(tile.Position.Y) - float64(center.Y)
-				dist := math.Sqrt(dx*dx + dy*dy)
-				if dist <= displayRadius {
-					key := [2]int{tile.Position.X, tile.Position.Y}
-					r.revealedByLumifly[key] = true
-				}
-			}
 		}
 	}
 }
@@ -1843,27 +1823,9 @@ func (r *BoardRenderer) renderSilhouetteOnBack(screen *ebiten.Image, geo thickGe
 		vSil[i].SrcY = silUvCoords[i][1] * sfh
 	}
 
-	// Vérifier si la position a été révélée par l'onde lumifly
-	revealed := false
-	if r.revealedByLumifly != nil {
-		pos := ent.GetPosition()
-		key := [2]int{pos.X, pos.Y}
-		revealed = r.revealedByLumifly[key]
-	}
-
-	if revealed {
-		// Couleur dorée (same as shader GlowColor) + alpha élevé pour rester visible tout le tour
-		for i := range vSil {
-			vSil[i].ColorR = 1.0
-			vSil[i].ColorG = 0.86
-			vSil[i].ColorB = 0.39
-			vSil[i].ColorA = 0.55
-		}
-	} else {
-		// Alpha très faible (10%) — silhouette basique
-		for i := range vSil {
-			vSil[i].ColorA *= 0.1
-		}
+	// Alpha très faible (10%) — silhouette basique
+	for i := range vSil {
+		vSil[i].ColorA *= 0.1
 	}
 
 	indices := []uint16{0, 1, 2, 0, 2, 3}

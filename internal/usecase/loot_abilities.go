@@ -437,5 +437,5 @@ func (a *LumiflyAbility) Execute(world *domain.World, level int) (string, error)
 
 	world.TriggerLumiflyEffect(centers, radius, duration)
 
-	return fmt.Sprintf("Lumifly libéré (Niv.%d) : %d onde(s) lumineuse(s) pendant %.0fs, rayon %.0f cases.", level, len(centers), duration, radius), nil
+	return fmt.Sprintf("Lumifly libéré %d onde dorée (Niv.%d)", len(centers), level), nil
 }
