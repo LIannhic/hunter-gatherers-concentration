@@ -949,10 +949,39 @@ func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *cr
 			swappedEntity, ok := world.Entities.Get(entity.ID(topID))
 			if ok {
 				idStr := string(c.GetID())
+
+				// Validation bidirectionnelle avant le swap
+				// 1. Retirer temporairement les deux entités
 				grid.RemoveEntity(board.Position{X: oldPos.X, Y: oldPos.Y}, idStr)
 				grid.RemoveEntity(board.Position{X: newPos.X, Y: newPos.Y}, topID)
 
-				// Placement direct via slice manipulation (Swap: on garde l'ordre existant mais on change les positions logiques)
+				// 2. Vérifier que la créature peut aller à newPos
+				creatureCanMove := s.isWalkable(c, newPos, grid, world)
+
+				// 3. Vérifier que l'entité déplacée peut aller à oldPos
+				otherCanMove := true
+				if otherCreature, ok := swappedEntity.(*creature.Creature); ok {
+					otherCanMove = s.isWalkable(otherCreature, oldPos, grid, world)
+				} else if _, ok := swappedEntity.(*resource.Resource); ok {
+					// Une ressource ne peut pas aller sur une tuile qui a déjà une ressource
+					if world.HasResourceAt(c.GetGridID(), board.Position{X: oldPos.X, Y: oldPos.Y}) {
+						otherCanMove = false
+					}
+				}
+
+				// 4. Si une des deux validations échoue, on restaure et on annule
+				if !creatureCanMove || !otherCanMove {
+					// Restaurer les entités dans leurs positions originales
+					if plotOld, err := grid.Get(board.Position{X: oldPos.X, Y: oldPos.Y}); err == nil {
+						plotOld.EntitiesID = append(plotOld.EntitiesID, idStr)
+					}
+					if plotNew, err := grid.Get(board.Position{X: newPos.X, Y: newPos.Y}); err == nil {
+						plotNew.EntitiesID = append(plotNew.EntitiesID, topID)
+					}
+					return false
+				}
+
+				// 5. Swap valide : placement direct via slice manipulation
 				if plotOld, err := grid.Get(board.Position{X: oldPos.X, Y: oldPos.Y}); err == nil {
 					plotOld.EntitiesID = append(plotOld.EntitiesID, topID)
 				}
