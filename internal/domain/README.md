@@ -57,6 +57,7 @@ type Lifecycle struct {
     CurrentStage int
     MaxStages    int
     StageNames   []string
+    Cyclic       bool // Si vrai, revient au stade 0 après le stade max
 }
 
 // System - Logique métier qui opère sur les composants
@@ -79,6 +80,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Entities` : Logique de spawn.
   - `Portal` : Système de portail portable (`world_portal.go`) — déploiement 3x3, effet séisme, pénalités (Rê, vortex shader, prévisualisation curseur.
   - `Query` : Fonctions de recherche.
+  - `TriggerLumiflyEffect` : Publie l'événement `lumifly_effect_triggered` avec les positions des Lumifly, le rayon et la durée restante du tour (`TurnTimer.Remaining`).
 - **`board/`** : Gestion de la géométrie et de la structure du monde
 - **`entity/`** : Gestion des identités (`ID`, `Type`), des états (`TileState`), et du manager
   - `TileState` : Hidden, Revealed, Matched, Blocked
@@ -95,7 +97,7 @@ func (s *LifecycleSystem) Update(world *World) {
 - **`system.go`** : Implémentation des systèmes ECS qui traitent les données.
   - `CreatureAISystem` : Gère les comportements de base des créatures
   - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes. **Filtre les déclencheurs par grille** : `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature. Stocke les révélations avec `RevealedTile{Position, GridID}`. **Validation du swap** : Le mode `ModeSwap` est soumis à une validation bidirectionnelle avant exécution — retrait temporaire des deux entités, vérification `IsWalkable` (règles de cohabitation créature) et `HasResourceAt` (interdiction de doublon ressource). Si une validation échoue, le mouvement est annulé.
-  - `LifecycleSystem` : Gère la maturation des ressources
+  - `LifecycleSystem` : Gère la maturation des ressources. Supporte les **cycles cycliques** : les ressources avec `Cyclic: true` reviennent au stade 0 après avoir atteint le stade maximum. La propagation a lieu avant le reset du cycle.
   - `PropagationSystem` : Gère l'expansion organique des ressources
   - `ToxicitySystem` : Gère les dégâts de poison cumulés et dégressifs infligés par les ressources toxiques (ex: Dreamberry stade 4). Vérifie les entités au sommet des piles **sur la grille actuelle uniquement** avec hazard actif + `IsConstant`.
   - `TriggerSystem` : Gère les structures interactives (terriers, etc.) et les dégâts de révélation (ex: Singe Mousse)
@@ -332,7 +334,7 @@ Les créatures changent de comportement selon leur état (chasse, fuite, pollini
 ```go
 // L'état est stocké dans le composant Behavior
 type Behavior struct {
-    State string // "idle", "hunting", "fleeing", "pollinating"
+    State string // "idle", "hunting", "fleeing", "regressing"
 }
 
 // L'AI utilise l'état pour décider

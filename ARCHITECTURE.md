@@ -86,6 +86,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Permet la recherche rapide des entités par position.
   - **Inventory Grid** : L'inventaire est désormais une grille logicielle (`InventoryGridID`), permettant un traitement spatial uniforme (hover, highlights).
   - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles. Les transformations sont cumulatives (`apply * current`).
+  - **Transformation D4 Unifiée** : Les UVs des tuiles (face et dos) sont transformés par la D4 de l'entité, y compris pour les créatures et ressources. Les croix et silhouettes suivent la rotation/miroir. Le dos utilise un miroir horizontal supplémentaire (`1.0 - u`).
   - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2+). Cela influence les règles de match et le rendu (échelle x1.15 par niveau + bordures concentriques colorées si révélé).
 
 - **Systems** : Mettent à jour l'état du monde via l'**Engine** (`engine.go`).
@@ -95,7 +96,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **CreatureAISystem** : Gère les comportements de base des créatures
   - **CreatureMovementSystem** : Implémente le système de mouvement avancé (triggers, navigation, modes). **Filtre par grille** : stocke les révélations dans `RevealedTile{Position, GridID}`. `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature. **Wandering fallback** : les créatures avec `NavAttraction`/`NavRepulsion` errent aléatoirement quand leur trigger ne se déclenche pas ET que leur cible n'existe pas sur la grille.
   - **ResourcePropagationSystem** : Gère la multiplication des ressources sur les cases adjacentes. Émet l'événement `ResourcePropagated` enrichi des positions `from` et `to` pour l'UI.
-  - **ResourceLifecycleSystem** : Gère la maturation des ressources. Émet des logs détaillés sur les transitions de stade.
+  - **ResourceLifecycleSystem** : Gère la maturation des ressources. Supporte les **cycles cycliques** (`Cyclic: true`) : les ressources reviennent au stade 0 après le stade maximum. La propagation a lieu avant le reset du cycle.
   - **ToxicitySystem** : Calcule les dégâts de poison cumulés et dégressifs infligés au joueur par les ressources révélées (ex: Dreamberry stade 4). **Ne vérifie que la grille actuelle** (`world.CurrentGridID`).
   - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire. Le butin hérite du niveau de cumul de la paire.
   - **TrackSystem** : Gère la décomposition temporelle des traces
@@ -120,6 +121,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Déclenche un auto-skip à l'expiration
   - Phase de panique (< 3s) utilisée pour les feedbacks visuels (pulse Sanity Gauge)
   - Durée maximale synchronisée avec `meta.DifficultySettings.TurnTimerDuration`
+  - **Remaining** : Utilisé par `TriggerLumiflyEffect` pour calculer la durée de persistance des silhouettes dorées (temps restant du tour, pas la durée totale).
   - **Time Scaling** : Vitesse adaptée selon contexte dans `Engine.UpdateFrame` :
     - Grille vide → `Stop()` (0%)
     - Preview/Animation → 50% vitesse (`dt * 0.5`)
@@ -370,7 +372,9 @@ Séparation des responsabilités :
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
     - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets (ex: "Vous êtes déboussolé.", "Vous toussez du sang.", "La mémoire revient...").
     - **Zone Droite**: Affiche les feedbacks de gameplay immédiats (ex: "CONFRONTATION ! -10 HP", "TOXICITÉ ! -X HP", "AMNÉSIE ! X tours.", "MATCH INVALIDE !").
-- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
+- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur, Lumifly) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
+  - **Lumifly Shader** (`renderer/shader/lumifly.kage`) : Onde lumineuse dorée circulaire avec silhouettes d'entités. Centre calculé via `calculateTileScreenPos` pour un alignement parfait avec les tuiles. Rayon basé sur la diagonale d'une case (`√2`).
+  - **Silhouettes sur le Dos** : Chaque tuile affiche la silhouette de son entité sur le dos (alpha variable), utilisée par le shader Lumifly pour les effets de révélation. Les UVs du dos sont transformés par la D4 avec miroir horizontal.
 
 - **Quake Shader** (`renderer/shader/quake.kage`) : Effet visuel de séisme déclenché par le Stonewarden. Utilise un frame buffer 990×990 avec SubImage pour cropper en 700×700. Le ghost snapshot (ancienne orientation) est roté dans le shader et le résultat est nettoyement affiché sur le playmat.
   - **Snapshot** (`playmatSnapshot`) : Capture de 990×990 (playmat 700×700 + `QuakePadding` = 145px par côté) pour éviter les espaces vides lors de la rotation.
@@ -566,7 +570,7 @@ type MovementProfile struct {
 
 | Créature | Déclencheur      | Navigation             | Perception | Mode | AggressionBase |
 |----------|------------------|------------------------|------------|------|----------------|
-| **Lumifly** | Auto             | Attraction (baie)      | Manifest | Over | 0 |
+| **Lumifly** | Auto             | Attraction (baie)      | Manifest | Over | 0 | Régresse les plantes (décrémente leur stade) |
 | **Shadowstalker** | Proximité (4)    | Attraction (Player)    | Cloaked | Swap | 80 | échange de place avec la cible (swap validé) |
 | **Echo Hound** | Auto             | Relatif                | Manifest | Swap | 50 | échange de place avec la cible et rebondit 180° quand bloqué |
 | **Burrower** | Auto             | Relatif                | Manifest | Under | 20 |

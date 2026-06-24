@@ -101,6 +101,19 @@ Les icônes de ressources supportent des variantes selon leur stade de maturatio
  `stonewarden` | Gardien de pierre | Gris roc |
  `fleeing_sprite` | Esprit fuyant | Blanc étincelant |
 
+### 4. Silhouettes (`silhouettes.go`)
+
+Les silhouettes sont des versions simplifiées des icônes, utilisées pour les effets de révélation (shader Lumifly) et le rendu sur le dos des tuiles.
+
+ **Silhouette** | Description | Couleur |
+----------------|-------------|---------|
+ `silhouette_creature_*` | Silhouettes de créatures | Couleur originale de l'espèce |
+ `silhouette_resource_*` | Silhouettes de ressources | Couleur originale du type |
+
+- **Original Colors** : Contrairement aux anciennes silhouettes monochromes (blanc), les silhouettes actuelles conservent les couleurs originales des entités pour permettre au shader de les manipuler librement.
+- **Fonctionnement** : Les silhouettes sont pré-générées à l'initialisation et mises en cache dans l'atlas.
+- **Accès** : `GetCreatureSilhouette(species)` et `GetResourceSilhouette(type, stage)`.
+
 ### 4. Traces et Indices (`tracks.go`)
 
 Les créatures marquent le terrain via des entités de traces :
