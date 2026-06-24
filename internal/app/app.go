@@ -188,6 +188,9 @@ func NewApplication() (*Application, error) {
 			player.NewEchoCrystalItem(2),
 			player.NewVoidBloomItem(2),
 			player.NewSandCoreItem(2),
+			player.NewLumiflyItem(1),
+			player.NewLumiflyItem(2),
+			player.NewLumiflyItem(3),
 		}
 		for _, item := range items {
 			_ = app.World.AddLootItem(item)
@@ -430,43 +433,29 @@ func (app *Application) setupDebugCallbacks() {
 		app.Renderer.TriggerQuakeEffect(gridID, clockwise, angle)
 	}
 
-	// F5 : Révéler instantanément toutes les tuiles cachées du monde
+	// F5 : Révéler visuellement toutes les tuiles (debug, sans modifier l'état réel)
 	app.Input.OnRevealAll = func(gridID string) {
-		fmt.Println("[CHEAT] Révélation instantanée de TOUTES les tuiles")
+		fmt.Println("[DEBUG] Révélation visuelle de TOUTES les tuiles (debug)")
 		app.Renderer.ClearAnimations()
 
+		debugMap := make(map[entity.ID]bool)
 		for _, gID := range app.World.GridOrder {
 			if grid, ok := app.World.GetGrid(gID); ok {
 				for _, tile := range grid.Plots {
 					for _, id := range tile.EntitiesID {
-						if e, ok := app.World.Entities.Get(entity.ID(id)); ok {
-							if e.GetState()&entity.Hidden != 0 {
-								e.SetState(entity.Revealed)
-								// NOTE: On ne tracke pas la révélation pour les cheats (sinon les stone wardens bougent)
-							}
-						}
+						debugMap[entity.ID(id)] = true
 					}
 				}
 			}
 		}
+		app.Renderer.SetDebugRevealAll(debugMap)
 	}
 
-	// F6 : Masquer instantanément toutes les tuiles du monde
+	// F6 : Masquer visuellement toutes les tuiles (debug, sans modifier l'état réel)
 	app.Input.OnHideAll = func(gridID string) {
-		fmt.Println("[CHEAT] Masquage instantané de TOUTES les tuiles")
+		fmt.Println("[DEBUG] Masquage visuel de TOUTES les tuiles (debug)")
 		app.Renderer.ClearAnimations()
-
-		for _, gID := range app.World.GridOrder {
-			if grid, ok := app.World.GetGrid(gID); ok {
-				for _, tile := range grid.Plots {
-					for _, id := range tile.EntitiesID {
-						if e, ok := app.World.Entities.Get(entity.ID(id)); ok {
-							e.SetState(entity.Hidden)
-						}
-					}
-				}
-			}
-		}
+		app.Renderer.ClearDebugReveal()
 	}
 
 	// F7 : Désceller les verrous de navigation de la zone actuelle

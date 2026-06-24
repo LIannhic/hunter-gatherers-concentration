@@ -655,6 +655,25 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		{"Void Bloom", "resource_void_bloom"},
 		{"Echo Crystal", "resource_echo_crystal"},
 		{"Sand Core", "resource_sand_core"},
+		// === SILHOUETTES (fond transparent) ===
+		{"Sil Lumifly", "silhouette_creature_lumifly"},
+		{"Sil Shadowstalker", "silhouette_creature_shadowstalker"},
+		{"Sil Burrower", "silhouette_creature_burrower"},
+		{"Sil Flutterwing", "silhouette_creature_flutterwing"},
+		{"Sil Fleeing Sprite", "silhouette_creature_fleeing_sprite"},
+		{"Sil Specter", "silhouette_creature_specter"},
+		{"Sil Echo Hound", "silhouette_creature_echo_hound"},
+		{"Sil Moss Monkey", "silhouette_creature_moss_monkey"},
+		{"Sil Stonewarden", "silhouette_creature_stonewarden"},
+		{"Sil Dreamberry", "silhouette_resource_dreamberry"},
+		{"Sil Moonstone", "silhouette_resource_moonstone"},
+		{"Sil Whisper Herb", "silhouette_resource_whispering_herb"},
+		{"Sil Void Bloom", "silhouette_resource_void_bloom"},
+		{"Sil Moss Truffle", "silhouette_resource_moss_truffle"},
+		{"Sil Echo Crystal", "silhouette_resource_echo_crystal"},
+		{"Sil Sand Core", "silhouette_resource_sand_core"},
+		{"Sil Shadow Essence", "silhouette_resource_shadow_essence"},
+		{"Sil Crystal Shard", "silhouette_resource_crystal_shard"},
 	}
 
 	itemsPerPage := 15
