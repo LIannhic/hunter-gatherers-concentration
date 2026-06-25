@@ -55,9 +55,14 @@ Chaque créature possède désormais une **Agressivité Totale** calculée dynam
 #### Seuil d'Attaque et Effets Logiques
 Lorsqu'une créature est révélée (fin d'animation de flip), si son **Agressivité Totale ≥ 100**, elle déclenche une **Attaque Immédiate** (Lunge) :
 - Vérifie si le joueur est dans sa **Zone de Menace** (même logique que l'ancienne Confrontation).
+- **Condition de Succès** : Les dégâts et effets ne s'appliquent que si l'attaque **touche** le joueur. Si l'attaque ne touche pas, le joueur n'a rien.
 - Inflige **10 dégâts physiques** (sauf si *Grâce* active).
 - **Effets Spécifiques au Monde** : Centralisés par le `CreatureAttackEffectSystem`.
   - **Stonewarden** : Son attaque provoque un séisme de rotation (pivote la grille de 90°).
+  - **Echo Hound** : Déclenche l'état **Aphasia** (3 tours).
+  - **Burrower** : Déclenche l'état **Ataxia** (3 tours).
+  - **Moss Monkey** : Déclenche l'état **Agnosia** et l'effet visuel de **Mousse Coulante** (3 tours).
+  - **Specter** : Déclenche l'état **Amnesia** (5 tours).
 - Déclenche des effets visuels selon l'espèce (Blur pour Shadowstalker, Bulle pour Lumifly).
 - Publie l'événement `CreatureAttacked` pour l'animation et `PlayerDamaged` pour le HUD.
 
@@ -287,12 +292,15 @@ Pour maintenir l'immersion tout en informant le joueur, le HUD intègre deux zon
 
 ### Troubles cognitifs (Status Effects)
 
-Le joueur peut subir des altérations mentales qui déforment l'interface :
+Le joueur peut subir des altérations mentales qui déforment radicalement l'interface lorsqu'une attaque de créature le touche :
 
-- **Aphasia** – brouille les labels des boutons (ex: "MATCH" devient "???" ou est permuté).
-- **Agnosia** – rend les boutons visuellement indifférenciés (couleurs altérées).
-- **Ataxia** – scramble les positions des boutons (ex: le bouton Match peut basculer au coin bas-droit).
-- **Amnesia** – désactive aléatoirement des boutons (30% de chance d'"oublier" un bouton). Seulement déclenché par le Spectre (pas l'Echo Hound) lorsqu'une attaque touche le joueur. Affiche "AMNÉSIE ! X tours." sur la zone droite et "Vous avez du mal à vous souvenir." sur la zone gauche. À la fin, "La mémoire revient..." et l'inventaire est révélé automatiquement.
+- **Aphasia** (Echo Hound) – Les labels des boutons (MATCH, SKIP, etc.) se brouillent avec des symboles et des chiffres ("B0uT0N", "@A#C*") qui changent toutes les 0.5 secondes. Le texte subit également une pulsation instable en taille.
+- **Ataxia** (Burrower) – Les boutons d'action entrent en mode **"Tape-taupe" (Whack-a-mole)**. Ils sortent brutalement de l'écran par le haut ou le bas, changent de position cible aléatoirement parmi les 4 coins, puis reviennent en glissant. Chaque bouton est désynchronisé. Adopte le thème visuel du **Désert** (ocre/sable).
+- **Agnosia** (Moss Monkey) – Rend les boutons visuellement indifférenciés via un **Thème Monochrome standardisé**. Les boutons deviennent noirs avec un contenu blanc, et leurs labels affichent tous **"BOUTON"**.
+- **Effacement par le Timer** (Agnosia) – La jauge de remplissage du timer s'applique aux 4 boutons et progresse du **Noir vers le BLANC**. À 100%, elle masque totalement le texte et l'icône, rendant le bouton anonyme.
+- **Amnesia** (Specter) – Les tuiles butins sont face cachée. Déclenché par le Spectre lorsqu'une attaque touche le joueur ou la proximité d'une void bloom. Les tuiles de l'inventaire se retournent vers une direction dictée par l'ancrage du joueur (le Spectre "frotte" les objets dans le sens de son passage). Affiche "AMNÉSIE ! X tours." sur la zone droite et "Vous avez du mal à vous souvenir." sur la zone gauche. À la fin, "La mémoire revient..." et l'inventaire est révélé automatiquement.
+
+Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
 
 Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
 
