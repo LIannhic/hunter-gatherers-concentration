@@ -26,6 +26,8 @@ var (
 	quakeShaderSource []byte
 	//go:embed shader/lumifly.kage
 	lumiflyShaderSource []byte
+	//go:embed shader/moss_drip.kage
+	mossDripShaderSource []byte
 )
 
 type EffectRenderer struct {
@@ -51,6 +53,7 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 		"vortex":  vortexShaderSource,
 		"quake":   quakeShaderSource,
 		"lumifly": lumiflyShaderSource,
+		"moss_drip": mossDripShaderSource,
 	}
 
 	for name, src := range sources {
@@ -66,6 +69,22 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 
 func (r *EffectRenderer) Update() {
 	r.count++
+}
+
+// DrawMossDrip dessine l'effet de mousse coulante sur le playmat
+func (r *EffectRenderer) DrawMossDrip(dst *ebiten.Image, x, y, w, h int) {
+	shader, ok := r.shaders["moss_drip"]
+	if !ok {
+		return
+	}
+
+	op := &ebiten.DrawRectShaderOptions{}
+	op.Uniforms = map[string]interface{}{
+		"Time":       float32(r.count) / 60.0,
+		"Resolution": []float32{float32(w), float32(h)},
+	}
+	op.GeoM.Translate(float64(x), float64(y))
+	dst.DrawRectShader(w, h, shader, op)
 }
 
 // DrawScannerEffect dessine l'effet de balayage du scanner.
@@ -172,8 +191,14 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	// On utilise une atténuation carrée pour le cumul comme suggéré.
 	intensity := float32(math.Pow(float64(1.0-params.SanityRatio), 2))
 
-	if intensity <= 0 && !params.UseBlur && !params.UseBubble && params.Biome == "" {
+	// CHANGEMENT : On autorise l'application même si intensity est 0 si des shaders spécifiques sont forcés
+	if intensity <= 0 && !params.UseBlur && !params.UseBubble && params.Biome == "" && params.PortalPos == nil {
 		return
+	}
+
+	// On force l'intensité au minimum pour que les shaders biome/bubble fonctionnent même à 100% de Sanity
+	if intensity < 0.1 {
+		intensity = 0.1
 	}
 
 	// Redimensionnement dynamique des buffers si nécessaire
