@@ -96,7 +96,7 @@ func TestBaseCoordinates(t *testing.T) {
 
 func TestImpairmentScrambling(t *testing.T) {
 	p := player.New("test")
-	p.StatusEffects.AddImpairment(player.ImpairmentAtaxia)
+	p.AtaxiaTurns = 3
 
 	m := NewManager(
 		func() int { return 2 },
@@ -131,12 +131,12 @@ func TestHitTest(t *testing.T) {
 	)
 	states := m.ComputeStates()
 
-	// Clic au centre du bouton Match
-	bx := int(states[BtnMatch].X + states[BtnMatch].Width/2)
-	by := int(states[BtnMatch].Y + states[BtnMatch].Height/2)
+	// Clic au centre du bouton Match (on utilise CurrentX/CurrentY car c'est ce que HitTest utilise)
+	bx := int(states[BtnMatch].CurrentX + states[BtnMatch].Width/2)
+	by := int(states[BtnMatch].CurrentY + states[BtnMatch].Height/2)
 	id, ok := m.HitTest(bx, by, states)
 	if !ok || id != BtnMatch {
-		t.Error("HitTest should detect Match button")
+		t.Errorf("HitTest should detect Match button at (%d,%d), got id=%d, ok=%v", bx, by, id, ok)
 	}
 
 	// Clic en dehors
@@ -184,7 +184,7 @@ func TestTimerPanicSetsSkipAlert(t *testing.T) {
 
 func TestAgnosiaSetsAllScrambled(t *testing.T) {
 	p := player.New("test")
-	p.StatusEffects.AddImpairment(player.ImpairmentAgnosia)
+	p.AgnosiaTurns = 3
 
 	m := NewManager(
 		func() int { return 2 },
@@ -204,7 +204,7 @@ func TestAgnosiaSetsAllScrambled(t *testing.T) {
 
 func TestAphasiaAltersLabels(t *testing.T) {
 	p := player.New("test")
-	p.StatusEffects.AddImpairment(player.ImpairmentAphasia)
+	p.AphasiaTurns = 3
 
 	m := NewManager(
 		func() int { return 0 },
@@ -214,6 +214,10 @@ func TestAphasiaAltersLabels(t *testing.T) {
 		func() float64 { return 0 },
 		func() bool { return false },
 	)
+
+	// Force un glitch immédiat en avançant le temps ou en appelant ComputeStates plusieurs fois
+	// Mais ici on va juste vérifier que les labels changent après le premier glitch
+	// Comme m.lastGlitch est initialisé à zero time, le premier appel devrait glitche.
 	states := m.ComputeStates()
 
 	// Ensure at least one label differs from the base label at the same index

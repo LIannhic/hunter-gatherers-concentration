@@ -740,54 +740,95 @@ func (r *BoardRenderer) renderActionButtons(screen *ebiten.Image) {
 
 func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons.ButtonState) {
 	var bgColor color.Color
-	if s.Scrambled {
-		bgColor = color.RGBA{120, 80, 80, 255}
+
+	if s.IsAgnosia {
+		// Thème monochrome standardisé pour l'Agnosia
+		bgColor = color.Black
+	} else if s.IsAtaxia {
+		// Thème Désert pour l'Ataxia (Whack-a-mole)
+		bgColor = color.RGBA{195, 145, 85, 255}
 	} else if s.Active {
 		bgColor = color.RGBA{60, 60, 80, 255}
 	} else {
 		bgColor = color.RGBA{40, 40, 40, 255}
 	}
 
-	vector.DrawFilledRect(screen, float32(s.X), float32(s.Y), float32(s.Width), float32(s.Height), bgColor, true)
+	x, y := float32(s.CurrentX), float32(s.CurrentY)
+	w, h := float32(s.Width), float32(s.Height)
 
-	if (s.ID == actionbuttons.BtnSkip || s.ID == actionbuttons.BtnEndTurn) && s.FillProgress > 0 {
-		fillW := float32(s.Width * s.FillProgress)
+	vector.DrawFilledRect(screen, x, y, w, h, bgColor, true)
+
+	if s.FillProgress > 0 {
+		fillW := w * float32(s.FillProgress)
 		var fillColor color.Color
-		if s.FillAlert {
+		if s.IsAgnosia {
+			// Remplissage progressif de NOIR vers BLANC
+			// À 100%, il devient BLANC et masque ainsi le texte/icône blanc (blanc sur blanc)
+			gray := uint8(s.FillProgress * 255)
+			fillColor = color.RGBA{gray, gray, gray, 255}
+		} else if s.IsAtaxia {
+			// Remplissage orangé/terracotta pour le désert
+			fillColor = color.RGBA{215, 130, 60, 200}
+		} else if s.FillAlert {
 			fillColor = color.RGBA{180, 50, 50, 200}
 		} else {
 			fillColor = color.RGBA{100, 80, 150, 160}
 		}
-		vector.DrawFilledRect(screen, float32(s.X), float32(s.Y), fillW, float32(s.Height), fillColor, true)
+		vector.DrawFilledRect(screen, x, y, fillW, h, fillColor, true)
 	}
 
 	var borderColor color.Color
-	if s.Active && !s.Scrambled {
+	if s.IsAgnosia {
+		borderColor = color.White
+	} else if s.IsAtaxia {
+		borderColor = color.RGBA{225, 185, 125, 255}
+	} else if s.Active {
 		borderColor = color.RGBA{200, 200, 255, 255}
-	} else if s.Active && s.Scrambled {
-		borderColor = color.RGBA{255, 100, 100, 255}
 	} else {
 		borderColor = color.RGBA{80, 80, 80, 255}
 	}
-	vector.StrokeRect(screen, float32(s.X), float32(s.Y), float32(s.Width), float32(s.Height), 1, borderColor, true)
+	vector.StrokeRect(screen, x, y, w, h, 1, borderColor, true)
 
 	var labelColor color.Color = color.White
-	if !s.Active {
+	if s.IsAgnosia {
+		labelColor = color.White
+	} else if !s.Active && !s.IsAtaxia {
 		labelColor = color.RGBA{120, 120, 120, 255}
-	} else if s.Scrambled {
-		labelColor = color.RGBA{255, 200, 200, 255}
 	}
 
-	text.Draw(screen, s.Label, basicfont.Face7x13, int(s.X+ui.ButtonTextRelativeX), int(s.Y+ui.ButtonTextRelativeY+15), labelColor)
+	// Application du TextScale pour l'effet pulsé (Aphasia)
+	tx := x + float32(ui.ButtonTextRelativeX)
+	ty := y + float32(ui.ButtonTextRelativeY) + 15
 
-	if s.Active {
-		ix := s.X + ui.ButtonIconRelativeX
-		iy := s.Y + ui.ButtonIconRelativeY
-		indicatorColor := color.RGBA{100, 255, 100, 200}
-		if s.Scrambled {
-			indicatorColor = color.RGBA{255, 100, 100, 200}
+	if s.TextScale != 1.0 {
+		// On dessine le texte sur une image temporaire pour pouvoir le scaler
+		txtW, txtH := int(math.Ceil(float64(ui.ActionButtonW))), 30
+		txtImg := ebiten.NewImage(txtW, txtH)
+		text.Draw(txtImg, s.Label, basicfont.Face7x13, 0, 15, color.White)
+
+		op := &ebiten.DrawImageOptions{}
+		// Point de pivot au centre du bouton (approximatif pour le texte)
+		op.GeoM.Translate(-float64(txtW)/4, -15)
+		op.GeoM.Scale(s.TextScale, s.TextScale)
+		op.GeoM.Translate(float64(tx)+float64(txtW)/4, float64(ty))
+		op.ColorScale.ScaleWithColor(labelColor)
+		screen.DrawImage(txtImg, op)
+	} else {
+		text.Draw(screen, s.Label, basicfont.Face7x13, int(tx), int(ty), labelColor)
+	}
+
+	if s.Active || s.IsAgnosia || s.IsAtaxia {
+		ix := x + float32(ui.ButtonIconRelativeX)
+		iy := y + float32(ui.ButtonIconRelativeY)
+		var indicatorColor color.Color
+		if s.IsAgnosia {
+			indicatorColor = color.White
+		} else if s.IsAtaxia {
+			indicatorColor = color.RGBA{240, 170, 90, 200}
+		} else {
+			indicatorColor = color.RGBA{100, 255, 100, 200}
 		}
-		vector.DrawFilledRect(screen, float32(ix), float32(iy), float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), indicatorColor, true)
+		vector.DrawFilledRect(screen, ix, iy, float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), indicatorColor, true)
 	}
 }
 

@@ -1,6 +1,7 @@
 package actionbuttons
 
 import (
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -26,12 +27,17 @@ type ButtonState struct {
 	ID           ButtonID
 	Label        string
 	Active       bool
-	X, Y         float64 // Coordonnées finales à l'écran (déjà transformées)
+	X, Y         float64 // Coordonnées cibles
+	CurrentX     float64 // Coordonnées réelles pour l'animation
+	CurrentY     float64 //
 	Width        float64
 	Height       float64
 	Scrambled    bool    // Vrai si les coordonnées ont été altérées par un trouble
+	IsAgnosia    bool    // Vrai si l'agnosie est active
+	IsAtaxia     bool    // Vrai si l'ataxie est active
 	FillProgress float64 // 0.0 → 1.0, remplissage temporel (Skip uniquement)
 	FillAlert    bool    // Vrai si le timer est en phase critique ou expiré
+	TextScale    float64 // Facteur d'échelle du texte (Aphasia)
 }
 
 // Manager gère l'état réactif des 4 boutons d'action du Playmat.
@@ -49,6 +55,16 @@ type Manager struct {
 	// Base coordinates (fixed by UI spec)
 	baseCoords [btnCount]struct{ x, y float64 }
 	baseLabels [btnCount]string
+
+	// Animation state
+	currentPos   [btnCount]struct{ x, y float64 }
+	glitchLabels [btnCount]string
+	lastGlitch   time.Time
+	startTime    time.Time
+	// Ataxia state (remplace jumpTime/jumpTarget/jumpPhase)
+	ataxiaPhase     [btnCount]int        // 0=stable, 1=sortie, 2=entrée
+	ataxiaPhaseTime [btnCount]float64    // elapsed au début de la phase
+	ataxiaSlot      [btnCount]int        // slot stable ou cible
 
 	// Cache du frame précédent pour stabilité visuelle
 	lastScrambleSeed int64
@@ -74,6 +90,11 @@ func NewManager(getRevealedTileCount func() int, getPlayer func() *player.Player
 			{ui.ActionBtn4X, ui.ActionBtn4Y},
 		},
 		baseLabels: [btnCount]string{"MATCH", "SKIP", "TURN", "MERGE"},
+		startTime:  time.Now(),
+	}
+	for i := 0; i < btnCount; i++ {
+		m.currentPos[i].x = ui.PlaymatX + m.baseCoords[i].x
+		m.currentPos[i].y = ui.PlaymatY + m.baseCoords[i].y
 	}
 	m.resetScramble()
 	return m
@@ -92,6 +113,7 @@ func (m *Manager) resetScramble() {
 func (m *Manager) ComputeStates() [btnCount]ButtonState {
 	revealedCount := m.getRevealedTileCount()
 	p := m.getPlayer()
+	elapsed := time.Since(m.startTime).Seconds()
 
 	var states [btnCount]ButtonState
 	for i := 0; i < btnCount; i++ {
@@ -108,20 +130,10 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 
 	// --- RÈGLE MÉTIER : Activation selon le nombre de tuiles révélées ---
 	if revealedCount >= 2 {
-		// Le système verrouille la grille et active Skip
 		states[BtnSkip].Active = true
-
-		// Match et Merge sont soumis à des conditions sur l'état des tuiles
-		// Pour l'instant, on active Merge si 2 tuiles sont retournées (la commande vérifiera si elles sont déjà cumulées)
 		states[BtnMerge].Active = true
-
-		// Match n'est activé QUE si les conditions de la commande sont remplies (tuiles cumulées)
-		// Comme le manager est réactif, on laisse l'input handler ou la commande fournir cette info ?
-		// Pour rester simple et réactif ici, on active les boutons si 2 tuiles sont là,
-		// mais on pourrait affiner si on passait l'état "Cumulated" au manager.
 		states[BtnMatch].Active = true
 	}
-	// Le bouton EndTurn reste toujours actif
 	states[BtnEndTurn].Active = true
 
 	// --- V0.2 : TRANSITION END GAME ---
@@ -129,7 +141,7 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 		states[BtnEndTurn].Label = "END GAME"
 		if m.getVictoryProgress != nil {
 			states[BtnEndTurn].FillProgress = m.getVictoryProgress()
-			states[BtnEndTurn].FillAlert = true // Toujours coloré pour indiquer l'importance
+			states[BtnEndTurn].FillAlert = true
 		}
 	}
 
@@ -142,75 +154,202 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 		states[BtnSkip].FillAlert = true
 	}
 
-	// --- TROUBLES COGNITIFS : Transformation des coordonnées ---
-	if p != nil && p.StatusEffects != nil && p.StatusEffects.HasAnyImpairment() {
-		m.applyImpairments(p.StatusEffects, &states)
+	// --- TROUBLES COGNITIFS ---
+	if p != nil && (p.AphasiaTurns > 0 || p.AtaxiaTurns > 0 || p.AgnosiaTurns > 0 || p.AmnesiaTurns > 0) {
+		m.applyImpairments(p, &states, elapsed)
 	} else {
 		m.resetScramble()
+		for i := 0; i < btnCount; i++ {
+			m.ataxiaPhaseTime[i] = 0
+			m.ataxiaSlot[i] = i
+			m.ataxiaPhase[i] = 0
+		}
+	}
+
+	// --- ANIMATION ET INTERPOLATION ---
+	dt := 0.15 // Vitesse de l'interpolation
+	ataxiaActive := p != nil && p.AtaxiaTurns > 0
+	for i := 0; i < btnCount; i++ {
+		targetX, targetY := states[i].X, states[i].Y
+
+		if ataxiaActive && m.ataxiaPhase[i] != 0 {
+			// Ataxia en phase 1 ou 2 : utilisation directe des positions calculées
+			m.currentPos[i].x = targetX
+			m.currentPos[i].y = targetY
+		} else {
+			speed := dt
+			m.currentPos[i].x += (targetX - m.currentPos[i].x) * speed
+			m.currentPos[i].y += (targetY - m.currentPos[i].y) * speed
+		}
+
+		states[i].CurrentX = m.currentPos[i].x
+		states[i].CurrentY = m.currentPos[i].y
+		states[i].TextScale = 1.0
+
+		// Pulsation pour Aphasia (Désynchronisée par bouton)
+		if p != nil && p.AphasiaTurns > 0 {
+			states[i].TextScale = 1.0 + 0.15*math.Sin(elapsed*7.0+float64(i)*1.5)
+		}
 	}
 
 	return states
 }
 
 // applyImpairments modifie les coordonnées et/ou labels des boutons
-// en fonction des troubles cognitifs actifs du joueur.
-func (m *Manager) applyImpairments(effects *player.StatusEffects, states *[btnCount]ButtonState) {
-	// Détermine un seed stable par frame pour éviter le clignotement
-	// tout en permettant un changement régulier (toutes les 2 secondes ~ 120 frames)
-	now := time.Now().UnixMilli()
-	seed := now / 2000 // changement toutes les 2 secondes
+func (m *Manager) applyImpairments(p *player.Player, states *[btnCount]ButtonState, elapsed float64) {
+	isAgnosia := p.AgnosiaTurns > 0
+	isAtaxia := p.AtaxiaTurns > 0
 
-	// Regénère la permutation si le seed a changé
-	if seed != m.lastScrambleSeed {
-		m.lastScrambleSeed = seed
-		m.regenerateScramble(effects, seed)
+	for i := 0; i < btnCount; i++ {
+		states[i].IsAgnosia = isAgnosia
+		states[i].IsAtaxia = isAtaxia
 	}
 
-	// Applique la permutation de positions (Ataxia / Agnosia / etc.)
-	// Tout trouble cognitif peut déclencher le scrambling des positions
-	if effects.HasImpairment(player.ImpairmentAtaxia) ||
-		effects.HasImpairment(player.ImpairmentAgnosia) ||
-		effects.HasImpairment(player.ImpairmentAphasia) ||
-		effects.HasImpairment(player.ImpairmentAmnesia) {
-		newCoords := [btnCount]struct{ x, y float64 }{}
-		for i := 0; i < btnCount; i++ {
-			mapped := m.scrambleMapping[i]
-			newCoords[i] = m.baseCoords[mapped]
+	// Ataxia : boutons sortent de l'écran et reviennent à une nouvelle position
+	if isAtaxia {
+		const btnHalfH = 21.88
+		exitTop := -btnHalfH
+		exitBottom := float64(ui.ScreenHeight) + btnHalfH
+		centerY := float64(ui.PlaymatY) + float64(ui.PlaymatH)/2
+
+		// Initialisation
+		if m.ataxiaPhaseTime[0] == 0 {
+			for i := 0; i < btnCount; i++ {
+				m.ataxiaPhase[i] = 0
+				m.ataxiaPhaseTime[i] = elapsed
+				m.ataxiaSlot[i] = i
+			}
 		}
+
+		// Bitmap des slots occupés (stable + incoming)
+		occupied := 0
 		for i := 0; i < btnCount; i++ {
-			states[i].X = ui.PlaymatX + newCoords[i].x
-			states[i].Y = ui.PlaymatY + newCoords[i].y
+			if m.ataxiaPhase[i] == 0 || m.ataxiaPhase[i] == 2 {
+				occupied |= 1 << uint(m.ataxiaSlot[i])
+			}
+		}
+
+		for i := 0; i < btnCount; i++ {
 			states[i].Scrambled = true
+			slot := m.ataxiaSlot[i]
+			base := m.baseCoords[slot]
+			slotY := float64(ui.PlaymatY) + base.y
+
+			switch m.ataxiaPhase[i] {
+			case 0: // Stable — assis au slot
+				states[i].X = float64(ui.PlaymatX) + base.x
+				states[i].Y = slotY
+
+				duration := 0.8 + rand.Float64()*1.2 // 0.8–2.0s
+				if elapsed-m.ataxiaPhaseTime[i] >= duration {
+					occupied &^= 1 << uint(slot)    // libère le slot
+					m.ataxiaPhase[i] = 1
+					m.ataxiaPhaseTime[i] = elapsed
+				}
+
+			case 1: // Sortie ease-out (0.2s)
+				duration := 0.2
+				progress := (elapsed - m.ataxiaPhaseTime[i]) / duration
+				if progress >= 1.0 {
+					progress = 1.0
+					// Choisit un slot libre
+					available := (0x0F) & ^occupied
+					if available == 0 {
+						available = 0x0F & ^(1 << uint(slot))
+						if available == 0 {
+							available = 0x0F
+						}
+					}
+					candidates := make([]int, 0, btnCount)
+					for b := 0; b < btnCount; b++ {
+						if available&(1<<uint(b)) != 0 {
+							candidates = append(candidates, b)
+						}
+					}
+					slot = candidates[rand.Intn(len(candidates))]
+					m.ataxiaSlot[i] = slot
+					occupied |= 1 << uint(slot) // réserve le nouveau slot
+					m.ataxiaPhase[i] = 2
+					m.ataxiaPhaseTime[i] = elapsed
+				}
+
+				states[i].X = float64(ui.PlaymatX) + base.x
+				exitY := exitBottom
+				if slotY < centerY {
+					exitY = exitTop
+				}
+				t := 1.0 - (1.0-progress)*(1.0-progress) // ease-out quad
+				states[i].Y = slotY + (exitY-slotY)*t
+
+			case 2: // Entrée ease-in (0.2s)
+				duration := 0.2
+				progress := (elapsed - m.ataxiaPhaseTime[i]) / duration
+				if progress >= 1.0 {
+					progress = 1.0
+					m.ataxiaPhase[i] = 0
+					m.ataxiaPhaseTime[i] = elapsed
+				}
+
+				targetBase := m.baseCoords[slot]
+				targetY := float64(ui.PlaymatY) + targetBase.y
+				states[i].X = float64(ui.PlaymatX) + targetBase.x
+
+				enterY := exitBottom
+				if targetY < centerY {
+					enterY = exitTop
+				}
+				t := progress * progress // ease-in quad
+				states[i].Y = enterY + (targetY-enterY)*t
+			}
 		}
 	}
 
-	// Aphasia : brouille les labels pour rendre l'identification difficile
-	if effects.HasImpairment(player.ImpairmentAphasia) {
-		scrambledLabels := [btnCount]string{"???", "???", "???", "???"}
-		// Mélange partiel : on permute les labels de manière déterministe
+	// Aphasia : Brouille les labels périodiquement (toutes les 0.5s)
+	if p.AphasiaTurns > 0 {
+		if time.Since(m.lastGlitch) > 500*time.Millisecond {
+			m.lastGlitch = time.Now()
+			symbols := []rune{'@', '#', '$', '!', '%', '&', '*', '?', '0', '3', '4', '7', '1', '8'}
+			for i := 0; i < btnCount; i++ {
+				sourceLabel := m.baseLabels[i]
+				if p.AgnosiaTurns > 0 {
+					sourceLabel = "BOUTON"
+				}
+				label := []rune(sourceLabel)
+
+				// Glitch proportionnel à la longueur (environ 30-40% des caractères)
+				numGlitches := (len(label) / 3) + 1
+				for n := 0; n < numGlitches; n++ {
+					idx := rand.Intn(len(label))
+					// Remplacement par un symbole ou un chiffre "glitché"
+					label[idx] = symbols[rand.Intn(len(symbols))]
+				}
+				m.glitchLabels[i] = string(label)
+			}
+		}
+		for i := 0; i < btnCount; i++ {
+			states[i].Label = m.glitchLabels[i]
+		}
+	}
+
+	// Agnosia : rend les boutons indifférenciés (identiques)
+	if p.AgnosiaTurns > 0 {
+		for i := 0; i < btnCount; i++ {
+			states[i].Label = "BOUTON"
+			states[i].Scrambled = true
+			// Applique le timer à tous les boutons pour l'uniformité
+			if m.getTimerProgress != nil {
+				states[i].FillProgress = m.getTimerProgress()
+				states[i].FillAlert = states[i].FillProgress >= 1.0
+			}
+		}
+	}
+
+	// Amnesia : Désactivation partielle
+	if p.AmnesiaTurns > 0 {
+		seed := time.Now().UnixMilli() / 2000
 		r := rand.New(rand.NewSource(seed))
-		perm := r.Perm(btnCount)
 		for i := 0; i < btnCount; i++ {
-			scrambledLabels[i] = m.baseLabels[perm[i]]
-		}
-		for i := 0; i < btnCount; i++ {
-			states[i].Label = scrambledLabels[i]
-		}
-	}
-
-	// Agnosia : rend les boutons indifférenciés (même couleur visuelle suggérée)
-	// -> géré côté renderer via le flag Scrambled
-	if effects.HasImpairment(player.ImpairmentAgnosia) {
-		for i := 0; i < btnCount; i++ {
-			states[i].Scrambled = true
-		}
-	}
-
-	// Amnesia : désactive aléatoirement des boutons (perte de mémoire des actions)
-	if effects.HasImpairment(player.ImpairmentAmnesia) {
-		r := rand.New(rand.NewSource(seed + 1))
-		for i := 0; i < btnCount; i++ {
-			if r.Float32() < 0.3 { // 30% de chance d'oublier un bouton
+			if r.Float32() < 0.3 {
 				states[i].Active = false
 			}
 		}
@@ -245,8 +384,8 @@ func (m *Manager) HitTest(x, y int, states [btnCount]ButtonState) (ButtonID, boo
 		if !s.Active {
 			continue
 		}
-		if fx >= s.X && fx <= s.X+s.Width &&
-			fy >= s.Y && fy <= s.Y+s.Height {
+		if fx >= s.CurrentX && fx <= s.CurrentX+s.Width &&
+			fy >= s.CurrentY && fy <= s.CurrentY+s.Height {
 			return s.ID, true
 		}
 	}
