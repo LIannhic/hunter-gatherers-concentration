@@ -102,7 +102,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **TrackSystem** : Gère la décomposition temporelle des traces
   - **AggressionSystem** : Calcule l'agressivité modulaire des créatures (Priority 1, avant mouvement). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `CreatureMoved` pour gérer la "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité totale ≥ 100 à la fin de l'animation de flip.
 
-- **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden — uniquement si `hit_target` présent dans le payload, i.e. attaque qui touche le joueur).
+- **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques réussies. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden, déclenchement des troubles cognitifs Aphasia, Ataxia, Agnosia, Amnesia — uniquement si `hit_target` présent dans le payload, i.e. attaque qui touche le joueur).
 
 - **ComboSystem** (Priority 10) : Gère le système de combo (associations consécutives). S'abonne à `TileMatched` pour incrémenter le compteur et calculer la juiciness (1-5). S'abonne à `TileMerged` pour publier un message sans incrémenter. S'abonne à `PlayerDamaged` pour réinitialiser le combo en cas d'erreur (`invalid_match`, `skipped_valid_match`). Publie `ComboTriggered` via `PublishImmediate` (sinon perdu dans `ProcessQueue`). Le message est rendu par le HUD dans la `ComboZone` (270×40px, en haut à droite) avec un fond coloré par niveau, un outline noir 8-directions, et un slide-in depuis la droite.
 
@@ -384,7 +384,12 @@ Séparation des responsabilités :
 
 - **DebugWindow** (`ui/debug/window.go`) : Console de débogage interactive (F12) permettant de modifier les statistiques, la difficulté, et de filtrer les entités spawnables. Contrôle la vitesse de défilement des messages HUD (`MessageSpeed` via `+`/`-`).
 
-- **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. Applique des transformations de coordonnées (scrambling) et gère le remplissage temporel du bouton Skip. Coordonne le **Feedback de Coût** vers les jauges du HUD.
+- **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. 
+  - **Aphasia** : Glitch périodique des labels (toutes les 0.5s) et pulsation de taille.
+  - **Ataxia** : Mode **Whack-a-mole** dynamique. Les boutons sautent hors de l'écran avant de réapparaître dans un autre coin. Thème Désert appliqué.
+  - **Agnosia** : Standardisation totale en Noir & Blanc. Labels forcés sur "BOUTON".
+  - **Remplissage Effaceur** : Le timer se remplit de Noir vers Blanc, effaçant visuellement le contenu blanc du bouton à mesure qu'il progresse.
+  - **Interaction** : Gère les transformations de coordonnées (scrambling) et l'interpolation pour des mouvements fluides. Coordonne le **Feedback de Coût** vers les jauges du HUD.
 
 ### 5. App (Wiring)
 

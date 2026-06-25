@@ -26,8 +26,8 @@ var (
 	quakeShaderSource []byte
 	//go:embed shader/lumifly.kage
 	lumiflyShaderSource []byte
-	//go:embed shader/moss_drip.kage
-	mossDripShaderSource []byte
+	//go:embed shader/rain.kage
+	rainShaderSource []byte
 )
 
 type EffectRenderer struct {
@@ -53,7 +53,7 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 		"vortex":  vortexShaderSource,
 		"quake":   quakeShaderSource,
 		"lumifly": lumiflyShaderSource,
-		"moss_drip": mossDripShaderSource,
+		"rain": rainShaderSource,
 	}
 
 	for name, src := range sources {
@@ -69,22 +69,6 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 
 func (r *EffectRenderer) Update() {
 	r.count++
-}
-
-// DrawMossDrip dessine l'effet de mousse coulante sur le playmat
-func (r *EffectRenderer) DrawMossDrip(dst *ebiten.Image, x, y, w, h int) {
-	shader, ok := r.shaders["moss_drip"]
-	if !ok {
-		return
-	}
-
-	op := &ebiten.DrawRectShaderOptions{}
-	op.Uniforms = map[string]interface{}{
-		"Time":       float32(r.count) / 60.0,
-		"Resolution": []float32{float32(w), float32(h)},
-	}
-	op.GeoM.Translate(float64(x), float64(y))
-	dst.DrawRectShader(w, h, shader, op)
 }
 
 // DrawScannerEffect dessine l'effet de balayage du scanner.
@@ -180,6 +164,7 @@ type GlobalEffectParams struct {
 	Biome       string
 	UseBlur     bool
 	UseBubble   bool
+	UseRain     bool
 	PortalPos   []float32 // [x, y] normalized, nil if none
 	MousePos    []float32 // [x, y] normalized
 	ScreenSize  []float32 // [width, height] pixels
@@ -188,17 +173,20 @@ type GlobalEffectParams struct {
 // ProcessGlobalEffects applique les effets cumulatifs sur l'image entière.
 func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params GlobalEffectParams) {
 	// L'intensité est nulle à Sanity 1.0 et max à 0.0.
-	// On utilise une atténuation carrée pour le cumul comme suggéré.
 	intensity := float32(math.Pow(float64(1.0-params.SanityRatio), 2))
 
-	// CHANGEMENT : On autorise l'application même si intensity est 0 si des shaders spécifiques sont forcés
-	if intensity <= 0 && !params.UseBlur && !params.UseBubble && params.Biome == "" && params.PortalPos == nil {
+	// On vérifie si on doit appliquer des shaders même sans intensité de folie
+	shouldApply := intensity > 0 || params.UseBlur || params.UseBubble || params.UseRain || params.Biome != "" || params.PortalPos != nil
+
+	if !shouldApply {
 		return
 	}
 
-	// On force l'intensité au minimum pour que les shaders biome/bubble fonctionnent même à 100% de Sanity
-	if intensity < 0.1 {
-		intensity = 0.1
+	// On s'assure d'une intensité minimale pour que les shaders biome soient visibles
+	// même si la santé mentale est haute.
+	shaderIntensity := intensity
+	if shaderIntensity < 0.15 {
+		shaderIntensity = 0.15
 	}
 
 	// Redimensionnement dynamique des buffers si nécessaire
@@ -208,7 +196,7 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 		r.bufferB = ebiten.NewImage(sw, sh)
 	}
 
-	// Ping-pong buffers initialization
+	// Initialisation : on copie l'écran actuel dans Buffer A (Source)
 	r.bufferA.Clear()
 	r.bufferA.DrawImage(screen, nil)
 	src := r.bufferA
@@ -216,40 +204,48 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 
 	anyApplied := false
 
-	// 1. Biome Effects (Wave for Swamp, Heat for Desert)
+	// 1. Biome Effects (Wave for Swamp, Heat for Desert, Rain for Forest)
 	if params.Biome == "swamp" {
-		r.applyShader(src, dst, "wave", intensity, nil, params.ScreenSize)
-		src, dst = dst, src
+		r.applyShader(src, dst, "wave", shaderIntensity, nil, params.ScreenSize)
+		src, dst = dst, src // Ping-pong
 		anyApplied = true
 	} else if params.Biome == "desert" {
-		r.applyShader(src, dst, "heat", intensity, nil, params.ScreenSize)
-		src, dst = dst, src
+		r.applyShader(src, dst, "heat", shaderIntensity, nil, params.ScreenSize)
+		src, dst = dst, src // Ping-pong
+		anyApplied = true
+	} else if params.Biome == "forest" {
+		r.applyShader(src, dst, "rain", shaderIntensity, nil, params.ScreenSize)
+		src, dst = dst, src // Ping-pong
 		anyApplied = true
 	}
 
 	// 2. Creature Attack Effects
 	if params.UseBubble {
-		r.applyShader(src, dst, "bubble", intensity, params.MousePos, params.ScreenSize)
+		r.applyShader(src, dst, "bubble", shaderIntensity, params.MousePos, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
 	if params.UseBlur {
-		// Blur is often applied last to smooth things out
-		r.applyShader(src, dst, "blur", intensity, nil, params.ScreenSize)
+		r.applyShader(src, dst, "blur", shaderIntensity, nil, params.ScreenSize)
+		src, dst = dst, src
+		anyApplied = true
+	}
+
+	if params.UseRain {
+		r.applyShader(src, dst, "rain", shaderIntensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
 	// 3. Special Static Effects (Vortex for Portal)
 	if params.PortalPos != nil {
-		// Le vortex est toujours à intensité max (ou peut être couplé à Sanity si on veut)
-		vIntensity := float32(1.0)
-		r.applyShader(src, dst, "vortex", vIntensity, params.PortalPos, params.ScreenSize)
+		r.applyShader(src, dst, "vortex", 1.0, params.PortalPos, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
+	// Rendu final : On recopie le dernier Buffer (src) sur l'écran
 	if anyApplied {
 		screen.DrawImage(src, nil)
 	}

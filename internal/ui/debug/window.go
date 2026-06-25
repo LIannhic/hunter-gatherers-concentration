@@ -137,9 +137,9 @@ func (dw *DebugWindow) renderCreatures(screen *ebiten.Image) {
 	sort.Strings(entities)
 
 	for i, e := range entities {
-		row := i / 5
-		col := i % 5
-		cx := startX + float32(col*200)
+		row := i / 4
+		col := i % 4
+		cx := startX + float32(col*185)
 		cy := startY + 30 + float32(row*30)
 
 		dw.drawCheckbox(screen, cx, cy, e, dw.world.Debug.AllowedCreatures[e])
@@ -147,11 +147,11 @@ func (dw *DebugWindow) renderCreatures(screen *ebiten.Image) {
 }
 
 func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
-	startX := dw.x + 750
+	startX := dw.x + 800
 	startY := dw.y + 70
 	text.Draw(screen, "ENVIRONMENT SHADERS", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
-	shaders := []string{"blur", "bubble", "heat", "quake", "wave", "moss_drip"}
+	shaders := []string{"blur", "bubble", "heat", "wave", "rain"}
 	sort.Strings(shaders)
 
 	for i, s := range shaders {
@@ -161,8 +161,8 @@ func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
 }
 
 func (dw *DebugWindow) renderImpairments(screen *ebiten.Image) {
-	startX := dw.x + 750
-	startY := dw.y + 300
+	startX := dw.x + 800
+	startY := dw.y + 250
 	text.Draw(screen, "COGNITIVE IMPAIRMENTS", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
 	p := dw.world.Player
@@ -316,9 +316,9 @@ func (dw *DebugWindow) handleClickCreatures(mx, my float32) {
 	sort.Strings(entities)
 
 	for i, e := range entities {
-		row := i / 5
-		col := i % 5
-		cx := startX + float32(col*200)
+		row := i / 4
+		col := i % 4
+		cx := startX + float32(col*185)
 		cy := startY + 30 + float32(row*30)
 
 		if dw.isInside(mx, my, cx, cy, 16, 16) {
@@ -328,9 +328,9 @@ func (dw *DebugWindow) handleClickCreatures(mx, my float32) {
 }
 
 func (dw *DebugWindow) handleClickShaders(mx, my float32) {
-	startX := dw.x + 750
+	startX := dw.x + 800
 	startY := dw.y + 70
-	shaders := []string{"blur", "bubble", "heat", "quake", "wave", "moss_drip"}
+	shaders := []string{"blur", "bubble", "heat", "wave", "rain"}
 	sort.Strings(shaders)
 
 	for i, s := range shaders {
@@ -350,8 +350,8 @@ func (dw *DebugWindow) handleClickShaders(mx, my float32) {
 }
 
 func (dw *DebugWindow) handleClickImpairments(mx, my float32) {
-	startX := dw.x + 750
-	startY := dw.y + 300
+	startX := dw.x + 800
+	startY := dw.y + 250
 	p := dw.world.Player
 	if p == nil {
 		return

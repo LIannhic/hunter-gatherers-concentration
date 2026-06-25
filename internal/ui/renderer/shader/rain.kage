@@ -1,0 +1,76 @@
+//kage:unit pixels
+package main
+
+var Time float
+var Intensity float
+var Resolution vec2
+
+func hash12(p vec2) float {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123)
+}
+
+func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
+	uv := position.xy / Resolution.y
+
+	// Colonnes : plus il y a d'intensité, plus il y a de cordes de pluie
+	cols := 5.0 + 7.0 * Intensity
+	st := uv * vec2(cols, 1.0)
+	colId := floor(st.x)
+
+	speedSeed := hash12(vec2(colId, 35.12))
+	t := Time * (0.5 + speedSeed * 1.0)
+
+	// Chute saccadée : pauses puis glissements
+	pY := uv.y - (t + sin(t + sin(t)*0.5)) * 0.4
+
+	rowId := floor(pY * 3.0)
+	yCoord := fract(pY * 3.0)
+	xCoord := fract(st.x)
+
+	cellNoise := hash12(vec2(colId, rowId))
+
+	xOffset := (cellNoise - 0.5) * 0.3
+	dropletPos := vec2(xCoord - 0.5 - xOffset, yCoord - 0.3)
+
+	// Forme de goutte : base lourde, sommet pointu
+	dropletPos.y -= dropletPos.x * dropletPos.x * 0.4
+	distToDroplet := length(dropletPos * vec2(1.0, 0.7))
+	dropletMask := smoothstep(0.15, 0.08, distToDroplet)
+
+	// Traînée d'eau au-dessus de la goutte
+	trailMask := 0.0
+	if yCoord > 0.3 {
+		distanceToTrailAxis := abs(xCoord - 0.5 - xOffset)
+		trailWidth := 0.04 * (1.0 - smoothstep(0.3, 1.0, yCoord))
+		trailMask = smoothstep(trailWidth, 0.0, distanceToTrailAxis)
+		trailMask *= 0.4 + 0.6 * smoothstep(0.2, 0.8, sin(yCoord * 30.0 + cellNoise * 10.0))
+	}
+
+	waterMask := max(dropletMask, trailMask)
+
+	// Réfraction lentille : déformation optique vers l'intérieur de la goutte
+	distortion := vec2(0.0)
+	if waterMask > 0.01 {
+		refractionDir := vec2(xCoord - 0.5 - xOffset, yCoord - 0.3)
+		distortionStrength := 35.0
+		distortion = refractionDir * waterMask * distortionStrength
+	}
+
+	baseColor := imageSrc0At(position.xy + distortion)
+
+	// Opacité générale pilotée par l'intensité (sanité)
+	alpha := (0.1 + 0.9 * Intensity) * waterMask
+
+	if alpha > 0.01 {
+		mossGreen := vec3(0.08, 0.38, 0.12)
+		baseColor.rgb = mix(baseColor.rgb, mossGreen, alpha * 0.4)
+
+		lightX := smoothstep(0.05, 0.0, length(dropletPos - vec2(-0.04, -0.04)))
+		baseColor.rgb += vec3(lightX * 0.4 * dropletMask * Intensity)
+
+		shadowX := smoothstep(0.15, 0.05, length(dropletPos - vec2(0.04, 0.04)))
+		baseColor.rgb -= vec3(shadowX * 0.1 * dropletMask * Intensity)
+	}
+
+	return baseColor
+}

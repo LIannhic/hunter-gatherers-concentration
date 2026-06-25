@@ -74,7 +74,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Engine` : Orchestrateur des systèmes ECS.
   - `ECS Systems` : Implémentations (IA, Mouvement, Lifecycle, Loot...).
   - `AggressionSystem` : Gère le calcul modulaire de l'agressivité (Base + Facteurs : révélations, patience, inventaire, colère d'espèce). Déclenche les attaques à 100%.
-  - `CreatureAttackEffectSystem` : Centralise les effets mondiaux déclenchés par les attaques (ex: rotation de grille).
+  - `CreatureAttackEffectSystem` : Centralise les effets mondiaux déclenchés par les attaques réussies (ex: rotation de grille, troubles cognitifs Aphasia/Ataxia/Agnosia/Amnesia).
   - `Mechanics` : Flip, Match, Merge.
   - `Navigation` : Gestion des grids et navigation.
   - `Entities` : Logique de spawn.
@@ -106,7 +106,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `ActionSystem` : Gère les actions spécifiques des créatures (ex: `spawn_trap` du Singe Mousse)
   - `TrackSystem` : Gère la durée de vie et la disparition progressive des traces au sol
   - `AggressionSystem` : **Nouveau** — Calcule l'agressivité totale des créatures (Base + Facteurs). S'abonne à `TileRevealed` (reason: "player_action") pour le facteur "reveals" et à `CreatureMoved` pour le facteur "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité ≥ 100 à la fin de l'animation de flip.
-  - `CreatureAttackEffectSystem` : Centralise les effets mondiaux des attaques (ex: rotation de grille du Stonewarden).
+  - `CreatureAttackEffectSystem` : Centralise les effets mondiaux des attaques réussies. Linke les impacts physiques aux altérations mentales (Aphasia, Ataxia, Agnosia, Amnesia) et transformations de terrain (Quake).
   - `ComboSystem` : Gère le système de combo (Priority 10). S'abonne à `TileMatched` pour incrémenter le compteur et calculer la juiciness (1-5). S'abonne à `TileMerged` pour publier un message sans incrémenter. S'abonne à `PlayerDamaged` pour réinitialiser le combo en cas d'erreur. Publie `ComboTriggered` via `PublishImmediate` (sinon perdu dans `ProcessQueue`).
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :

@@ -34,13 +34,16 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 
 	c := ent.(*creature.Creature)
 
+	// SI L'ATTAQUE TOUCHE LE JOUEUR ALORS EN PLUS DES DEGATS IL Y A UN EFFET NEGATIF !
+	// SI L'ATTAQUE NE TOUCHE PAS, LE JOUEUR N'A RIEN !
+	hitTarget, hasHit := e.Payload["hit_target"].(*entity.Position)
+	if !hasHit || hitTarget == nil {
+		return
+	}
+
 	// Logique d'effets spécifiques par espèce
 	switch c.Species {
 	case "stonewarden":
-		hitTarget, hasHit := e.Payload["hit_target"].(*entity.Position)
-		if !hasHit || hitTarget == nil {
-			return
-		}
 		fmt.Println("[STONEWARDEN] L'attaque touche et provoque un séisme de rotation !")
 		s.world.RotateGrid(c.GetGridID())
 		s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vous êtes déboussolé."))
@@ -72,10 +75,6 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 		}
 
 	case "specter":
-		hitTarget, hasHit := e.Payload["hit_target"].(*entity.Position)
-		if !hasHit || hitTarget == nil {
-			return
-		}
 		fmt.Printf("[%s] L'attaque touche le joueur et provoque une amnésie temporaire !\n", c.Species)
 		flipDir := entity.FlipTop
 		if s.world.Player != nil {
