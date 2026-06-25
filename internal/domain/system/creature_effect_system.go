@@ -34,27 +34,47 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 
 	c := ent.(*creature.Creature)
 
+	// SI L'ATTAQUE TOUCHE LE JOUEUR ALORS EN PLUS DES DEGATS IL Y A UN EFFET NEGATIF !
+	// SI L'ATTAQUE NE TOUCHE PAS, LE JOUEUR N'A RIEN !
+	hitTarget, hasHit := e.Payload["hit_target"].(*entity.Position)
+	if !hasHit || hitTarget == nil {
+		return
+	}
+
 	// Logique d'effets spécifiques par espèce
 	switch c.Species {
 	case "stonewarden":
-		hitTarget, hasHit := e.Payload["hit_target"].(*entity.Position)
-		if !hasHit || hitTarget == nil {
-			return
-		}
 		fmt.Println("[STONEWARDEN] L'attaque touche et provoque un séisme de rotation !")
 		s.world.RotateGrid(c.GetGridID())
 		s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vous êtes déboussolé."))
 
 	case "shadowstalker":
-		// Les effets de shader sont gérés par le AggressionSystem (immédiat)
-		// et le Renderer (visuel). On pourra ajouter ici des effets de statut
-		// comme la réduction de sanité maximale ou le vol d'objets.
+		// Applique un effet visuel de flou
+		if s.world.Player != nil {
+			s.world.Player.VisualEffects["blur"] = 3
+			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Votre vision se trouble..."))
+		}
+
+	case "echo_hound":
+		if s.world.Player != nil {
+			s.world.Player.AphasiaTurns = 3
+			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Les mots perdent leur sens..."))
+		}
+
+	case "burrower":
+		if s.world.Player != nil {
+			s.world.Player.AtaxiaTurns = 3
+			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vos mains ne vous obéissent plus !"))
+		}
+
+	case "moss_monkey":
+		if s.world.Player != nil {
+			s.world.Player.AgnosiaTurns = 3
+			s.world.Player.VisualEffects["moss_drip"] = 3
+			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Une mousse envahissante vous aveugle !"))
+		}
 
 	case "specter":
-		hitTarget, hasHit := e.Payload["hit_target"].(*entity.Position)
-		if !hasHit || hitTarget == nil {
-			return
-		}
 		fmt.Printf("[%s] L'attaque touche le joueur et provoque une amnésie temporaire !\n", c.Species)
 		flipDir := entity.FlipTop
 		if s.world.Player != nil {
@@ -66,6 +86,8 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 		s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vous avez du mal à vous souvenir."))
 
 	case "lumifly":
-		// Effets logiques futurs pour le Lumifly (ex: étourdissement, mana drain)
+		if s.world.Player != nil {
+			s.world.Player.VisualEffects["bubble"] = 2
+		}
 	}
 }

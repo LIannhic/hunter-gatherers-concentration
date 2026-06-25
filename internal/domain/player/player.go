@@ -150,6 +150,9 @@ type Player struct {
 	ThreatVisionTurns int // Nombre de tours où les zones de menace sont visibles
 	GraceTurns int // Nombre de tours où les créatures n'attaquent pas lors de la révélation (Flutterwing)
 	AmnesiaTurns int // Nombre de tours où l'inventaire est face cachée (Amnésie)
+	AphasiaTurns int // Durée de l'aphasie (Echo Hound)
+	AtaxiaTurns  int // Durée de l'ataxie (Burrower)
+	AgnosiaTurns int // Durée de l'agnosie (Moss Monkey)
 
 	// Effets visuels (Shaders)
 	VisualEffects map[string]int // "blur", "bubble", etc. -> Durée en tours
@@ -606,6 +609,15 @@ func (p *Player) ConsumeSanity(amount int) {
 	}
 	if amount > 0 && p.AmnesiaTurns > 0 {
 		p.AmnesiaTurns--
+	}
+	if amount > 0 && p.AphasiaTurns > 0 {
+		p.AphasiaTurns--
+	}
+	if amount > 0 && p.AtaxiaTurns > 0 {
+		p.AtaxiaTurns--
+	}
+	if amount > 0 && p.AgnosiaTurns > 0 {
+		p.AgnosiaTurns--
 	}
 }
 
