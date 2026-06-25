@@ -54,6 +54,7 @@ func (dw *DebugWindow) Render(screen *ebiten.Image) {
 	dw.renderDifficulty(screen)
 	dw.renderCreatures(screen)
 	dw.renderShaders(screen)
+	dw.renderImpairments(screen)
 }
 
 func (dw *DebugWindow) renderStats(screen *ebiten.Image) {
@@ -150,13 +151,29 @@ func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
 	startY := dw.y + 70
 	text.Draw(screen, "ENVIRONMENT SHADERS", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
-	shaders := []string{"blur", "bubble", "heat", "quake", "wave"}
+	shaders := []string{"blur", "bubble", "heat", "quake", "wave", "moss_drip"}
 	sort.Strings(shaders)
 
 	for i, s := range shaders {
 		cy := startY + 30 + float32(i*30)
 		dw.drawCheckbox(screen, startX, cy, s, dw.world.Debug.ActiveShaders[s])
 	}
+}
+
+func (dw *DebugWindow) renderImpairments(screen *ebiten.Image) {
+	startX := dw.x + 750
+	startY := dw.y + 300
+	text.Draw(screen, "COGNITIVE IMPAIRMENTS", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+
+	p := dw.world.Player
+	if p == nil {
+		return
+	}
+
+	dw.drawCheckbox(screen, startX, startY+30, "Aphasia (Echo Hound)", p.AphasiaTurns > 0)
+	dw.drawCheckbox(screen, startX, startY+60, "Ataxia (Burrower)", p.AtaxiaTurns > 0)
+	dw.drawCheckbox(screen, startX, startY+90, "Agnosia (Moss Monkey)", p.AgnosiaTurns > 0)
+	dw.drawCheckbox(screen, startX, startY+120, "Amnesia (Specter)", p.AmnesiaTurns > 0)
 }
 
 func (dw *DebugWindow) drawButton(screen *ebiten.Image, x, y float32, label, id string) {
@@ -206,6 +223,8 @@ func (dw *DebugWindow) HandleClick(mx, my int) bool {
 	dw.handleClickCreatures(fx, fy)
 	// Shaders
 	dw.handleClickShaders(fx, fy)
+	// Impairments
+	dw.handleClickImpairments(fx, fy)
 
 	return true
 }
@@ -311,14 +330,44 @@ func (dw *DebugWindow) handleClickCreatures(mx, my float32) {
 func (dw *DebugWindow) handleClickShaders(mx, my float32) {
 	startX := dw.x + 750
 	startY := dw.y + 70
-	shaders := []string{"blur", "bubble", "heat", "quake", "wave"}
+	shaders := []string{"blur", "bubble", "heat", "quake", "wave", "moss_drip"}
 	sort.Strings(shaders)
 
 	for i, s := range shaders {
 		cy := startY + 30 + float32(i*30)
 		if dw.isInside(mx, my, startX, cy, 16, 16) {
 			dw.world.Debug.ActiveShaders[s] = !dw.world.Debug.ActiveShaders[s]
+			// Sync with player visual effects for immediate feedback
+			if dw.world.Player != nil {
+				if dw.world.Debug.ActiveShaders[s] {
+					dw.world.Player.VisualEffects[s] = 999
+				} else {
+					dw.world.Player.VisualEffects[s] = 0
+				}
+			}
 		}
+	}
+}
+
+func (dw *DebugWindow) handleClickImpairments(mx, my float32) {
+	startX := dw.x + 750
+	startY := dw.y + 300
+	p := dw.world.Player
+	if p == nil {
+		return
+	}
+
+	if dw.isInside(mx, my, startX, startY+30, 16, 16) {
+		if p.AphasiaTurns > 0 { p.AphasiaTurns = 0 } else { p.AphasiaTurns = 10 }
+	}
+	if dw.isInside(mx, my, startX, startY+60, 16, 16) {
+		if p.AtaxiaTurns > 0 { p.AtaxiaTurns = 0 } else { p.AtaxiaTurns = 10 }
+	}
+	if dw.isInside(mx, my, startX, startY+90, 16, 16) {
+		if p.AgnosiaTurns > 0 { p.AgnosiaTurns = 0 } else { p.AgnosiaTurns = 10 }
+	}
+	if dw.isInside(mx, my, startX, startY+120, 16, 16) {
+		if p.AmnesiaTurns > 0 { p.AmnesiaTurns = 0 } else { p.AmnesiaTurns = 10 }
 	}
 }
 
@@ -330,6 +379,13 @@ func (dw *DebugWindow) ResetDefaults() {
 	dw.world.Debug.OverrideDifficulty = false
 	dw.world.Debug.ActiveShaders = make(map[string]bool)
 	dw.world.Debug.MessageSpeed = 1.0
+	if dw.world.Player != nil {
+		dw.world.Player.AphasiaTurns = 0
+		dw.world.Player.AtaxiaTurns = 0
+		dw.world.Player.AgnosiaTurns = 0
+		dw.world.Player.AmnesiaTurns = 0
+		dw.world.Player.VisualEffects = make(map[string]int)
+	}
 	dw.world.Debug.AllowedCreatures = map[string]bool{
 		"lumifly":         true,
 		"shadowstalker":   true,

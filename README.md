@@ -292,7 +292,7 @@ Le joueur peut subir des altérations mentales qui déforment l'interface :
 - **Aphasia** – brouille les labels des boutons (ex: "MATCH" devient "???" ou est permuté).
 - **Agnosia** – rend les boutons visuellement indifférenciés (couleurs altérées).
 - **Ataxia** – scramble les positions des boutons (ex: le bouton Match peut basculer au coin bas-droit).
-- **Amnesia** – désactive aléatoirement des boutons (30% de chance d'"oublier" un bouton). Seulement déclenché par le Spectre (pas l'Echo Hound) lorsqu'une attaque touche le joueur. Affiche "AMNÉSIE ! X tours." sur la zone droite et "Vous avez du mal à vous souvenir." sur la zone gauche. À la fin, "La mémoire revient..." et l'inventaire est révélé automatiquement.
+- **Amnesia** – les tuiles butins sont face cachée, déclenché par le Spectre lorsqu'une attaque touche le joueur ou la proximité d'une void bloom. Affiche "AMNÉSIE ! X tours." sur la zone droite et "Vous avez du mal à vous souvenir." sur la zone gauche. À la fin, "La mémoire revient..." et l'inventaire est révélé automatiquement.
 
 Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
 
