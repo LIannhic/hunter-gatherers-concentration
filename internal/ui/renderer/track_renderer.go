@@ -337,78 +337,78 @@ func (tr *TrackRenderer) DrawAttackIntent(screen *ebiten.Image, intent *AttackIn
 
 // DrawFootstepPreview dessine un aperçu semi-transparent d'une empreinte de pas
 // sur le bord de la tuile la plus proche du curseur. Fonctionne sur toutes les grilles.
-func (tr *TrackRenderer) DrawFootstepPreview(screen *ebiten.Image, cursorX, cursorY float64, world *domain.World, getTileCenter func(board.Position) (float64, float64)) {
-	if world == nil || world.CurrentGridID == "" {
-		return
-	}
+// func (tr *TrackRenderer) DrawFootstepPreview(screen *ebiten.Image, cursorX, cursorY float64, world *domain.World, getTileCenter func(board.Position) (float64, float64)) {
+// 	if world == nil || world.CurrentGridID == "" {
+// 		return
+// 	}
 
-	grid, ok := world.GetGrid(world.CurrentGridID)
-	if !ok || grid == nil {
-		return
-	}
+// 	grid, ok := world.GetGrid(world.CurrentGridID)
+// 	if !ok || grid == nil {
+// 		return
+// 	}
 
-	sprite := tr.getOrCreateSprite("footprints")
-	if sprite == nil {
-		return
-	}
+// 	sprite := tr.getOrCreateSprite("footprints")
+// 	if sprite == nil {
+// 		return
+// 	}
 
-	// Trouve la tuile la plus proche du curseur
-	bestDist := math.MaxFloat64
-	var bestCenterX, bestCenterY float64
-	found := false
+// 	// Trouve la tuile la plus proche du curseur
+// 	bestDist := math.MaxFloat64
+// 	var bestCenterX, bestCenterY float64
+// 	found := false
 
-	for y := 0; y < grid.Height; y++ {
-		for x := 0; x < grid.Width; x++ {
-			pos := board.Position{X: x, Y: y}
-			cx, cy := getTileCenter(pos)
-			dx := cursorX - cx
-			dy := cursorY - cy
-			d := dx*dx + dy*dy
-			if d < bestDist {
-				bestDist = d
-				bestCenterX = cx
-				bestCenterY = cy
-				found = true
-			}
-		}
-	}
+// 	for y := 0; y < grid.Height; y++ {
+// 		for x := 0; x < grid.Width; x++ {
+// 			pos := board.Position{X: x, Y: y}
+// 			cx, cy := getTileCenter(pos)
+// 			dx := cursorX - cx
+// 			dy := cursorY - cy
+// 			d := dx*dx + dy*dy
+// 			if d < bestDist {
+// 				bestDist = d
+// 				bestCenterX = cx
+// 				bestCenterY = cy
+// 				found = true
+// 			}
+// 		}
+// 	}
 
-	if !found {
-		return
-	}
+// 	if !found {
+// 		return
+// 	}
 
-	// Ne dessine pas si le curseur est trop loin de la grille (> 1.5 tuiles)
-	if bestDist > (tr.tileSize*1.5)*(tr.tileSize*1.5) {
-		return
-	}
+// 	// Ne dessine pas si le curseur est trop loin de la grille (> 1.5 tuiles)
+// 	if bestDist > (tr.tileSize*1.5)*(tr.tileSize*1.5) {
+// 		return
+// 	}
 
-	// Direction du centre vers le curseur
-	dirX := cursorX - bestCenterX
-	dirY := cursorY - bestCenterY
-	dist := math.Sqrt(dirX*dirX + dirY*dirY)
+// 	// Direction du centre vers le curseur
+// 	dirX := cursorX - bestCenterX
+// 	dirY := cursorY - bestCenterY
+// 	dist := math.Sqrt(dirX*dirX + dirY*dirY)
 
-	if dist < 1.0 {
-		dirX, dirY = 0, 1
-		dist = 1.0
-	}
-	dirX /= dist
-	dirY /= dist
+// 	if dist < 1.0 {
+// 		dirX, dirY = 0, 1
+// 		dist = 1.0
+// 	}
+// 	dirX /= dist
+// 	dirY /= dist
 
-	// Position sur le bord extérieur
-	edgeDist := tr.tileSize/2 + 4
-	drawX := bestCenterX + dirX*edgeDist
-	drawY := bestCenterY + dirY*edgeDist
+// 	// Position sur le bord extérieur
+// 	edgeDist := tr.tileSize/2 + 4
+// 	drawX := bestCenterX + dirX*edgeDist
+// 	drawY := bestCenterY + dirY*edgeDist
 
-	// Angle vers le centre
-	angle := math.Atan2(-dirY, -dirX)
+// 	// Angle vers le centre
+// 	angle := math.Atan2(-dirY, -dirX)
 
-	// Dessine l'empreinte semi-transparente
-	op := &ebiten.DrawImageOptions{}
-	w, h := sprite.Bounds().Dx(), sprite.Bounds().Dy()
-	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
-	op.GeoM.Rotate(angle)
-	op.GeoM.Translate(drawX, drawY)
-	op.ColorScale.ScaleAlpha(0.35)
+// 	// Dessine l'empreinte semi-transparente
+// 	op := &ebiten.DrawImageOptions{}
+// 	w, h := sprite.Bounds().Dx(), sprite.Bounds().Dy()
+// 	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+// 	op.GeoM.Rotate(angle)
+// 	op.GeoM.Translate(drawX, drawY)
+// 	op.ColorScale.ScaleAlpha(0.35)
 
-	screen.DrawImage(sprite, op)
-}
+// 	screen.DrawImage(sprite, op)
+// }

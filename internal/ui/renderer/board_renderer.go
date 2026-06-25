@@ -590,10 +590,10 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 		r.renderMovementsOver(screen, world)
 
 		// Aperçu de l'empreinte de pas au curseur (semi-transparent)
-		if world.Player != nil && world.Player.IsAlive() {
-			cursorX, cursorY := ebiten.CursorPosition()
-			r.trackRenderer.DrawFootstepPreview(screen, float64(cursorX), float64(cursorY), world, getCenter)
-		}
+		// if world.Player != nil && world.Player.IsAlive() {
+		// 	cursorX, cursorY := ebiten.CursorPosition()
+		// 	r.trackRenderer.DrawFootstepPreview(screen, float64(cursorX), float64(cursorY), world, getCenter)
+		// }
 
 		// Le scanner glisse au-dessus de tout le monde sur le plateau
 		r.renderEffectsOver(screen, world)
