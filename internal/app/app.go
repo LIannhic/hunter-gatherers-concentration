@@ -1065,6 +1065,7 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 			Biome:       biome,
 			UseBlur:     app.World.Player.VisualEffects["blur"] > 0 || app.World.Debug.ActiveShaders["blur"],
 			UseBubble:   (app.World.Player.VisualEffects["bubble"] > 0 || app.World.Debug.ActiveShaders["bubble"]) && isOverPlaymat,
+			UseRain:     app.World.Player.VisualEffects["rain"] > 0 || app.World.Debug.ActiveShaders["rain"],
 			PortalPos:   portalPos,
 			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},
