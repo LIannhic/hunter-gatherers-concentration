@@ -28,6 +28,8 @@ var (
 	lumiflyShaderSource []byte
 	//go:embed shader/rain.kage
 	rainShaderSource []byte
+	//go:embed shader/cave.kage
+	caveShaderSource []byte
 )
 
 type EffectRenderer struct {
@@ -53,7 +55,8 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 		"vortex":  vortexShaderSource,
 		"quake":   quakeShaderSource,
 		"lumifly": lumiflyShaderSource,
-		"rain": rainShaderSource,
+		"rain":    rainShaderSource,
+		"cave":    caveShaderSource,
 	}
 
 	for name, src := range sources {
@@ -217,17 +220,26 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 		r.applyShader(src, dst, "rain", shaderIntensity, nil, params.ScreenSize)
 		src, dst = dst, src // Ping-pong
 		anyApplied = true
+	} else if params.Biome == "cave" {
+		hudLights := r.buildHudLights()
+		r.applyCaveShader(src, dst, shaderIntensity, params.ScreenSize, hudLights)
+		src, dst = dst, src // Ping-pong
+		anyApplied = true
 	}
 
-	// 2. Creature Attack Effects
+	// 2. Creature Attack Effects — mapping linéaire [min, 1.0] sur la plage de sanité
 	if params.UseBubble {
-		r.applyShader(src, dst, "bubble", shaderIntensity, params.MousePos, params.ScreenSize)
+		bubbleMin := float32(0.45) // Min 88px radius = taille d'une tuile
+		bubbleIntensity := bubbleMin + (1.0-bubbleMin)*intensity
+		r.applyShader(src, dst, "bubble", bubbleIntensity, params.MousePos, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
 	if params.UseBlur {
-		r.applyShader(src, dst, "blur", shaderIntensity, nil, params.ScreenSize)
+		blurMin := float32(0.4) // Min 0.8px offset = flou léger perceptible
+		blurIntensity := blurMin + (1.0-blurMin)*intensity
+		r.applyShader(src, dst, "blur", blurIntensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
@@ -249,6 +261,41 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	if anyApplied {
 		screen.DrawImage(src, nil)
 	}
+}
+
+// buildHudLights retourne les cercles de lumière pour les panneaux HUD.
+// Format plat [cx, cy, radius, 0, ...] × 4 éléments (pixels écran).
+func (r *EffectRenderer) buildHudLights() []float32 {
+	// Portrait : centre (145,145), rayon ~190 (couvre le carré 270×270)
+	// Inventaire : centre (145,525), rayon ~230 (couvre 270×370)
+	// Jauges : centre (1135,220), rayon ~210 (couvre 270×320)
+	// Minimap : centre (1135,575), rayon ~190 (couvre 270×270)
+	return []float32{
+		145, 145, 190, 0,
+		145, 525, 230, 0,
+		1135, 220, 210, 0,
+		1135, 575, 190, 0,
+	}
+}
+
+func (r *EffectRenderer) applyCaveShader(src, dst *ebiten.Image, intensity float32, resolution, hudLights []float32) {
+	shader, ok := r.shaders["cave"]
+	if !ok {
+		return
+	}
+
+	dst.Clear()
+	op := &ebiten.DrawRectShaderOptions{}
+	op.Images[0] = src
+	op.Uniforms = map[string]interface{}{
+		"Time":       float32(r.count) / 60.0,
+		"Intensity":  intensity,
+		"Resolution": resolution,
+		"HudLights":  hudLights,
+	}
+
+	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()
+	dst.DrawRectShader(sw, sh, shader, op)
 }
 
 func (r *EffectRenderer) applyShader(src, dst *ebiten.Image, name string, intensity float32, center []float32, resolution []float32) {

@@ -13,12 +13,14 @@ type Component interface {
 
 // Store stocke les composants par entité
 type Store struct {
-	components map[string]map[string]Component // entityID -> componentType -> Component
+	components  map[string]map[string]Component // entityID -> componentType -> Component
+	byComponent map[string]map[string]bool      // componentType -> entityID -> present
 }
 
 func NewStore() *Store {
 	return &Store{
-		components: make(map[string]map[string]Component),
+		components:  make(map[string]map[string]Component),
+		byComponent: make(map[string]map[string]bool),
 	}
 }
 
@@ -27,6 +29,10 @@ func (s *Store) Add(entityID string, c Component) {
 		s.components[entityID] = make(map[string]Component)
 	}
 	s.components[entityID][c.Type()] = c
+	if s.byComponent[c.Type()] == nil {
+		s.byComponent[c.Type()] = make(map[string]bool)
+	}
+	s.byComponent[c.Type()][entityID] = true
 }
 
 func (s *Store) Get(entityID string, componentType string) (Component, bool) {
@@ -40,6 +46,9 @@ func (s *Store) Get(entityID string, componentType string) (Component, bool) {
 func (s *Store) Remove(entityID string, componentType string) {
 	if s.components[entityID] != nil {
 		delete(s.components[entityID], componentType)
+	}
+	if s.byComponent[componentType] != nil {
+		delete(s.byComponent[componentType], entityID)
 	}
 }
 
@@ -60,17 +69,23 @@ func (s *Store) GetAll(entityID string) []Component {
 }
 
 func (s *Store) QueryByComponent(componentType string) []string {
-	var result []string
-	for entityID, comps := range s.components {
-		if _, ok := comps[componentType]; ok {
-			result = append(result, entityID)
-		}
+	ids := s.byComponent[componentType]
+	result := make([]string, 0, len(ids))
+	for entityID := range ids {
+		result = append(result, entityID)
 	}
 	return result
 }
 
 func (s *Store) RemoveEntity(entityID string) {
-	delete(s.components, entityID)
+	if comps, ok := s.components[entityID]; ok {
+		for compType := range comps {
+			if s.byComponent[compType] != nil {
+				delete(s.byComponent[compType], entityID)
+			}
+		}
+		delete(s.components, entityID)
+	}
 }
 
 // --- Composants concrets ---

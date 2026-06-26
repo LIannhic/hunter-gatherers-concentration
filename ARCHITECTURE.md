@@ -378,7 +378,7 @@ Séparation des responsabilités :
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
     - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets (ex: "Vous êtes déboussolé.", "Vous toussez du sang.", "La mémoire revient...").
     - **Zone Droite**: Affiche les feedbacks de gameplay immédiats (ex: "CONFRONTATION ! -10 HP", "TOXICITÉ ! -X HP", "AMNÉSIE ! X tours.", "MATCH INVALIDE !").
-- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur, Lumifly) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
+- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur, Lumifly, Cave) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
   - **Lumifly Shader** (`renderer/shader/lumifly.kage`) : Onde lumineuse dorée circulaire avec silhouettes d'entités. Centre calculé via `calculateTileScreenPos` pour un alignement parfait avec les tuiles. Rayon basé sur la diagonale d'une case (`√2`).
   - **Silhouettes sur le Dos** : Chaque tuile affiche la silhouette de son entité sur le dos (alpha variable), utilisée par le shader Lumifly pour les effets de révélation. Les UVs du dos sont transformés par la D4 avec miroir horizontal.
 
@@ -387,6 +387,13 @@ Séparation des responsabilités :
   - **Frame Buffer** (`quakeFrameBuffer`) : 990×990, reçoit la sortie du shader, puis `SubImage` centre 700×700 affiché à `(PlaymatX, PlaymatY)`.
   - **Uniforms** : `RotationAngle` (Pi/2 ou -Pi/2), `Clockwise` (bool), `GhostSize` [990,990], `Resolution` [990,990].
   - **Rendu** : `RenderQuakeOverlay` appelé après `ProcessGlobalEffects` pour le plus haut z-index.
+
+- **Cave Shader** (`renderer/shader/cave.kage`) : Effet d'ambiance oppressive pour le biome grotte. Couplé à la **Santé Mentale** du joueur via le paramètre `Intensity` (0.0 = sane, 1.0 = folie totale).
+  - **Obscurité de fond** : Assombrit uniformément l'écran (55% à sanity满 → 98% à sanity 0). La torche centrale crée un cercle de lumière proportionnel à la folie.
+  - **Torche centre** : Rayon de 175px (sanity满) → 13px (sanity 0). Force de 35% (sanity满) → 95% (sanity 0). Vacillement procédural (`hash12`) avec amplitude croissante.
+  - **Lights HUD** : Cercles de lumière fixes sur les panneaux HUD (Portrait, Inventaire, Jauges, Minimap). Le rayon est contraint aux dimensions du panneau (`smoothstep(r*edge, r, dist)`). L'ombre interne rétrécit avec l'intensité (0.85 → 0.15), étendant la zone éclairée du centre vers les bords.
+  - **Uniforms** : `Time`, `Intensity`, `Resolution`, `HudLights [16]float` (4 × `[cx, cy, radius, _]`).
+  - **Application** : Appliqué dans `ProcessGlobalEffects` via `applyCaveShader()`, après les biomes (wave/heat/rain) et avant les effets créatures.
 
 - **DebugWindow** (`ui/debug/window.go`) : Console de débogage interactive (F12) permettant de modifier les statistiques, la difficulté, et de filtrer les entités spawnables. Contrôle la vitesse de défilement des messages HUD (`MessageSpeed` via `+`/`-`).
 

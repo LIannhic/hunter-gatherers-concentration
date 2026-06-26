@@ -8,8 +8,8 @@ var Resolution vec2
 func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
     clr := vec4(0, 0, 0, 0)
     samples := 9
-    // Décalage en pixels (environ 2 pixels à intensité max)
-    offset := 2.0 * Intensity
+    // Décalage en pixels (environ 5 pixels à intensité max)
+    offset := 5.0 * Intensity
 
     clr += imageSrc0At(srcPos + vec2(-offset, -offset))
     clr += imageSrc0At(srcPos + vec2(0, -offset))
