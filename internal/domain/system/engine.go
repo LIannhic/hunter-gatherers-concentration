@@ -20,6 +20,7 @@ type Engine struct {
 	movementSystem *CreatureMovementSystem // Référence directe pour les mises à jour
 	previewSystem  *PreviewSystem          // Référence pour les événements
 	lootSystem     *LootSystem
+	comboSystem    *ComboSystem
 }
 
 // NewEngine initialise le moteur de jeu avec ses systèmes
@@ -47,6 +48,7 @@ func NewEngine(world *World) *Engine {
 		movementSystem: moveSys,
 		previewSystem:  prevSys,
 		lootSystem:     lootSys,
+		comboSystem:    comboSys,
 	}
 
 	// Lie l'engine au monde pour permettre aux systèmes de communiquer
@@ -209,6 +211,12 @@ func (e *Engine) TrackTileReveal(pos board.Position, gridID string) {
 // AddSystem ajoute dynamiquement un système au moteur
 func (e *Engine) AddSystem(s System) {
 	e.systems = append(e.systems, s)
+}
+
+func (e *Engine) IncreaseComboCheat() {
+	if e.comboSystem != nil {
+		e.comboSystem.CheatIncreaseCombo()
+	}
 }
 
 // GetWorld retourne la référence du monde

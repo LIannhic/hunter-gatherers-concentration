@@ -615,8 +615,8 @@ func (app *Application) updateMenu() error {
 			app.HUD.DiffSelection.SetVisible(false)
 			return nil
 		}
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-			x, y := ebiten.CursorPosition()
+		if app.Input.IsJustPressed() {
+			x, y := app.Input.GetInteractionPosition()
 			app.HUD.HandleClick(x, y)
 		}
 		return nil
@@ -628,8 +628,8 @@ func (app *Application) updateMenu() error {
 			return nil
 		}
 
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-			x, y := ebiten.CursorPosition()
+		if app.Input.IsJustPressed() {
+			x, y := app.Input.GetInteractionPosition()
 			action := app.SaveMenu.HandleClick(x, y)
 
 			switch action.Type {
@@ -662,8 +662,8 @@ func (app *Application) updateMenu() error {
 		return nil
 	}
 
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		x, y := ebiten.CursorPosition()
+	if app.Input.IsJustPressed() {
+		x, y := app.Input.GetInteractionPosition()
 		if app.TitleScreen.IsStartButtonClicked(x, y) {
 			if app.hasSaves {
 				// Charge le dernier slot joué
@@ -698,8 +698,8 @@ func (app *Application) updatePlaying() error {
 			return nil
 		}
 
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-			mx, my := ebiten.CursorPosition()
+		if app.Input.IsJustPressed() {
+			mx, my := app.Input.GetInteractionPosition()
 			action := app.HUD.HandleVictoryClick(mx, my)
 			switch action {
 			case "replay":
@@ -721,8 +721,8 @@ func (app *Application) updatePlaying() error {
 	}
 
 	if app.World.Debug.Visible {
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-			mx, my := ebiten.CursorPosition()
+		if app.Input.IsJustPressed() {
+			mx, my := app.Input.GetInteractionPosition()
 			if app.DebugWindow.HandleClick(mx, my) {
 				return nil
 			}
@@ -763,8 +763,8 @@ func (app *Application) updatePlaying() error {
 		app.State = domain.StateGameOver
 	}
 
-	mx, my := ebiten.CursorPosition()
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+	mx, my := app.Input.GetInteractionPosition()
+	if app.Input.IsJustPressed() {
 		prevSelectedIdx := app.HUD.GetSelectedLootIndex()
 
 		if app.HUD.HandleClick(mx, my) {
@@ -841,8 +841,8 @@ func (app *Application) updateGameOver() error {
 		return nil
 	}
 
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		mx, my := ebiten.CursorPosition()
+	if app.Input.IsJustPressed() {
+		mx, my := app.Input.GetInteractionPosition()
 		action := app.HUD.HandleGameOverClick(mx, my)
 		switch action {
 		case "replay":
