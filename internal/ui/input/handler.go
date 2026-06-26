@@ -72,6 +72,8 @@ type Handler struct {
 	touchStartTime    time.Time
 	touchStartScreenX int
 	touchStartScreenY int
+	touchLastScreenX  int
+	touchLastScreenY  int
 	isDragging        bool
 	isLongPressFired  bool
 
@@ -386,6 +388,7 @@ func (h *Handler) handleMouse() error {
        h.isLongPressFired = false
        h.isDragging = false
        h.touchStartScreenX, h.touchStartScreenY = h.GetInteractionPosition()
+       h.touchLastScreenX, h.touchLastScreenY = h.touchStartScreenX, h.touchStartScreenY
        return nil
     }
 
@@ -400,9 +403,11 @@ func (h *Handler) handleMouse() error {
           return nil
        }
 
+       h.touchLastScreenX, h.touchLastScreenY = currX, currY
+
        // Détection du Drag
        dist := math.Hypot(float64(currX-h.touchStartScreenX), float64(currY-h.touchStartScreenY))
-       if dist > 15.0 { // Augmenté légèrement à 15 pour la sensibilité mobile
+       if dist > 30.0 { // Augmenté à 30 pour la sensibilité mobile (éviter les faux drags lors des taps)
           h.isDragging = true
        }
 
@@ -444,13 +449,14 @@ func (h *Handler) handleMouse() error {
 
     // 3. Relâchement (Action finale)
     if h.IsJustReleased() {
-       if !h.isDragging && !h.isLongPressFired {
+       // Autorise l'action si on n'est pas en drag OU si on est en mode portail portable (drag-to-deploy)
+       if (!h.isDragging && !h.isLongPressFired) || h.portablePortalMode {
           // SUR MOBILE : Au relâchement, GetInteractionPosition() renvoie (-1, -1).
-          // On utilise donc touchStartScreenX/Y qui contiennent la position initiale du clic valide !
+          // On utilise donc touchLastScreenX/Y qui contiennent la dernière position valide !
           execX, execY := h.GetInteractionPosition()
           if execX == -1 && execY == -1 {
-             execX = h.touchStartScreenX
-             execY = h.touchStartScreenY
+             execX = h.touchLastScreenX
+             execY = h.touchLastScreenY
           }
           return h.executePrimaryActionAt(execX, execY)
        }
@@ -475,8 +481,8 @@ func (h *Handler) handleLongPress() {
 func (h *Handler) executePrimaryActionAt(x, y int) error {
     // SÉCURITÉ MOBILE : Si les coordonnées reçues suite au relâchement du doigt sont invalides
     if x == -1 && y == -1 {
-        x = h.touchStartScreenX
-        y = h.touchStartScreenY
+        x = h.touchLastScreenX
+        y = h.touchLastScreenY
     }
 
 // Priorité : gestion des clics sur les boutons d'action (même si isProcessing)
@@ -491,10 +497,12 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 	// Priorité : mode portail portable (même si isProcessing)
 	if h.portablePortalMode && h.OnUsePortablePortal != nil {
 		if pos, gridID, ok := h.renderer.ScreenToGrid(x, y, h.world); ok {
-			grid, _ := h.world.GetGrid(gridID)
-			if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
-				h.OnUsePortablePortal(gridID, pos)
-				return nil
+			if gridID != board.InventoryGridID {
+				grid, _ := h.world.GetGrid(gridID)
+				if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
+					h.OnUsePortablePortal(gridID, pos)
+					return nil
+				}
 			}
 		}
 	}
