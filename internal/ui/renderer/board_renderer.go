@@ -110,6 +110,16 @@ type FlipAnimation struct {
 	TileState      entity.TileState // État final de la tuile
 }
 
+// Optimization: string cache to avoid fmt.Sprintf in render loop
+var (
+	gridPosCache = make(map[string]string) // "gridID:x,y"
+)
+
+func getGridPosKey(gridID string, x, y int) string {
+	// Simple manual concatenation is faster than fmt.Sprintf for frequent calls
+	return gridID + ":" + string(rune(x)) + "," + string(rune(y))
+}
+
 // ScannerEffect représente l'état d'un effet de scanner
 type ScannerEffect struct {
 	GridID    string
@@ -221,7 +231,7 @@ func (r *BoardRenderer) ClearDebugReveal() {
 
 // StartFlipAnimation démarre une animation de flip pour une tuile
 func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir entity.FlipDirection, entityID string, finalState entity.TileState, startTrans, endTrans entity.Transformation) {
-	key := fmt.Sprintf("%s:%d,%d:%s", gridID, pos.X, pos.Y, entityID)
+	key := gridID + ":" + fmt.Sprint(pos.X) + "," + fmt.Sprint(pos.Y) + ":" + entityID
 	fmt.Printf("[ANIM-DEBUG] StartFlipAnimation: Key=%s, Dir=%v, State=%s\n", key, flipDir, finalState.String())
 	r.flipAnimations[key] = &FlipAnimation{
 		GridID:         gridID,
@@ -559,6 +569,11 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 
 	if world.CurrentGridID != "" {
 		grid, _ := world.GetGrid(world.CurrentGridID)
+
+		// On prépare les traces pour cette frame
+		if r.trackRenderer != nil {
+			r.trackRenderer.PrepareFrame(world)
+		}
 
 		// NOTE : On ne synchronise plus r.boardRotation avec grid.MainBearing ici.
 		// La rotation est gérée logiquement par world.RotateGrid qui déplace les tuiles
@@ -1179,7 +1194,7 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 
 	var tileImg *ebiten.Image
 	if visualState&entity.Matched != 0 {
-		tileImg = r.assets.GetImage("tile_matched")
+		tileImg = r.assets.GetTileImage("matched", themeName)
 	} else if visualState&entity.Revealed != 0 {
 		tileImg = r.getEntityRevealedImage(ent, themeName)
 	} else {
@@ -1346,12 +1361,6 @@ func (r *BoardRenderer) getEntityRevealedImage(ent entity.Entity, themeName stri
 			return r.assets.GetTileImage("obelisk", themeName)
 		}
 		return r.assets.GetTileImage("structure", themeName)
-	case entity.TypeArtefact:
-		return r.assets.GetTileImage("revealed", themeName)
-	case entity.TypeLoot:
-		return r.assets.GetTileImage("revealed", themeName)
-	case entity.TypeCreature, entity.TypeResource, entity.TypeTrack:
-		return r.assets.GetTileImage("revealed", themeName)
 	default:
 		return r.assets.GetTileImage("revealed", themeName)
 	}

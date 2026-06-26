@@ -576,6 +576,7 @@ Le jeu supporte la persistance des données :
 | Action | Touche |
 |--------|--------|
 | Difficulté (E, N, H, I) | F1 à F4 |
+| Augmenter Combo (Cheat) | F10 |
 | Fenêtre de Debug (Console) | F12 |
 | Spawn entités (Debug ouvert) | S |
 | Spawn toutes créatures | Shift + S |

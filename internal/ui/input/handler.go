@@ -220,12 +220,30 @@ func (h *Handler) Update() error {
 	return nil
 }
 
-func (h *Handler) getInteractionPosition() (int, int) {
+func (h *Handler) GetInteractionPosition() (int, int) {
 	tids := ebiten.TouchIDs()
 	if len(tids) > 0 {
 		return ebiten.TouchPosition(tids[0])
 	}
 	return ebiten.CursorPosition()
+}
+
+// IsJustPressed vérifie si un clic ou un touch vient de commencer
+func (h *Handler) IsJustPressed() bool {
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		return true
+	}
+	tids := inpututil.AppendJustPressedTouchIDs(nil)
+	return len(tids) > 0
+}
+
+// IsJustReleased vérifie si un clic ou un touch vient d'être relâché
+func (h *Handler) IsJustReleased() bool {
+	if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		return true
+	}
+	rtids := inpututil.AppendJustReleasedTouchIDs(nil)
+	return len(rtids) > 0
 }
 
 func (h *Handler) updateButtonHover() {
@@ -282,7 +300,7 @@ func (h *Handler) updateHover() {
 	}
 
 	activeThisFrame := make(map[string]bool)
-	mx, my := h.getInteractionPosition()
+	mx, my := h.GetInteractionPosition()
 
 	// SÉCURITÉ MOBILE : Pas de survol si aucun doigt/souris n'est actif
     if mx == -1 && my == -1 {
@@ -363,25 +381,18 @@ func (h *Handler) handleMouse() error {
     }
 
     // 1. Détection du début (Appui)
-    justPressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-    var tids []ebiten.TouchID
-    tids = inpututil.AppendJustPressedTouchIDs(tids)
-    if len(tids) > 0 {
-       justPressed = true
-    }
-
-    if justPressed {
+    if h.IsJustPressed() {
        h.touchStartTime = time.Now()
        h.isLongPressFired = false
        h.isDragging = false
-       h.touchStartScreenX, h.touchStartScreenY = h.getInteractionPosition()
+       h.touchStartScreenX, h.touchStartScreenY = h.GetInteractionPosition()
        return nil
     }
 
     // 2. Pendant la pression (Drag, Long Press)
     isDown := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) || len(ebiten.TouchIDs()) > 0
     if isDown {
-       currX, currY := h.getInteractionPosition()
+       currX, currY := h.GetInteractionPosition()
 
        // Si on est sur mobile et qu'on récupère (-1, -1) alors que c'est pressé,
        // on ignore cette frame pour éviter de casser les calculs
@@ -397,7 +408,7 @@ func (h *Handler) handleMouse() error {
 
        if h.isDragging {
           // Défilement de l'inventaire
-          mx, my := h.getInteractionPosition()
+          mx, my := h.GetInteractionPosition()
           _, gridID, ok := h.renderer.ScreenToGrid(mx, my, h.world)
           if ok && gridID == board.InventoryGridID {
              dy := float64(h.touchStartScreenY - currY)
@@ -432,15 +443,11 @@ func (h *Handler) handleMouse() error {
     }
 
     // 3. Relâchement (Action finale)
-    var rtids []ebiten.TouchID
-    rtids = inpututil.AppendJustReleasedTouchIDs(rtids)
-    justReleased := inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) || len(rtids) > 0
-
-    if justReleased {
+    if h.IsJustReleased() {
        if !h.isDragging && !h.isLongPressFired {
-          // SUR MOBILE : Au relâchement, getInteractionPosition() renvoie (-1, -1).
+          // SUR MOBILE : Au relâchement, GetInteractionPosition() renvoie (-1, -1).
           // On utilise donc touchStartScreenX/Y qui contiennent la position initiale du clic valide !
-          execX, execY := h.getInteractionPosition()
+          execX, execY := h.GetInteractionPosition()
           if execX == -1 && execY == -1 {
              execX = h.touchStartScreenX
              execY = h.touchStartScreenY
@@ -454,7 +461,7 @@ func (h *Handler) handleMouse() error {
 }
 
 func (h *Handler) handleLongPress() {
-	x, y := h.getInteractionPosition()
+	x, y := h.GetInteractionPosition()
 	pos, gridID, ok := h.renderer.ScreenToGrid(x, y, h.world)
 	if !ok {
 		return
@@ -1240,9 +1247,14 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	// F8: Cheat - retirer l'état bloqué des tuiles
-	if inpututil.IsKeyJustPressed(ebiten.KeyF8) {
-		if h.OnClearBlocked != nil {
-			h.OnClearBlocked(h.GetCurrentGridID())
+	if inpututil.IsKeyJustPressed(ebiten.KeyF10) {
+		if h.world.Engine != nil {
+			// On cherche le ComboSystem dans les systèmes de l'engine
+			// Note: On pourrait aussi l'exposer directement dans Engine si besoin
+			// mais ici on va le chercher pour rester cohérent avec la structure actuelle.
+			// En fait, dans engine.go, comboSys est local à NewEngine mais ajouté à e.systems.
+			// Cependant, ComboSystem n'est pas exporté, donc on va l'ajouter à l'Engine pour un accès facile.
+			h.world.Engine.IncreaseComboCheat()
 		}
 	}
 
@@ -1434,8 +1446,8 @@ func (h *Handler) getHoveredTile() (board.Position, string, bool) {
     if h.renderer == nil {
        return board.Position{}, "", false
     }
-    // FIX MOBILE : Remplacer CursorPosition par getInteractionPosition
-    x, y := h.getInteractionPosition()
+    // FIX MOBILE : Remplacer CursorPosition par GetInteractionPosition
+    x, y := h.GetInteractionPosition()
 
     // Si aucun contact/souris, on s'arrête là
     if x == -1 && y == -1 {
@@ -1445,8 +1457,8 @@ func (h *Handler) getHoveredTile() (board.Position, string, bool) {
 }
 
 func (h *Handler) getClickedExit() (entity.Direction, int, bool) {
-    // FIX MOBILE : Remplacer CursorPosition par getInteractionPosition
-    x, y := h.getInteractionPosition()
+    // FIX MOBILE : Remplacer CursorPosition par GetInteractionPosition
+    x, y := h.GetInteractionPosition()
     if x == -1 && y == -1 {
        return 0, 0, false
     }
@@ -1464,8 +1476,8 @@ func (h *Handler) calculateFlipDirection(gridID string) domain.FlipDirection {
        return usecase.DefaultFlipDirection
     }
 
-    // FIX MOBILE : Récupère la position tactile ou souris (getInteractionPosition)
-    cursorX, cursorY := h.getInteractionPosition()
+    // FIX MOBILE : Récupère la position tactile ou souris (GetInteractionPosition)
+    cursorX, cursorY := h.GetInteractionPosition()
     if cursorX == -1 && cursorY == -1 {
        return usecase.DefaultFlipDirection
     }

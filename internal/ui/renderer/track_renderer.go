@@ -23,13 +23,63 @@ type AttackIntent struct {
 type TrackRenderer struct {
 	spriteCache map[string]*ebiten.Image // Cache des assets générés
 	tileSize    float64
+
+	// Cache de frame pour éviter les allocations et itérations multiples
+	lastTurn     int
+	lastGridID   string
+	underTracks  []*entity.Track
+	normalTracks []*entity.Track
+	overTracks   []*entity.Track
 }
 
 func NewTrackRenderer(tileSize float64) *TrackRenderer {
 	return &TrackRenderer{
-		spriteCache: make(map[string]*ebiten.Image),
-		tileSize:    tileSize,
+		spriteCache:  make(map[string]*ebiten.Image),
+		tileSize:     tileSize,
+		underTracks:  make([]*entity.Track, 0),
+		normalTracks: make([]*entity.Track, 0),
+		overTracks:   make([]*entity.Track, 0),
 	}
+}
+
+// PrepareFrame pré-filtre les traces par couche pour la frame actuelle
+func (tr *TrackRenderer) PrepareFrame(world *domain.World) {
+	// On ne recalcule que si le tour ou la grille a changé
+	// Note: On pourrait aussi utiliser un flag dirty du Manager si on veut être parfait,
+	// mais le recalcul une fois par frame est déjà une énorme optimisation.
+	if tr.lastTurn == world.Turn && tr.lastGridID == world.CurrentGridID {
+		return
+	}
+
+	tr.underTracks = tr.underTracks[:0]
+	tr.normalTracks = tr.normalTracks[:0]
+	tr.overTracks = tr.overTracks[:0]
+
+	tracks := world.Entities.GetByType(entity.TypeTrack)
+	for _, e := range tracks {
+		t, ok := e.(*entity.Track)
+		if !ok || t.GetGridID() != world.CurrentGridID {
+			continue
+		}
+
+		// Classification par couche (Strate)
+		if t.Kind == "claws" || t.Kind == "intent_beam" {
+			// Griffes et intentions sont toujours Over
+			tr.overTracks = append(tr.overTracks, t)
+		} else if t.Kind == "mud" || t.Kind == "broken_grass" {
+			// Boue et herbe sont toujours Under
+			tr.underTracks = append(tr.underTracks, t)
+		} else if t.FromPos == t.ToPos {
+			// Traces statiques (ex: footprints à l'origine) vont en Under
+			tr.underTracks = append(tr.underTracks, t)
+		} else {
+			// Traces de mouvement (ex: footprints entre les cases) vont en Normal
+			tr.normalTracks = append(tr.normalTracks, t)
+		}
+	}
+
+	tr.lastTurn = world.Turn
+	tr.lastGridID = world.CurrentGridID
 }
 
 // getOrCreateSprite retourne le sprite d'une trace, en le générant si nécessaire
@@ -50,34 +100,15 @@ func (tr *TrackRenderer) getOrCreateSprite(kind string) *ebiten.Image {
 
 // RenderUnder gère les indices enfouis ou sous les cases (ex: boue profonde, galeries)
 func (tr *TrackRenderer) RenderUnder(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
-	tracks := world.Entities.GetByType(entity.TypeTrack)
-	for _, e := range tracks {
-		t, ok := e.(*entity.Track)
-		if !ok || t.GetGridID() != world.CurrentGridID {
-			continue
-		}
-		// mud et broken_grass sont sur la strate Under
-		if t.Kind == "mud" || t.Kind == "broken_grass" {
-			tr.Draw(screen, t, getCenter)
-		} else if t.FromPos == t.ToPos {
-			// Autres traces statiques par défaut
-			tr.Draw(screen, t, getCenter)
-		}
+	for _, t := range tr.underTracks {
+		tr.Draw(screen, t, getCenter)
 	}
 }
 
 // RenderNormal affiche les traces situées dans les interstices (les translations)
 func (tr *TrackRenderer) RenderNormal(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
-	tracks := world.Entities.GetByType(entity.TypeTrack)
-	for _, e := range tracks {
-		t, ok := e.(*entity.Track)
-		if !ok || t.GetGridID() != world.CurrentGridID {
-			continue
-		}
-		// On dessine ici les traces de mouvement génériques (pas mud qui est Under, ni claws/intent qui sont Over)
-		if t.Kind != "mud" && t.Kind != "claws" && t.Kind != "intent_beam" && t.Kind != "broken_grass" && t.FromPos != t.ToPos {
-			tr.Draw(screen, t, getCenter)
-		}
+	for _, t := range tr.normalTracks {
+		tr.Draw(screen, t, getCenter)
 	}
 }
 
@@ -88,16 +119,8 @@ func (tr *TrackRenderer) RenderEffectsNormal(screen *ebiten.Image, world *domain
 
 // RenderOver affiche les indices ou effets aériens (ex: marques de griffes volantes, nuages)
 func (tr *TrackRenderer) RenderOver(screen *ebiten.Image, world *domain.World, getCenter func(board.Position) (float64, float64)) {
-	tracks := world.Entities.GetByType(entity.TypeTrack)
-	for _, e := range tracks {
-		t, ok := e.(*entity.Track)
-		if !ok || t.GetGridID() != world.CurrentGridID {
-			continue
-		}
-		// claws et intent_beam sont sur la strate Over
-		if t.Kind == "claws" || t.Kind == "intent_beam" {
-			tr.Draw(screen, t, getCenter)
-		}
+	for _, t := range tr.overTracks {
+		tr.Draw(screen, t, getCenter)
 	}
 }
 

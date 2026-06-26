@@ -112,6 +112,14 @@ func (s *ComboSystem) onMerge(e event.Event) {
 	s.world.EventBus.PublishImmediate(event.NewComboTriggeredEvent(msg, s.comboCount, 10, 2))
 }
 
+func (s *ComboSystem) CheatIncreaseCombo() {
+	s.onMatch(event.Event{
+		Type:     event.TileMatched,
+		SourceID: "cheat",
+		Payload:  map[string]interface{}{"is_cheat": true},
+	})
+}
+
 func (s *ComboSystem) Reset() {
 	if s.comboCount > 0 {
 		fmt.Printf("[COMBO] Combo brisé à %d\n", s.comboCount)

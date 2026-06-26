@@ -701,6 +701,10 @@ func (s *CreatureMovementSystem) Update(world *World) {
 			continue
 		}
 
+		if c.Species == "shadowstalker" && c.GetState()&entity.Revealed != 0 {
+			continue
+		}
+
 		grid, ok := world.GetGrid(c.GetGridID())
 		if !ok {
 			continue
@@ -909,6 +913,11 @@ func (s *CreatureMovementSystem) MoveSpeciesOneStepTowards(species string, targe
 		if !ok || c.Species != species {
 			continue
 		}
+
+		if c.Species == "shadowstalker" && c.GetState()&entity.Revealed != 0 {
+			continue
+		}
+
 		grid, ok := world.GetGrid(c.GetGridID())
 		if !ok {
 			continue
@@ -977,6 +986,13 @@ func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *cr
 			topID := tile.EntitiesID[len(tile.EntitiesID)-1]
 			swappedEntity, ok := world.Entities.Get(entity.ID(topID))
 			if ok {
+				// Blocage du swap entre créatures de même espèce
+				if otherCreature, ok := swappedEntity.(*creature.Creature); ok {
+					if otherCreature.Species == c.Species {
+						return false
+					}
+				}
+
 				idStr := string(c.GetID())
 
 				// Validation bidirectionnelle avant le swap

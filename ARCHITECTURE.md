@@ -78,6 +78,9 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - Des composants optionnels (Lifecycle, Matchable, CreatureAI, etc.)
   - **Creature** : Possède une `ThreatZone` définissant ses angles d'attaque (Forward, Backward, Left, Right). Supporte **8 directions cardinales et ordinales** transformées par son orientation unifiée (intrinsèque + D4).
 
+- **Manager** : Centralise la gestion des entités.
+  - **Mise en cache** : Utilise un cache (`cacheByType` + `dirtyTypes`) pour `GetByType` afin d'éviter les tris et allocations inutiles à chaque appel. Le cache est invalidé uniquement lors d'un `Register` ou `Remove`.
+
 - **Board/Grid** : Gère la géométrie du plateau
   - Chaque tuile contient une référence optionnelle à une entité.
   - Les tuiles ne portent plus d'état ; c'est l'entité qui le porte.
@@ -99,7 +102,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **ResourceLifecycleSystem** : Gère la maturation des ressources. Supporte les **cycles cycliques** (`Cyclic: true`) : les ressources reviennent au stade 0 après le stade maximum. La propagation a lieu avant le reset du cycle.
   - **ToxicitySystem** : Calcule les dégâts de poison cumulés et dégressifs infligés au joueur par les ressources révélées (ex: Dreamberry stade 4). **Ne vérifie que la grille actuelle** (`world.CurrentGridID`).
   - **LootSystem** : Transforme les matches réussis en entités `TypeLoot` et les place sur la grille d'inventaire. Le butin hérite du niveau de cumul de la paire.
-  - **TrackSystem** : Gère la décomposition temporelle des traces
+  - **TrackSystem** : Gère la décomposition temporelle des traces (décrément de `Duration` à chaque tour, suppression définitive à 0).
   - **AggressionSystem** : Calcule l'agressivité modulaire des créatures (Priority 1, avant mouvement). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `CreatureMoved` pour gérer la "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité totale ≥ 100 à la fin de l'animation de flip.
 
 - **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques réussies. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden, déclenchement des troubles cognitifs Aphasia, Ataxia, Agnosia, Amnesia — uniquement si `hit_target` présent dans le payload, i.e. attaque qui touche le joueur).
@@ -360,6 +363,7 @@ Le jeu utilise une résolution logique fixe de **1280x720**. L'interface est div
 
 Séparation des responsabilités :
 - **Renderer**: Dessine le plateau central avec espacement dynamique.
+  - **Optimisation des Traces** : `PrepareFrame` pré-filtre une seule fois par frame les traces par couche (Under, Normal, Over) et par grille. Évite le scan complet des entités lors des appels de rendu stratifiés.
   - **Gestion de la Profondeur** : Les zones de messages sont rendues en premier pour être couvertes par les fenêtres modales (Z-indexing logique).
   - **Système de Calques (Depth Illusion)** : Utilise trois strates conceptuelles (**Under**, **Normal**, **Over**).
   - **Calcul Dynamique** : Utilise `getTileCenter` pour aligner parfaitement les strates et les traces dans les interstices, supportant la rotation globale et les variations d'espacement (3x3 à 6x6).
@@ -367,7 +371,9 @@ Séparation des responsabilités :
     - **Plateau (Board)** : 525x525. Contient les tuiles et les traces.
     - **Tapis de Jeu (Playmat)** : 700x700. Contient le plateau, les boutons et les **Effets Plein Écran** (ex: Scanner de l'Echo Hound).
   - **Barre d'Agressivité** : Sur les créatures révélées (`Aggression > 0`), dessine une barre horizontale (40x4px) en bas de la tuile. Couleur dégradée : Orange (faible) → Rouge (100%). Fond semi-transparent noir.
-- **Input**: Capture les événements (clavier, souris, tactile), gère la navigation entre les zones et les raccourcis clavier. Supporte les interactions mobiles (Wasm) via le défilement de l'inventaire par glissement (Drag-to-scroll) et l'appui long pour la suppression.
+- **Input**: Capture les événements (clavier, souris, tactile), gère la navigation entre les zones et les raccourcis clavier. 
+  - **Unification Cross-Platform** : Utilise `GetInteractionPosition()` (priorise le tactile sur le curseur) et `IsJustPressed()` / `IsJustReleased()` pour garantir une réactivité identique entre Desktop et WASM/Mobile.
+  - **Interactions Tactiles** : Supporte le défilement de l'inventaire par glissement (Drag-to-scroll) et l'appui long pour la suppression.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
     - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets (ex: "Vous êtes déboussolé.", "Vous toussez du sang.", "La mémoire revient...").
@@ -489,6 +495,7 @@ go test ./internal/domain/... -v
 | Action | Touche |
 |--------|--------|
 | Difficulté (E, N, H, I) | F1 à F4 |
+| Augmenter Combo (Cheat) | F10 |
 | Fenêtre de Debug (Console) | F12 |
 | Spawn entités (Debug ouvert) | S |
 | Spawn toutes créatures | Shift + S |

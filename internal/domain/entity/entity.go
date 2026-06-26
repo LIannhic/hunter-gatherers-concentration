@@ -670,16 +670,20 @@ func (e *BaseEntity) GetCategory() string {
 
 // Manager gère toutes les entités
 type Manager struct {
-	entities map[ID]Entity
-	byType   map[Type]map[ID]Entity
-	byPos    map[Position]ID
+	entities    map[ID]Entity
+	byType      map[Type]map[ID]Entity
+	byPos       map[Position]ID
+	cacheByType map[Type][]Entity
+	dirtyTypes  map[Type]bool
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		entities: make(map[ID]Entity),
-		byType:   make(map[Type]map[ID]Entity),
-		byPos:    make(map[Position]ID),
+		entities:    make(map[ID]Entity),
+		byType:      make(map[Type]map[ID]Entity),
+		byPos:       make(map[Position]ID),
+		cacheByType: make(map[Type][]Entity),
+		dirtyTypes:  make(map[Type]bool),
 	}
 }
 
@@ -693,6 +697,9 @@ func (m *Manager) Register(e Entity) {
 	}
 	m.byType[e.GetType()][e.GetID()] = e
 	m.byPos[e.GetPosition()] = e.GetID()
+
+	// Invalide le cache pour ce type
+	m.dirtyTypes[e.GetType()] = true
 }
 
 func (m *Manager) Remove(id ID) {
@@ -703,6 +710,9 @@ func (m *Manager) Remove(id ID) {
 	delete(m.entities, id)
 	delete(m.byType[e.GetType()], id)
 	delete(m.byPos, e.GetPosition())
+
+	// Invalide le cache pour ce type
+	m.dirtyTypes[e.GetType()] = true
 }
 
 func (m *Manager) Get(id ID) (Entity, bool) {
@@ -730,6 +740,11 @@ func (m *Manager) UpdatePosition(id ID, newPos Position) error {
 }
 
 func (m *Manager) GetByType(t Type) []Entity {
+	// Retourne le cache s'il est à jour
+	if !m.dirtyTypes[t] && m.cacheByType[t] != nil {
+		return m.cacheByType[t]
+	}
+
 	result := make([]Entity, 0, len(m.byType[t]))
 	for _, e := range m.byType[t] {
 		result = append(result, e)
@@ -738,6 +753,11 @@ func (m *Manager) GetByType(t Type) []Entity {
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].GetID() < result[j].GetID()
 	})
+
+	// Met à jour le cache
+	m.cacheByType[t] = result
+	m.dirtyTypes[t] = false
+
 	return result
 }
 
