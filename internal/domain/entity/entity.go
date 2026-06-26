@@ -675,6 +675,9 @@ type Manager struct {
 	byPos       map[Position]ID
 	cacheByType map[Type][]Entity
 	dirtyTypes  map[Type]bool
+	// Cache pour GetAllActive()
+	activeCache []Entity
+	dirtyActive bool
 }
 
 func NewManager() *Manager {
@@ -700,6 +703,7 @@ func (m *Manager) Register(e Entity) {
 
 	// Invalide le cache pour ce type
 	m.dirtyTypes[e.GetType()] = true
+	m.dirtyActive = true
 }
 
 func (m *Manager) Remove(id ID) {
@@ -713,6 +717,7 @@ func (m *Manager) Remove(id ID) {
 
 	// Invalide le cache pour ce type
 	m.dirtyTypes[e.GetType()] = true
+	m.dirtyActive = true
 }
 
 func (m *Manager) Get(id ID) (Entity, bool) {
@@ -762,12 +767,17 @@ func (m *Manager) GetByType(t Type) []Entity {
 }
 
 func (m *Manager) GetAllActive() []Entity {
+	if !m.dirtyActive && m.activeCache != nil {
+		return m.activeCache
+	}
 	result := make([]Entity, 0)
 	for _, e := range m.entities {
 		if e.IsActive() {
 			result = append(result, e)
 		}
 	}
+	m.activeCache = result
+	m.dirtyActive = false
 	return result
 }
 

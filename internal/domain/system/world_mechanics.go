@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/board"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/creature"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/event"
 )
@@ -50,8 +51,18 @@ func (w *World) FlipTile(gridID string, pos board.Position, flipDir entity.FlipD
 	currentState := ent.GetState()
 	if currentState&entity.Revealed != 0 {
 		ent.SetState(entity.Hidden)
+		// Décrémente le compteur species_anger si c'est une créature qui se cache
+		if c, ok := ent.(*creature.Creature); ok {
+			if w.RevealedBySpecies[c.Species] > 0 {
+				w.RevealedBySpecies[c.Species]--
+			}
+		}
 	} else {
 		ent.SetState(entity.Revealed)
+		// Incrémente le compteur species_anger si c'est une créature qui se révèle
+		if c, ok := ent.(*creature.Creature); ok {
+			w.RevealedBySpecies[c.Species]++
+		}
 	}
 
 	// 6. Transformation diédrique persistante (Composition globale)
@@ -141,6 +152,11 @@ func (w *World) RevealTile(gridID string, pos board.Position, flipDir entity.Fli
 	// 1. Force l'état Revealed (uniquement si pas déjà révélé)
 	if ent.GetState()&entity.Revealed == 0 {
 		ent.SetState(entity.Revealed)
+
+		// Incrémente le compteur species_anger si c'est une créature
+		if c, ok := ent.(*creature.Creature); ok {
+			w.RevealedBySpecies[c.Species]++
+		}
 
 		// 2. Applique la transformation géométrique du flip
 		currentTrans := ent.GetTransformation()

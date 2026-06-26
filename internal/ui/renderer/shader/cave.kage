@@ -1,0 +1,89 @@
+//kage:unit pixels
+
+package main
+
+var Time float
+var Intensity float // 0.0 = 100% Sanity | 0.5 = 50% Sanity | 1.0 = 0% Sanity
+var Resolution vec2
+var HudLights [16]float // [cx, cy, radius, _, ...] × 4 éléments
+
+func hash12(p vec2) float {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123)
+}
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	distPixels := length(dstPos.xy - (Resolution * 0.5))
+	tileSize := 87.5
+
+	// === 1. RAYON DE LA TORCHE ===
+	var targetRadius float
+	if Intensity < 0.5 {
+		targetRadius = mix(2.0, 1.2, Intensity*2.0) * tileSize
+	} else {
+		targetRadius = mix(1.2, 0.15, (Intensity-0.5)*2.0) * tileSize
+	}
+
+	// === 2. FORCE ET VACILLEMENT ===
+	flickerNoise := hash12(vec2(floor(Time*14.0), 12.34))
+
+	var torchForce float
+	var flickerAmp float
+	if Intensity < 0.5 {
+		t := Intensity * 2.0
+		torchForce = mix(0.35, 0.55, t)
+		flickerAmp = mix(0.03, 0.10, t)
+	} else {
+		t := (Intensity - 0.5) * 2.0
+		torchForce = mix(0.70, 0.95, t)
+		flickerAmp = mix(0.10, 0.30, t)
+	}
+	currentTorchFactor := torchForce + (flickerNoise-0.5)*flickerAmp
+
+	// === 3. OBSCURITÉ DE FOND ===
+	var maxDarkness float
+	if Intensity < 0.5 {
+		maxDarkness = mix(0.55, 0.75, Intensity*2.0)
+	} else {
+		maxDarkness = mix(0.75, 0.90, (Intensity-0.5)*2.0)
+	}
+
+	// === 4. VIGNETTE DE LA TORCHE ===
+	innerGlow := targetRadius * 0.4
+	outerGlow := targetRadius
+	torchVignette := smoothstep(innerGlow, outerGlow, distPixels)
+
+	// === 5. COMPOSITION ===
+	baseColor := imageSrc0At(srcPos)
+	caveBlack := vec4(0.01, 0.01, 0.02, 1.0)
+	litColor := baseColor * currentTorchFactor
+
+	darknessMix := torchVignette * maxDarkness
+	finalColor := mix(litColor, caveBlack, darknessMix)
+
+	// === 6. LIGHTS HUD — cercles de lumière contraints aux panneaux ===
+	// [cx, cy, radius, _] × 4 éléments. Le rayon ne dépasse jamais radius.
+	if Intensity > 0.0 {
+		hudLight := 0.0
+		// L'ombre interne (smoothstep) rétrécit avec l'intensité → la lumière "grandit"
+		edge := mix(0.85, 0.15, Intensity)
+
+		for i := 0; i < 16; i += 4 {
+			cx := HudLights[i]
+			cy := HudLights[i+1]
+			r := HudLights[i+2]
+
+			dist := length(dstPos.xy - vec2(cx, cy))
+			light := 1.0 - smoothstep(r*edge, r, dist)
+			if light > hudLight {
+				hudLight = light
+			}
+		}
+
+		if hudLight > 0.0 {
+			litHud := baseColor * currentTorchFactor
+			finalColor = mix(finalColor, litHud, hudLight*0.95)
+		}
+	}
+
+	return finalColor
+}

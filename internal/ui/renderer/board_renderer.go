@@ -73,6 +73,10 @@ type BoardRenderer struct {
 	// Effet Lumifly actif (nil si aucun)
 	lumiflyEffect *LumiflyEffect
 
+	// Buffers pré-alloués pour les effets (évite ebiten.NewImage à chaque frame)
+	scannerBuffer *ebiten.Image
+	lumiflyBuffer *ebiten.Image
+
 	// Dernier tour rendu (pour détecter le changement de tour et clear les silhouettes)
 	lastRenderedTurn int
 }
@@ -171,6 +175,24 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 	// Initialise le gestionnaire d'animations lié au renderer
 	r.AnimManager = NewAnimationManager(r)
 	return r
+}
+
+// getScannerBuffer retourne le buffer pré-alloué pour l'effet scanner (lazy init).
+func (r *BoardRenderer) getScannerBuffer() *ebiten.Image {
+	if r.scannerBuffer == nil {
+		r.scannerBuffer = ebiten.NewImage(int(ui.PlaymatW), int(ui.PlaymatH))
+	}
+	r.scannerBuffer.Clear()
+	return r.scannerBuffer
+}
+
+// getLumiflyBuffer retourne le buffer pré-alloué pour l'effet lumifly (lazy init).
+func (r *BoardRenderer) getLumiflyBuffer() *ebiten.Image {
+	if r.lumiflyBuffer == nil {
+		r.lumiflyBuffer = ebiten.NewImage(int(ui.PlaymatW), int(ui.PlaymatH))
+	}
+	r.lumiflyBuffer.Clear()
+	return r.lumiflyBuffer
 }
 
 // SetGridOffset change la position du plateau à l'écran
@@ -1679,10 +1701,8 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 		return
 	}
 
-	// 1. Création de l'image source pour le shader (Revealed items)
-	playmatW, playmatH := ui.PlaymatW, ui.PlaymatH
-	srcImg := ebiten.NewImage(int(playmatW), int(playmatH))
-	// On peut remplir avec un fond très sombre pour le style
+	// 1. Image source pour le shader (buffer pré-alloué)
+	srcImg := r.getScannerBuffer()
 	srcImg.Fill(color.RGBA{15, 15, 20, 255})
 
 	// 2. Rendu uniquement des positions scannées
@@ -1709,7 +1729,7 @@ func (r *BoardRenderer) renderScannerEffects(screen *ebiten.Image, gridID string
 
 	// 3. Paramètres de l'animation pour le shader
 	// On balaie de gauche à droite sur toute la largeur du playmat
-	fullWidth := float32(playmatW)
+	fullWidth := float32(ui.PlaymatW)
 	margin := float32(200.0) // Pour que la vague commence/finisse hors champ
 
 	// Progress va de -margin à fullWidth + margin
@@ -1739,8 +1759,7 @@ func (r *BoardRenderer) renderLumiflyEffect(screen *ebiten.Image, world *domain.
 
 	// L'effet doré persiste tant que le tour n'est pas terminé (timer du monde)
 	if !world.TurnTimer.IsExpired() && r.effectRenderer != nil {
-		playmatW, playmatH := ui.PlaymatW, ui.PlaymatH
-		srcImg := ebiten.NewImage(int(playmatW), int(playmatH))
+		srcImg := r.getLumiflyBuffer()
 		srcImg.Fill(color.RGBA{0, 0, 0, 0})
 
 		isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)

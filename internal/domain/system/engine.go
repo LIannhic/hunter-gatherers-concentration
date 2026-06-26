@@ -21,6 +21,8 @@ type Engine struct {
 	previewSystem  *PreviewSystem          // Référence pour les événements
 	lootSystem     *LootSystem
 	comboSystem    *ComboSystem
+	// Cache: true si la grille courante contient au moins une entité matchable (défaut: true = non vide)
+	hasMatchableEntities bool
 }
 
 // NewEngine initialise le moteur de jeu avec ses systèmes
@@ -31,7 +33,8 @@ func NewEngine(world *World) *Engine {
 	comboSys := NewComboSystem(world)
 
 	e := &Engine{
-		world: world,
+		world:                world,
+		hasMatchableEntities: true, // Par défaut non vide (comportement original)
 		systems: []System{
 			&LifecycleSystem{},
 			&PropagationSystem{},
@@ -54,6 +57,15 @@ func NewEngine(world *World) *Engine {
 	// Lie l'engine au monde pour permettre aux systèmes de communiquer
 	world.Engine = e
 
+	// Tri initial des systèmes par priorité (une seule fois, l'ordre est constant)
+	for i := 0; i < len(e.systems)-1; i++ {
+		for j := i + 1; j < len(e.systems); j++ {
+			if e.systems[i].Priority() > e.systems[j].Priority() {
+				e.systems[i], e.systems[j] = e.systems[j], e.systems[i]
+			}
+		}
+	}
+
 	// S'abonne aux entrées de grille
 	world.EventBus.SubscribeFunc(event.GridEntered, func(ev event.Event) {
 		gridID, _ := ev.Payload["grid_id"].(string)
@@ -72,15 +84,6 @@ func (e *Engine) ResetPreviews() {
 
 // Update fait progresser le tour de jeu
 func (e *Engine) Update() {
-	// Tri des systèmes par priorité
-	for i := 0; i < len(e.systems)-1; i++ {
-		for j := i + 1; j < len(e.systems); j++ {
-			if e.systems[i].Priority() > e.systems[j].Priority() {
-				e.systems[i], e.systems[j] = e.systems[j], e.systems[i]
-			}
-		}
-	}
-
 	for _, sys := range e.systems {
 		sys.Update(e.world)
 	}
@@ -131,26 +134,35 @@ func (e *Engine) Update() {
 	}
 
 	e.world.EventBus.Publish(event.NewTurnEndedEvent(e.world.Turn))
+
+	// Recalcule le cache des entités matchables pour UpdateFrame
+	e.recomputeMatchableCount()
+}
+
+// recomputeMatchableCount vérifie si la grille courante contient au moins une entité matchable (resource ou creature).
+// Le résultat est mis en cache dans hasMatchableEntities pour éviter de rescanner à chaque frame.
+func (e *Engine) recomputeMatchableCount() {
+	e.hasMatchableEntities = false
+	grid, ok := e.world.GetGrid(e.world.CurrentGridID)
+	if !ok {
+		return
+	}
+	for _, tile := range grid.Plots {
+		if len(tile.EntitiesID) > 0 {
+			if ent, ok := e.world.Entities.Get(entity.ID(tile.EntitiesID[len(tile.EntitiesID)-1])); ok {
+				if ent.GetType() == entity.TypeResource || ent.GetType() == entity.TypeCreature {
+					e.hasMatchableEntities = true
+					return
+				}
+			}
+		}
+	}
 }
 
 // UpdateFrame effectue les mises à jour visuelles et les systèmes temps réel (pseudo-systèmes de frame)
 func (e *Engine) UpdateFrame(dt float64) {
-	// 1. Détecter grille vide (aucune entité matchable)
-	isEmptyGrid := false
-	if grid, ok := e.world.GetGrid(e.world.CurrentGridID); ok {
-		hasMatchable := false
-		for _, tile := range grid.Plots {
-			if len(tile.EntitiesID) > 0 {
-				if ent, ok := e.world.Entities.Get(entity.ID(tile.EntitiesID[len(tile.EntitiesID)-1])); ok {
-					if ent.GetType() == entity.TypeResource || ent.GetType() == entity.TypeCreature {
-						hasMatchable = true
-						break
-					}
-				}
-			}
-		}
-		isEmptyGrid = !hasMatchable
-	}
+	// 1. Utilise le cache calculé à la fin du dernier Update()
+	isEmptyGrid := !e.hasMatchableEntities
 
 	// 2. Détecter prévisualisation active
 	isPreviewing := e.previewSystem != nil && e.previewSystem.IsPreviewActive(e.world.CurrentGridID)

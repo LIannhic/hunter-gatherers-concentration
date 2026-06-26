@@ -136,15 +136,11 @@ func (s *AggressionSystem) updateAggressionFactors(c *creature.Creature) {
 	}
 	c.Behavior.AggressionFactors["inventory"] = inventoryAgg
 
-	// 2. Facteur Grille (Species Anger)
+	// 2. Facteur Grille (Species Anger) — O(1) via compteur maintenu par le World
 	speciesAnger := 0
-	revealedSameSpecies := 0
-	for _, e := range s.world.Entities.GetAllActive() {
-		if other, ok := e.(*creature.Creature); ok && other.Species == c.Species {
-			if other.GetID() != c.GetID() && other.GetState()&entity.Revealed != 0 {
-				revealedSameSpecies++
-			}
-		}
+	revealedSameSpecies := s.world.RevealedBySpecies[c.Species]
+	if c.GetState()&entity.Revealed != 0 {
+		revealedSameSpecies-- // Exclure soi-même
 	}
 	if revealedSameSpecies > 0 {
 		speciesAnger = revealedSameSpecies * 20

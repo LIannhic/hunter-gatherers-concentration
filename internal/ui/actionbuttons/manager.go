@@ -155,7 +155,7 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 	}
 
 	// --- TROUBLES COGNITIFS ---
-	if p != nil && (p.AphasiaTurns > 0 || p.AtaxiaTurns > 0 || p.AgnosiaTurns > 0 || p.AmnesiaTurns > 0) {
+	if p != nil && (p.AphasiaTurns > 0 || p.AtaxiaTurns > 0 || p.AgnosiaTurns > 0) {
 		m.applyImpairments(p, &states, elapsed)
 	} else {
 		m.resetScramble()
@@ -340,17 +340,6 @@ func (m *Manager) applyImpairments(p *player.Player, states *[btnCount]ButtonSta
 			if m.getTimerProgress != nil {
 				states[i].FillProgress = m.getTimerProgress()
 				states[i].FillAlert = states[i].FillProgress >= 1.0
-			}
-		}
-	}
-
-	// Amnesia : Désactivation partielle
-	if p.AmnesiaTurns > 0 {
-		seed := time.Now().UnixMilli() / 2000
-		r := rand.New(rand.NewSource(seed))
-		for i := 0; i < btnCount; i++ {
-			if r.Float32() < 0.3 {
-				states[i].Active = false
 			}
 		}
 	}

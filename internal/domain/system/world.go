@@ -64,6 +64,9 @@ type World struct {
 	// Référence vers l'engine (pour la communication entre systèmes)
 	Engine *Engine
 
+	// Compteur de créatures révélées par espèce (pour species_anger en O(1))
+	RevealedBySpecies map[string]int
+
 	// Debug
 	Debug DebugState
 }
@@ -99,6 +102,7 @@ func NewWorld() *World {
 		tilesFlippedThisTurn: make([]board.Position, 0),
 		lastTurnNumber:       0,
 		TurnTimer:            NewTurnTimer(meta.GetSettings(meta.LevelNormal).TurnTimerDuration),
+		RevealedBySpecies:    make(map[string]int),
 		Debug: DebugState{
 			Difficulty: meta.GetSettings(meta.LevelNormal),
 			MessageSpeed: 1.0,

@@ -83,6 +83,7 @@ func TestAggressionSystem_Factors(t *testing.T) {
 	// On ajoute une autre créature de la même espèce et on la révèle
 	c2, _ := w.SpawnCreature("test", "lumifly", entity.Position{X: 0, Y: 0})
 	c2.SetState(entity.Revealed)
+	w.RevealedBySpecies[c2.Species]++
 
 	sys.Update(w)
 
