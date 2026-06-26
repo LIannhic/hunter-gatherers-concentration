@@ -89,6 +89,9 @@ type HUD struct {
 
 	// Combo Juicy
 	comboMsg *ComboMessage
+
+	// Navigation des stades dans l'atlas des assets
+	resourceStageIndex map[string]int
 }
 
 // NewHUD crée un nouveau HUD
@@ -109,6 +112,7 @@ func NewHUD(world *domain.World) *HUD {
 		DiffSelection:        NewDifficultySelection(),
 		queueLeft:            make([]string, 0),
 		queueRight:           make([]string, 0),
+		resourceStageIndex:   make(map[string]int),
 	}
 
 	// S'abonne aux événements d'inventaire plein
@@ -619,6 +623,16 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(closeX), float32(closeY), 20, 20, color.RGBA{150, 50, 50, 255}, true)
 	text.Draw(screen, "X", basicfont.Face7x13, closeX+6, closeY+15, color.White)
 
+	// Définition des stades par ressource (pour navigation dans l'atlas)
+	resourceStages := map[string][]string{
+		"resource_dreamberry":      {"bourgeon", "fleur", "fruit", "gâté"},
+		"resource_whispering_herb": {"graine", "pousse", "mature"},
+		"resource_void_bloom":      {"graine", "éclosion", "pleine"},
+		"resource_moss_truffle":    {"bourgeon", "pousse", "mature"},
+		"resource_echo_crystal":    {"vibrant", "résonnant"},
+		"resource_sand_core":       {"instable", "stable"},
+	}
+
 	// Liste des assets à montrer
 	allAssets := []struct {
 		name string
@@ -655,25 +669,7 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		{"Void Bloom", "resource_void_bloom"},
 		{"Echo Crystal", "resource_echo_crystal"},
 		{"Sand Core", "resource_sand_core"},
-		// === SILHOUETTES (fond transparent) ===
-		{"Sil Lumifly", "silhouette_creature_lumifly"},
-		{"Sil Shadowstalker", "silhouette_creature_shadowstalker"},
-		{"Sil Burrower", "silhouette_creature_burrower"},
-		{"Sil Flutterwing", "silhouette_creature_flutterwing"},
-		{"Sil Fleeing Sprite", "silhouette_creature_fleeing_sprite"},
-		{"Sil Specter", "silhouette_creature_specter"},
-		{"Sil Echo Hound", "silhouette_creature_echo_hound"},
-		{"Sil Moss Monkey", "silhouette_creature_moss_monkey"},
-		{"Sil Stonewarden", "silhouette_creature_stonewarden"},
-		{"Sil Dreamberry", "silhouette_resource_dreamberry"},
-		{"Sil Moonstone", "silhouette_resource_moonstone"},
-		{"Sil Whisper Herb", "silhouette_resource_whispering_herb"},
-		{"Sil Void Bloom", "silhouette_resource_void_bloom"},
-		{"Sil Moss Truffle", "silhouette_resource_moss_truffle"},
-		{"Sil Echo Crystal", "silhouette_resource_echo_crystal"},
-		{"Sil Sand Core", "silhouette_resource_sand_core"},
-		{"Sil Shadow Essence", "silhouette_resource_shadow_essence"},
-		{"Sil Crystal Shard", "silhouette_resource_crystal_shard"},
+		{"Shadow Essence", "resource_shadow_essence"},
 	}
 
 	itemsPerPage := 15
@@ -712,16 +708,27 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		ax := x + 30 + col*colWidth
 		ay := y + 60 + row*rowHeight
 
+		// Détermine la clé d'image (avec stade si applicable)
+		imgKey := asset.key
+		stages, hasStages := resourceStages[asset.key]
+		stageIdx := h.resourceStageIndex[asset.key]
+		if hasStages {
+			if stageIdx < 0 || stageIdx >= len(stages) {
+				stageIdx = 0
+				h.resourceStageIndex[asset.key] = 0
+			}
+			imgKey = asset.key + "_" + stages[stageIdx]
+		}
+
 		// Cadre de l'asset
 		vector.StrokeRect(screen, float32(ax), float32(ay), 88, 88, 1, color.RGBA{60, 60, 80, 255}, true)
 
 		// Dessin de l'asset si disponible
 		if h.assets != nil {
-			img := h.assets.GetImage(asset.key)
+			img := h.assets.GetImage(imgKey)
 			if img != nil {
 				op := &ebiten.DrawImageOptions{}
 				op.GeoM.Translate(float64(ax), float64(ay))
-				// On scale un peu si l'image est plus grande que le cadre
 				sw := 88.0 / float64(img.Bounds().Dx())
 				sh := 88.0 / float64(img.Bounds().Dy())
 				s := sw
@@ -744,6 +751,17 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		cleanKey = strings.ToUpper(cleanKey)
 
 		text.Draw(screen, "["+cleanKey+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
+
+		// Flèches de navigation de stade (pour ressources avec stades)
+		if hasStages {
+			arrowColor := color.RGBA{180, 180, 200, 255}
+			stageName := stages[stageIdx]
+			stageNameX := ax + (88-len(stageName)*7)/2
+			text.Draw(screen, stageName, basicfont.Face7x13, stageNameX, ay+85, arrowColor)
+
+			text.Draw(screen, "<", basicfont.Face7x13, ax+2, ay+85, arrowColor)
+			text.Draw(screen, ">", basicfont.Face7x13, ax+78, ay+85, arrowColor)
+		}
 	}
 }
 
@@ -1412,7 +1430,7 @@ func (h *HUD) HandleClick(x, y int) bool {
 		}
 
 		// Boutons Pagination
-		allAssetsCount := 31 // Nombre total d'assets dans la liste (fixe pour l'instant)
+		allAssetsCount := 32 // Nombre total d'assets dans la liste
 		itemsPerPage := 15
 		maxPage := (allAssetsCount - 1) / itemsPerPage
 
@@ -1428,6 +1446,105 @@ func (h *HUD) HandleClick(x, y int) bool {
 		if h.assetPage < maxPage {
 			if fx >= float32(wx+winW-120) && fx <= float32(wx+winW-20) && fy >= float32(wy+winH-40) && fy <= float32(wy+winH-15) {
 				h.assetPage++
+				return true
+			}
+		}
+
+		// Flèches de navigation de stade dans les cellules
+		resourceStages := map[string][]string{
+			"resource_dreamberry":      {"bourgeon", "fleur", "fruit", "gâté"},
+			"resource_whispering_herb": {"graine", "pousse", "mature"},
+			"resource_void_bloom":      {"graine", "éclosion", "pleine"},
+			"resource_moss_truffle":    {"bourgeon", "pousse", "mature"},
+			"resource_echo_crystal":    {"vibrant", "résonnant"},
+			"resource_sand_core":       {"instable", "stable"},
+		}
+
+		colWidth := 150
+		rowHeight := 140
+		itemsPerRow := 5
+
+		startIdx := h.assetPage * itemsPerPage
+		endIdx := startIdx + itemsPerPage
+		if endIdx > allAssetsCount {
+			endIdx = allAssetsCount
+		}
+
+		allAssets := []struct {
+			name string
+			key  string
+		}{
+			{"Dos Tuile Std", "tile_hidden"},
+			{"Tuile Révélée", "tile_revealed"},
+			{"Tuile Matchée", "tile_matched"},
+			{"Tuile Piège", "tile_trap"},
+			{"Tuile Bloquée", "tile_blocked"},
+			{"Tuile Scellée", "tile_sealed"},
+			{"Portail", "tile_portal"},
+			{"Sortie", "tile_exit"},
+			{"Case Vide", "square_empty"},
+			{"Trace Boue", "mud"},
+			{"Trace Griffes", "claws"},
+			{"Herbe Cassée", "broken_grass"},
+			{"Empreinte Pas", "footprints"},
+			{"Rayon Attaque", "intent_beam"},
+			{"Lumifly", "creature_lumifly"},
+			{"Shadowstalker", "creature_shadowstalker"},
+			{"Burrower", "creature_burrower"},
+			{"Flutterwing", "creature_flutterwing"},
+			{"Fleeing Sprite", "creature_fleeing_sprite"},
+			{"Specter", "creature_specter"},
+			{"Echo Hound", "creature_echo_hound"},
+			{"Moss Monkey", "creature_moss_monkey"},
+			{"Stonewarden", "creature_stonewarden"},
+			{"Dreamberry", "resource_dreamberry"},
+			{"Moonstone", "resource_moonstone"},
+			{"Whisper Herb", "resource_whispering_herb"},
+			{"Shard", "resource_crystal_shard"},
+			{"Moss Truffle", "resource_moss_truffle"},
+			{"Void Bloom", "resource_void_bloom"},
+			{"Echo Crystal", "resource_echo_crystal"},
+			{"Sand Core", "resource_sand_core"},
+			{"Shadow Essence", "resource_shadow_essence"},
+		}
+
+		for i := startIdx; i < endIdx; i++ {
+			asset := allAssets[i]
+			stages, hasStages := resourceStages[asset.key]
+			if !hasStages {
+				continue
+			}
+
+			localIdx := i - startIdx
+			row := localIdx / itemsPerRow
+			col := localIdx % itemsPerRow
+
+			ax := wx + 30 + col*colWidth
+			ay := wy + 60 + row*rowHeight
+
+			// Zone de la flèche gauche
+			leftArrowX := ax + 2
+			leftArrowY := ay + 78
+			if int(fx) >= leftArrowX && int(fx) <= leftArrowX+10 && int(fy) >= leftArrowY-10 && int(fy) <= leftArrowY+5 {
+				idx := h.resourceStageIndex[asset.key]
+				idx--
+				if idx < 0 {
+					idx = len(stages) - 1
+				}
+				h.resourceStageIndex[asset.key] = idx
+				return true
+			}
+
+			// Zone de la flèche droite
+			rightArrowX := ax + 78
+			rightArrowY := ay + 78
+			if int(fx) >= rightArrowX && int(fx) <= rightArrowX+10 && int(fy) >= rightArrowY-10 && int(fy) <= rightArrowY+5 {
+				idx := h.resourceStageIndex[asset.key]
+				idx++
+				if idx >= len(stages) {
+					idx = 0
+				}
+				h.resourceStageIndex[asset.key] = idx
 				return true
 			}
 		}

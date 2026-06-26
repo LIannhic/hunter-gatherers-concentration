@@ -121,12 +121,12 @@ type ScannerEffect struct {
 
 // QuakeEffect représente l'état d'un effet de séisme (Stonewarden)
 type QuakeEffect struct {
-	GridID         string
-	Progress       float64 // 0.0 à 1.0
-	Duration       float64 // Durée totale en secondes
-	Elapsed        float64 // Temps écoulé en secondes
-	RotationAngle  float32 // Angle de rotation de l'ancienne orientation (radians)
-	Clockwise      bool    // Sens de la rotation (true = horaire, false = antihoraire)
+	GridID        string
+	Progress      float64 // 0.0 à 1.0
+	Duration      float64 // Durée totale en secondes
+	Elapsed       float64 // Temps écoulé en secondes
+	RotationAngle float32 // Angle de rotation de l'ancienne orientation (radians)
+	Clockwise     bool    // Sens de la rotation (true = horaire, false = antihoraire)
 }
 
 // IsActive retourne true si l'animation est en cours
@@ -152,7 +152,7 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		flipAnimations:       make(map[string]*FlipAnimation),
 		effectRenderer:       effectRenderer,
 		activeScannerEffects: make(map[string]*ScannerEffect),
-		activeQuakeEffects:  make(map[string]*QuakeEffect),
+		activeQuakeEffects:   make(map[string]*QuakeEffect),
 		hoverStates:          make(map[string]*HoverState),
 		bounceStates:         make(map[string]*BounceState),
 		trackRenderer:        NewTrackRenderer(ui.TileSize),
@@ -756,7 +756,7 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 	x, y := float32(s.CurrentX), float32(s.CurrentY)
 	w, h := float32(s.Width), float32(s.Height)
 
-	vector.DrawFilledRect(screen, x, y, w, h, bgColor, true)
+	vector.FillRect(screen, x, y, w, h, bgColor, true)
 
 	if s.FillProgress > 0 {
 		fillW := w * float32(s.FillProgress)
@@ -828,7 +828,7 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 		} else {
 			indicatorColor = color.RGBA{100, 255, 100, 200}
 		}
-		vector.DrawFilledRect(screen, ix, iy, float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), indicatorColor, true)
+		vector.FillRect(screen, ix, iy, float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), indicatorColor, true)
 	}
 }
 
@@ -1082,25 +1082,25 @@ func (r *BoardRenderer) renderGrid(screen *ebiten.Image, gridID string, world *d
 					r.renderSingleTileIDAt(screen, sx, sy, gridID, underID, world, forceReveal, 1.0)
 				}
 			} else {
-                // EFFET PEEK : Si la tuile du dessus est en train de se retourner (FlipAnimation active),
-                // et qu'il y a une tuile en dessous, on dessine d'abord la tuile du dessous en forçant son reveal visuel.
-                var topIsFlipping bool
-                for _, anim := range r.flipAnimations {
-                   if anim.EntityID == topID && (gridID == "" || anim.GridID == gridID) && anim.IsActive() {
-                      topIsFlipping = true
-                      break
-                   }
-                }
+				// EFFET PEEK : Si la tuile du dessus est en train de se retourner (FlipAnimation active),
+				// et qu'il y a une tuile en dessous, on dessine d'abord la tuile du dessous en forçant son reveal visuel.
+				var topIsFlipping bool
+				for _, anim := range r.flipAnimations {
+					if anim.EntityID == topID && (gridID == "" || anim.GridID == gridID) && anim.IsActive() {
+						topIsFlipping = true
+						break
+					}
+				}
 
-                if topIsFlipping && len(plot.EntitiesID) > 1 {
-                   underID := plot.EntitiesID[len(plot.EntitiesID)-2]
-                   // On passe forceReveal à true pour que le joueur puisse entrevoir la tuile inférieure pendant l'animation
-                   r.renderSingleTileIDAt(screen, sx, sy, gridID, underID, world, true, 1.0)
-                }
+				if topIsFlipping && len(plot.EntitiesID) > 1 {
+					underID := plot.EntitiesID[len(plot.EntitiesID)-2]
+					// On passe forceReveal à true pour que le joueur puisse entrevoir la tuile inférieure pendant l'animation
+					r.renderSingleTileIDAt(screen, sx, sy, gridID, underID, world, true, 1.0)
+				}
 
-                // Rendu normal de la tuile au sommet (qui dessinera le flip 3D par-dessus)
-                r.renderSingleTileIDAt(screen, sx, sy, gridID, topID, world, forceReveal, 1.0)
-            }
+				// Rendu normal de la tuile au sommet (qui dessinera le flip 3D par-dessus)
+				r.renderSingleTileIDAt(screen, sx, sy, gridID, topID, world, forceReveal, 1.0)
+			}
 		}
 	}
 }
@@ -1285,13 +1285,13 @@ func (r *BoardRenderer) renderSingleTileIDAt(screen *ebiten.Image, x, y float64,
 		var borderColor color.Color
 		switch {
 		case level >= 4:
-			borderColor = color.RGBA{200, 50, 50, 255}   // Rouge profond
+			borderColor = color.RGBA{200, 50, 50, 255} // Rouge profond
 		case level == 3:
-			borderColor = color.RGBA{200, 120, 20, 255}  // Orange ambré
+			borderColor = color.RGBA{200, 120, 20, 255} // Orange ambré
 		case level == 2:
-			borderColor = color.RGBA{180, 160, 30, 255}  // Jaune doré
+			borderColor = color.RGBA{180, 160, 30, 255} // Jaune doré
 		default:
-			borderColor = color.RGBA{120, 200, 80, 255}  // Vert doux
+			borderColor = color.RGBA{120, 200, 80, 255} // Vert doux
 		}
 		// Dessiner `level` bordures concentriques fines
 		for b := 0; b < level; b++ {
@@ -1555,7 +1555,7 @@ func (r *BoardRenderer) RenderPortalPlacementPreview(screen *ebiten.Image, cente
 		previewColor = color.RGBA{180, 150, 30, 140}
 		fillColor = color.RGBA{180, 150, 30, 20}
 	}
-	vector.DrawFilledRect(screen, float32(x), float32(y), float32(width), float32(height), fillColor, true)
+	vector.FillRect(screen, float32(x), float32(y), float32(width), float32(height), fillColor, true)
 	vector.StrokeRect(screen, float32(x), float32(y), float32(width), float32(height), 3, previewColor, true)
 }
 

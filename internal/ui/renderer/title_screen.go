@@ -32,7 +32,7 @@ func (r Rect) Contains(x, y int) bool {
 // NewTitleScreen crée un nouvel écran titre
 func NewTitleScreen() *TitleScreen {
 	return &TitleScreen{
-		width: 1280,
+		width:  1280,
 		height: 720,
 		buttonRect: Rect{
 			X: 540,
@@ -91,7 +91,7 @@ func (t *TitleScreen) Render(screen *ebiten.Image, hasSaves bool) {
 // drawButton dessine le bouton principal
 func (t *TitleScreen) drawButton(screen *ebiten.Image) {
 	// Fond du bouton
-	vector.DrawFilledRect(
+	vector.FillRect(
 		screen,
 		float32(t.buttonRect.X),
 		float32(t.buttonRect.Y),
@@ -141,7 +141,7 @@ func (t *TitleScreen) IsProfileButtonClicked(x, y int) bool {
 // drawPlaytestButton dessine le bouton de playtest
 func (t *TitleScreen) drawPlaytestButton(screen *ebiten.Image) {
 	// Fond du bouton
-	vector.DrawFilledRect(
+	vector.FillRect(
 		screen,
 		float32(t.playtestButtonRect.X),
 		float32(t.playtestButtonRect.Y),
@@ -173,7 +173,7 @@ func (t *TitleScreen) drawPlaytestButton(screen *ebiten.Image) {
 // drawProfileButton dessine le bouton de changement de profil
 func (t *TitleScreen) drawProfileButton(screen *ebiten.Image) {
 	// Fond du bouton
-	vector.DrawFilledRect(
+	vector.FillRect(
 		screen,
 		float32(t.profileButtonRect.X),
 		float32(t.profileButtonRect.Y),
