@@ -480,7 +480,7 @@ Système de traces visuelles pour les déplacements de créatures :
 - **Entité `Track`** : Champs `OffsetX`, `OffsetY`, `Angle` (positionnement bord de case, rotation vers centre).
 - **Types** : Boue (Under, interstice), Herbe Brisée (Under, origine), Griffures (Over, destination), Empreintes (Normal, sous tuiles), Intent Beam (Over, créature→cible).
 - **FIFO max 2** : `footstepTrackIDs` dans Handler, nettoyage dans `OnTurnEnd` callback.
-- **Aperçu curseur** : `DrawFootstepPreview()` — empreinte semi-transparente snappée au bord de case.
+- **Indicateur de position** : `DrawPlayerPosition()` — affiche la position réelle du joueur (grid pos + ancrage) comme indicateur persistant au bord du plateau.
 
 ---
 

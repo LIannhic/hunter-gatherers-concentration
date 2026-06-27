@@ -391,15 +391,14 @@ Les créatures laissent derrière elles des traces qui respectent des règles de
 
 Toutes les traces s'adaptent dynamiquement à la distance entre les cases, qu'il s'agisse d'un plateau 3x3 ou 6x6.
 
-#### Empreintes de pas du joueur
+#### Indicateur de position du joueur
 
-Le joueur laisse des empreintes de pas sur le plateau de jeu lors de ses actions :
-- **Création** : Une empreinte de pas est placée sur le bord extérieur de chaque tuile que le joueur clique pour révéler. L'orientation pointe vers le centre de la tuile.
-- **FIFO (max 2)** : Au plus deux empreintes sont visibles simultanément. La troisième fait disparaître la plus ancienne.
-- **Arrivée en zone** : Une empreinte de pas est créée automatiquement sur le bord du plateau de jeu côté navigation lorsque le joueur entre dans une nouvelle zone.
+Le joueur dispose d'un indicateur visuel persistant montrant sa position actuelle sur le plateau :
+- **Création** : L'indicateur est placé sur le bord extérieur de la tuile où le joueur se trouve (position actuelle grid + ancrage).
+- **Position** : L'indicateur pointe vers le centre de la tuile et suit la position périphérique du joueur (là où il clique pour révéler).
 - **Fin de tour** :
-  - Si le joueur s'est déplacé (a cliqué sur au moins une tuile) : la dernière empreinte est conservée, les précédentes sont supprimées.
-  - Si le joueur n'a pas bougé (passé son tour sans cliquer) : toutes les empreintes sont supprimées.
+  - Si le joueur s'est déplacé (a cliqué sur au moins une tuile) : l'indicateur est mis à jour vers la nouvelle position.
+  - Si le joueur n'a pas bougé (passé son tour sans cliquer) : l'indicateur est conservé.
 
 ### Bestiaire
 

@@ -73,6 +73,7 @@ const (
 	ButtonTextH         = 21.88
 
 	ButtonIconRelativeX = 180.5
+	ButtonIconLeftRelativeX = 10
 	ButtonIconRelativeY = 5
 	ButtonIconSize      = 29.17
 
@@ -112,10 +113,11 @@ const (
 
 // Combo Zone (above gauges)
 const (
-	ComboZoneX = 1000
-	ComboZoneY = 10
-	ComboZoneW = 270
-	ComboZoneH = 40
+	ComboZoneX     = 1000
+	ComboZoneY     = 10
+	ComboZoneW     = 270
+	ComboZoneH     = 40
+	ComboTextOffY  = 4 // décalage texte vers le bas dans la zone
 )
 
 // Gauges Holder
