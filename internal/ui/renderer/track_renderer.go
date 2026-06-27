@@ -358,80 +358,70 @@ func (tr *TrackRenderer) DrawAttackIntent(screen *ebiten.Image, intent *AttackIn
 	screen.DrawImage(sprite, op)
 }
 
-// DrawFootstepPreview dessine un aperçu semi-transparent d'une empreinte de pas
-// sur le bord de la tuile la plus proche du curseur. Fonctionne sur toutes les grilles.
-// func (tr *TrackRenderer) DrawFootstepPreview(screen *ebiten.Image, cursorX, cursorY float64, world *domain.World, getTileCenter func(board.Position) (float64, float64)) {
-// 	if world == nil || world.CurrentGridID == "" {
-// 		return
-// 	}
+// DrawPlayerPosition dessine une empreinte de pas sur le bord extérieur de la tuile
+// où se trouve actuellement le joueur. Direction déterminée par l'ancre du joueur.
+func (tr *TrackRenderer) DrawPlayerPosition(screen *ebiten.Image, world *domain.World, getTileCenter func(board.Position) (float64, float64)) {
+	if world == nil || world.CurrentGridID == "" || world.Player == nil || !world.Player.IsAlive() {
+		return
+	}
 
-// 	grid, ok := world.GetGrid(world.CurrentGridID)
-// 	if !ok || grid == nil {
-// 		return
-// 	}
+	sprite := tr.getOrCreateSprite("footprints")
+	if sprite == nil {
+		return
+	}
 
-// 	sprite := tr.getOrCreateSprite("footprints")
-// 	if sprite == nil {
-// 		return
-// 	}
+	playerPos := world.GetPlayerPosition()
+	anchor := world.Player.GetAnchor()
 
-// 	// Trouve la tuile la plus proche du curseur
-// 	bestDist := math.MaxFloat64
-// 	var bestCenterX, bestCenterY float64
-// 	found := false
+	// Direction sortante de l'ancre (du centre de la tuile vers le bord du joueur)
+	outward := anchor.GetOutwardDirection()
+	dirX, dirY := directionToXY(outward)
 
-// 	for y := 0; y < grid.Height; y++ {
-// 		for x := 0; x < grid.Width; x++ {
-// 			pos := board.Position{X: x, Y: y}
-// 			cx, cy := getTileCenter(pos)
-// 			dx := cursorX - cx
-// 			dy := cursorY - cy
-// 			d := dx*dx + dy*dy
-// 			if d < bestDist {
-// 				bestDist = d
-// 				bestCenterX = cx
-// 				bestCenterY = cy
-// 				found = true
-// 			}
-// 		}
-// 	}
+	// Centre de la tuile du joueur
+	centerX, centerY := getTileCenter(playerPos)
 
-// 	if !found {
-// 		return
-// 	}
+	// Position sur le bord extérieur
+	edgeDist := tr.tileSize/2 + 4
+	drawX := centerX + dirX*edgeDist
+	drawY := centerY + dirY*edgeDist
 
-// 	// Ne dessine pas si le curseur est trop loin de la grille (> 1.5 tuiles)
-// 	if bestDist > (tr.tileSize*1.5)*(tr.tileSize*1.5) {
-// 		return
-// 	}
+	// Angle orienté vers le centre de la tuile
+	angle := math.Atan2(-dirY, -dirX)
 
-// 	// Direction du centre vers le curseur
-// 	dirX := cursorX - bestCenterX
-// 	dirY := cursorY - bestCenterY
-// 	dist := math.Sqrt(dirX*dirX + dirY*dirY)
+	// Dessine l'empreinte opaque
+	op := &ebiten.DrawImageOptions{}
+	w, h := sprite.Bounds().Dx(), sprite.Bounds().Dy()
+	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+	op.GeoM.Rotate(angle)
+	op.GeoM.Translate(drawX, drawY)
 
-// 	if dist < 1.0 {
-// 		dirX, dirY = 0, 1
-// 		dist = 1.0
-// 	}
-// 	dirX /= dist
-// 	dirY /= dist
+	screen.DrawImage(sprite, op)
+}
 
-// 	// Position sur le bord extérieur
-// 	edgeDist := tr.tileSize/2 + 4
-// 	drawX := bestCenterX + dirX*edgeDist
-// 	drawY := bestCenterY + dirY*edgeDist
-
-// 	// Angle vers le centre
-// 	angle := math.Atan2(-dirY, -dirX)
-
-// 	// Dessine l'empreinte semi-transparente
-// 	op := &ebiten.DrawImageOptions{}
-// 	w, h := sprite.Bounds().Dx(), sprite.Bounds().Dy()
-// 	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
-// 	op.GeoM.Rotate(angle)
-// 	op.GeoM.Translate(drawX, drawY)
-// 	op.ColorScale.ScaleAlpha(0.35)
-
-// 	screen.DrawImage(sprite, op)
-// }
+// directionToXY convertit une direction cardinale en vecteur (dx, dy).
+func directionToXY(dir entity.Direction) (float64, float64) {
+	switch dir {
+	case entity.DirNorth:
+		return 0, -1
+	case entity.DirSouth:
+		return 0, 1
+	case entity.DirEast:
+		return 1, 0
+	case entity.DirWest:
+		return -1, 0
+	case entity.DirNorthEast:
+		d := math.Sqrt(2) / 2
+		return d, -d
+	case entity.DirSouthEast:
+		d := math.Sqrt(2) / 2
+		return d, d
+	case entity.DirSouthWest:
+		d := math.Sqrt(2) / 2
+		return -d, d
+	case entity.DirNorthWest:
+		d := math.Sqrt(2) / 2
+		return -d, -d
+	default:
+		return 0, -1
+	}
+}

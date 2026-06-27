@@ -6,10 +6,9 @@ import (
 	"sort"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/textutil"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/basicfont"
 )
 
 type DebugWindow struct {
@@ -38,17 +37,17 @@ func (dw *DebugWindow) Render(screen *ebiten.Image) {
 	vector.StrokeRect(screen, dw.x, dw.y, dw.w, dw.h, 2, color.RGBA{200, 200, 255, 255}, true)
 
 	// Titre
-	text.Draw(screen, "DEBUG CONSOLE (F12)", basicfont.Face7x13, int(dw.x)+20, int(dw.y)+30, color.RGBA{0, 255, 255, 255})
+	textutil.Draw(screen, "DEBUG CONSOLE (F12)", int(dw.x)+20, int(dw.y)+30, color.RGBA{0, 255, 255, 255})
 
 	// Bouton Fermer
 	closeX, closeY := dw.x+dw.w-30, dw.y+10
 	vector.DrawFilledRect(screen, closeX, closeY, 20, 20, color.RGBA{200, 50, 50, 255}, true)
-	text.Draw(screen, "X", basicfont.Face7x13, int(closeX)+6, int(closeY)+15, color.White)
+	textutil.Draw(screen, "X", int(closeX)+6, int(closeY)+15, color.White)
 
 	// Bouton Réinitialiser
 	resetX, resetY := dw.x+dw.w-150, dw.y+10
 	vector.DrawFilledRect(screen, resetX, resetY, 110, 20, color.RGBA{100, 100, 150, 255}, true)
-	text.Draw(screen, "RESET DEFAULTS", basicfont.Face7x13, int(resetX)+5, int(resetY)+15, color.White)
+	textutil.Draw(screen, "RESET DEFAULTS", int(resetX)+5, int(resetY)+15, color.White)
 
 	dw.renderStats(screen)
 	dw.renderDifficulty(screen)
@@ -60,7 +59,7 @@ func (dw *DebugWindow) Render(screen *ebiten.Image) {
 func (dw *DebugWindow) renderStats(screen *ebiten.Image) {
 	startX := dw.x + 20
 	startY := dw.y + 70
-	text.Draw(screen, "PLAYER STATS", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "PLAYER STATS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
 	stats := []struct {
 		label string
@@ -74,7 +73,7 @@ func (dw *DebugWindow) renderStats(screen *ebiten.Image) {
 
 	for i, s := range stats {
 		y := startY + 30 + float32(i*40)
-		text.Draw(screen, fmt.Sprintf("%-7s: %d / %d", s.label, *s.val, *s.max), basicfont.Face7x13, int(startX), int(y)+15, color.White)
+		textutil.Draw(screen, fmt.Sprintf("%-7s: %d / %d", s.label, *s.val, *s.max), int(startX), int(y)+15, color.White)
 
 		// Boutons pour Valeur
 		dw.drawButton(screen, startX+150, y, "-", "v-1")
@@ -91,7 +90,7 @@ func (dw *DebugWindow) renderStats(screen *ebiten.Image) {
 func (dw *DebugWindow) renderDifficulty(screen *ebiten.Image) {
 	startX := dw.x + 450
 	startY := dw.y + 70
-	text.Draw(screen, "DIFFICULTY & RULES", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "DIFFICULTY & RULES", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
 	settings := &dw.world.Difficulty
 	if dw.world.Debug.OverrideDifficulty {
@@ -101,22 +100,22 @@ func (dw *DebugWindow) renderDifficulty(screen *ebiten.Image) {
 	dw.drawCheckbox(screen, startX, startY+30, "Override Game Settings", dw.world.Debug.OverrideDifficulty)
 
 	y := startY + 70
-	text.Draw(screen, fmt.Sprintf("Turn Timer: %.1fs", settings.TurnTimerDuration), basicfont.Face7x13, int(startX), int(y)+15, color.White)
+	textutil.Draw(screen, fmt.Sprintf("Turn Timer: %.1fs", settings.TurnTimerDuration), int(startX), int(y)+15, color.White)
 	dw.drawButton(screen, startX+150, y, "-", "timer-")
 	dw.drawButton(screen, startX+180, y, "+", "timer+")
 
 	y += 30
-	text.Draw(screen, fmt.Sprintf("Preview Dur: %.1fs", settings.PreviewDuration), basicfont.Face7x13, int(startX), int(y)+15, color.White)
+	textutil.Draw(screen, fmt.Sprintf("Preview Dur: %.1fs", settings.PreviewDuration), int(startX), int(y)+15, color.White)
 	dw.drawButton(screen, startX+150, y, "-", "prev-")
 	dw.drawButton(screen, startX+180, y, "+", "prev+")
 
 	y += 30
-	text.Draw(screen, fmt.Sprintf("Nav Threshold: %.0f%%", settings.NavThreshold*100), basicfont.Face7x13, int(startX), int(y)+15, color.White)
+	textutil.Draw(screen, fmt.Sprintf("Nav Threshold: %.0f%%", settings.NavThreshold*100), int(startX), int(y)+15, color.White)
 	dw.drawButton(screen, startX+150, y, "-", "nav-")
 	dw.drawButton(screen, startX+180, y, "+", "nav+")
 
 	y += 30
-	text.Draw(screen, fmt.Sprintf("Msg Speed: %.1f", dw.world.Debug.MessageSpeed), basicfont.Face7x13, int(startX), int(y)+15, color.White)
+	textutil.Draw(screen, fmt.Sprintf("Msg Speed: %.1f", dw.world.Debug.MessageSpeed), int(startX), int(y)+15, color.White)
 	dw.drawButton(screen, startX+150, y, "-", "msgspd-")
 	dw.drawButton(screen, startX+180, y, "+", "msgspd+")
 }
@@ -124,7 +123,7 @@ func (dw *DebugWindow) renderDifficulty(screen *ebiten.Image) {
 func (dw *DebugWindow) renderCreatures(screen *ebiten.Image) {
 	startX := dw.x + 20
 	startY := dw.y + 250
-	text.Draw(screen, "ALLOWED ENTITIES (for random spawn)", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "ALLOWED ENTITIES (for random spawn)", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
 	entities := []string{
 		// Creatures
@@ -149,7 +148,7 @@ func (dw *DebugWindow) renderCreatures(screen *ebiten.Image) {
 func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
 	startX := dw.x + 800
 	startY := dw.y + 70
-	text.Draw(screen, "ENVIRONMENT SHADERS", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "ENVIRONMENT SHADERS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
 	shaders := []string{"blur", "bubble", "heat", "wave", "rain"}
 	sort.Strings(shaders)
@@ -163,7 +162,7 @@ func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
 func (dw *DebugWindow) renderImpairments(screen *ebiten.Image) {
 	startX := dw.x + 800
 	startY := dw.y + 250
-	text.Draw(screen, "COGNITIVE IMPAIRMENTS", basicfont.Face7x13, int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "COGNITIVE IMPAIRMENTS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
 	p := dw.world.Player
 	if p == nil {
@@ -181,7 +180,7 @@ func (dw *DebugWindow) drawButton(screen *ebiten.Image, x, y float32, label, id 
 	h := float32(20)
 	vector.DrawFilledRect(screen, x, y, w, h, color.RGBA{60, 60, 80, 255}, true)
 	vector.StrokeRect(screen, x, y, w, h, 1, color.RGBA{150, 150, 200, 255}, true)
-	text.Draw(screen, label, basicfont.Face7x13, int(x)+5, int(y)+15, color.White)
+	textutil.Draw(screen, label, int(x)+5, int(y)+15, color.White)
 }
 
 func (dw *DebugWindow) drawCheckbox(screen *ebiten.Image, x, y float32, label string, checked bool) {
@@ -190,7 +189,7 @@ func (dw *DebugWindow) drawCheckbox(screen *ebiten.Image, x, y float32, label st
 	if checked {
 		vector.DrawFilledRect(screen, x+3, y+3, size-6, size-6, color.RGBA{0, 255, 0, 255}, true)
 	}
-	text.Draw(screen, label, basicfont.Face7x13, int(x)+25, int(y)+13, color.White)
+	textutil.Draw(screen, label, int(x)+25, int(y)+13, color.White)
 }
 
 func (dw *DebugWindow) HandleClick(mx, my int) bool {

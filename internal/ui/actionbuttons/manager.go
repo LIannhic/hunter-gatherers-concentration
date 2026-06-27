@@ -38,6 +38,7 @@ type ButtonState struct {
 	FillProgress float64 // 0.0 → 1.0, remplissage temporel (Skip uniquement)
 	FillAlert    bool    // Vrai si le timer est en phase critique ou expiré
 	TextScale    float64 // Facteur d'échelle du texte (Aphasia)
+	RevealedEntities []string // IDs des entités révélées ce tour
 }
 
 // Manager gère l'état réactif des 4 boutons d'action du Playmat.
@@ -46,6 +47,7 @@ type ButtonState struct {
 type Manager struct {
 	// Références externes
 	getRevealedTileCount func() int
+	getRevealedEntities  func() []string
 	getPlayer            func() *player.Player
 	getTimerProgress     func() float64 // 0.0 → 1.0 (temps écoulé)
 	getTimerPanic        func() bool    // true si < 3s restantes
@@ -75,9 +77,10 @@ type Manager struct {
 // getRevealedTileCount doit retourner le nombre de tuiles révélées ce tour.
 // getPlayer doit retourner le joueur courant (pour les StatusEffects).
 // getTimerProgress / getTimerPanic fournissent l'état du compte à rebours temps réel.
-func NewManager(getRevealedTileCount func() int, getPlayer func() *player.Player, getTimerProgress func() float64, getTimerPanic func() bool, getVictoryProgress func() float64, isVictoryActive func() bool) *Manager {
+func NewManager(getRevealedTileCount func() int, getRevealedEntities func() []string, getPlayer func() *player.Player, getTimerProgress func() float64, getTimerPanic func() bool, getVictoryProgress func() float64, isVictoryActive func() bool) *Manager {
 	m := &Manager{
 		getRevealedTileCount: getRevealedTileCount,
+		getRevealedEntities:  getRevealedEntities,
 		getPlayer:            getPlayer,
 		getTimerProgress:     getTimerProgress,
 		getTimerPanic:        getTimerPanic,
@@ -112,6 +115,10 @@ func (m *Manager) resetScramble() {
 // hormis le cache de scrambling pour éviter le clignotement épileptique.
 func (m *Manager) ComputeStates() [btnCount]ButtonState {
 	revealedCount := m.getRevealedTileCount()
+	var revealedEntities []string
+	if m.getRevealedEntities != nil {
+		revealedEntities = m.getRevealedEntities()
+	}
 	p := m.getPlayer()
 	elapsed := time.Since(m.startTime).Seconds()
 
@@ -125,6 +132,7 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 			Y:      ui.PlaymatY + m.baseCoords[i].y,
 			Width:  ui.ActionButtonW,
 			Height: ui.ActionButtonH,
+			RevealedEntities: revealedEntities,
 		}
 	}
 

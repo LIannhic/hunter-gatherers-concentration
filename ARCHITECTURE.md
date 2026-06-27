@@ -348,7 +348,7 @@ Système de traces visuelles laissées par les créatures lors de leurs déplace
 - **Entité `Track`** : Champs `OffsetX`, `OffsetY`, `Angle` pour positionnement précis aux bords des cases.
 - **FIFO max 2** : `footstepTrackIDs []string` dans Handler — l'ancienne est supprimée quand on dépasse 2.
 - **Nettoyage tour** : `ClearFootsteps()` appelé dans `OnTurnEnd` callback.
-- **Aperçu curseur** : `DrawFootstepPreview()` — empreinte semi-transparente au curseur, snappée au bord de case le plus proche.
+- **Indicateur de position** : `DrawPlayerPosition()` — affiche la position réelle du joueur (grid pos + ancrage) comme indicateur persistant au bord du plateau.
 
 ### 4. UI
 
@@ -397,6 +397,7 @@ Séparation des responsabilités :
 
 - **DebugWindow** (`ui/debug/window.go`) : Console de débogage interactive (F12) permettant de modifier les statistiques, la difficulté, et de filtrer les entités spawnables. Contrôle la vitesse de défilement des messages HUD (`MessageSpeed` via `+`/`-`).
 
+- **TextUtil** (`ui/textutil/textutil.go`) : Package helper centralisant le rendu texte via `text/v2` avec police Go Mono intégrée (via `//go:embed`). Fournit `Draw()`, `MeasureWidth()` et `GoTextFace`. `MeasureWidth` optimisé avec `len(str) * charWidth` (police monospace). Le `Draw()` soustrait `HAscent` pour maintenir la compatibilité baseline avec text v1.
 - **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. 
   - **Aphasia** : Glitch périodique des labels (toutes les 0.5s) et pulsation de taille.
   - **Ataxia** : Mode **Whack-a-mole** dynamique. Les boutons sautent hors de l'écran avant de réapparaître dans un autre coin. Thème Désert appliqué.

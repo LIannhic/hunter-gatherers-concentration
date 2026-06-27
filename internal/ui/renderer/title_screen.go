@@ -4,10 +4,9 @@ package renderer
 import (
 	"image/color"
 
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/textutil"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/basicfont"
 )
 
 // TitleScreen gère l'affichage de l'écran titre
@@ -63,13 +62,13 @@ func (t *TitleScreen) Render(screen *ebiten.Image, hasSaves bool) {
 
 	// Titre du jeu
 	title := "Hunter Gatherers Concentration"
-	titleX := t.width/2 - len(title)*4 // Approximation du centrage
-	text.Draw(screen, title, basicfont.Face7x13, titleX, 150, color.RGBA{200, 180, 100, 255})
+	titleX := t.width/2 - textutil.MeasureWidth(title)/2
+	textutil.Draw(screen, title, titleX, 150, color.RGBA{200, 180, 100, 255})
 
 	// Sous-titre
 	subtitle := "Memory Game"
-	subX := t.width/2 - len(subtitle)*3
-	text.Draw(screen, subtitle, basicfont.Face7x13, subX, 190, color.RGBA{150, 150, 255, 255})
+	subX := t.width/2 - textutil.MeasureWidth(subtitle)/2
+	textutil.Draw(screen, subtitle, subX, 190, color.RGBA{150, 150, 255, 255})
 
 	// Bouton principal
 	t.drawButton(screen)
@@ -84,8 +83,8 @@ func (t *TitleScreen) Render(screen *ebiten.Image, hasSaves bool) {
 
 	// Instructions
 	hint := "En jeu: Appuyez sur echap pour retourner au menu"
-	hintX := t.width/2 - len(hint)*3
-	text.Draw(screen, hint, basicfont.Face7x13, hintX, 500, color.RGBA{100, 100, 100, 255})
+	hintX := t.width/2 - textutil.MeasureWidth(hint)/2
+	textutil.Draw(screen, hint, hintX, 500, color.RGBA{100, 100, 100, 255})
 }
 
 // drawButton dessine le bouton principal
@@ -118,9 +117,9 @@ func (t *TitleScreen) drawButton(screen *ebiten.Image) {
 	if btnText == "" {
 		btnText = "DEMARRER"
 	}
-	btnX := t.buttonRect.X + t.buttonRect.W/2 - len(btnText)*3
+	btnX := t.buttonRect.X + t.buttonRect.W/2 - textutil.MeasureWidth(btnText)/2
 	btnY := t.buttonRect.Y + t.buttonRect.H/2 + 4
-	text.Draw(screen, btnText, basicfont.Face7x13, btnX, btnY, color.White)
+	textutil.Draw(screen, btnText, btnX, btnY, color.White)
 }
 
 // IsStartButtonClicked vérifie si le bouton démarrer a été cliqué
@@ -165,9 +164,9 @@ func (t *TitleScreen) drawPlaytestButton(screen *ebiten.Image) {
 
 	// Texte du bouton
 	btnText := "PLAYTEST"
-	btnX := t.playtestButtonRect.X + t.playtestButtonRect.W/2 - len(btnText)*3
+	btnX := t.playtestButtonRect.X + t.playtestButtonRect.W/2 - textutil.MeasureWidth(btnText)/2
 	btnY := t.playtestButtonRect.Y + t.playtestButtonRect.H/2 + 4
-	text.Draw(screen, btnText, basicfont.Face7x13, btnX, btnY, color.White)
+	textutil.Draw(screen, btnText, btnX, btnY, color.White)
 }
 
 // drawProfileButton dessine le bouton de changement de profil
@@ -197,9 +196,9 @@ func (t *TitleScreen) drawProfileButton(screen *ebiten.Image) {
 
 	// Texte du bouton
 	btnText := "PROFILS"
-	btnX := t.profileButtonRect.X + t.profileButtonRect.W/2 - len(btnText)*3
+	btnX := t.profileButtonRect.X + t.profileButtonRect.W/2 - textutil.MeasureWidth(btnText)/2
 	btnY := t.profileButtonRect.Y + t.profileButtonRect.H/2 + 4
-	text.Draw(screen, btnText, basicfont.Face7x13, btnX, btnY, color.White)
+	textutil.Draw(screen, btnText, btnX, btnY, color.White)
 }
 
 // Layout retourne la taille de l'écran titre

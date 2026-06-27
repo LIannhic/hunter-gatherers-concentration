@@ -10,6 +10,7 @@ import (
 func TestNewManager(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
+		func() []string { return nil },
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0 },
 		func() bool { return false },
@@ -25,6 +26,7 @@ func TestNewManager(t *testing.T) {
 func TestButtonActivationAtRest(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
+		func() []string { return nil },
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0 },
 		func() bool { return false },
@@ -52,6 +54,7 @@ func TestButtonActivationAtRest(t *testing.T) {
 func TestButtonActivationWhenTwoTilesRevealed(t *testing.T) {
 	m := NewManager(
 		func() int { return 2 },
+		func() []string { return nil },
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0.5 },
 		func() bool { return false },
@@ -71,6 +74,7 @@ func TestButtonActivationWhenTwoTilesRevealed(t *testing.T) {
 func TestBaseCoordinates(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
+		func() []string { return nil },
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0 },
 		func() bool { return false },
@@ -100,6 +104,7 @@ func TestImpairmentScrambling(t *testing.T) {
 
 	m := NewManager(
 		func() int { return 2 },
+		func() []string { return nil },
 		func() *player.Player { return p },
 		func() float64 { return 0 },
 		func() bool { return false },
@@ -123,6 +128,7 @@ func TestImpairmentScrambling(t *testing.T) {
 func TestHitTest(t *testing.T) {
 	m := NewManager(
 		func() int { return 2 },
+		func() []string { return nil },
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0.3 },
 		func() bool { return false },
@@ -149,6 +155,7 @@ func TestHitTest(t *testing.T) {
 func TestVictoryEndTurn(t *testing.T) {
 	m := NewManager(
 		func() int { return 0 },
+		func() []string { return nil },
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0 },
 		func() bool { return false },
@@ -170,6 +177,7 @@ func TestVictoryEndTurn(t *testing.T) {
 func TestTimerPanicSetsSkipAlert(t *testing.T) {
 	m := NewManager(
 		func() int { return 2 },
+		func() []string { return nil },
 		func() *player.Player { return player.New("test") },
 		func() float64 { return 0.2 },
 		func() bool { return true },
@@ -188,6 +196,7 @@ func TestAgnosiaSetsAllScrambled(t *testing.T) {
 
 	m := NewManager(
 		func() int { return 2 },
+		func() []string { return nil },
 		func() *player.Player { return p },
 		func() float64 { return 0 },
 		func() bool { return false },
@@ -208,6 +217,7 @@ func TestAphasiaAltersLabels(t *testing.T) {
 
 	m := NewManager(
 		func() int { return 0 },
+		func() []string { return nil },
 		func() *player.Player { return p },
 		func() float64 { return 0 },
 		func() bool { return false },
@@ -231,5 +241,27 @@ func TestAphasiaAltersLabels(t *testing.T) {
 	}
 	if !diff {
 		t.Error("Expected at least one label to be altered under Aphasia")
+	}
+}
+
+func TestRevealedEntitiesPropagation(t *testing.T) {
+	revealed := []string{"ent1", "ent2"}
+	m := NewManager(
+		func() int { return 2 },
+		func() []string { return revealed },
+		func() *player.Player { return player.New("test") },
+		func() float64 { return 0 },
+		func() bool { return false },
+		func() float64 { return 0 },
+		func() bool { return false },
+	)
+	states := m.ComputeStates()
+	for i := 0; i < 4; i++ {
+		if len(states[i].RevealedEntities) != 2 {
+			t.Errorf("Button %d: expected 2 revealed entities, got %d", i, len(states[i].RevealedEntities))
+		}
+		if states[i].RevealedEntities[0] != "ent1" || states[i].RevealedEntities[1] != "ent2" {
+			t.Errorf("Button %d: unexpected revealed entities content: %v", i, states[i].RevealedEntities)
+		}
 	}
 }

@@ -72,11 +72,14 @@ type Handler struct {
 	touchStartTime    time.Time
 	touchStartScreenX int
 	touchStartScreenY int
+	touchLastScreenX  int
+	touchLastScreenY  int
 	isDragging        bool
 	isLongPressFired  bool
 
 	// Gestion du tour de jeu memory
 	revealedEntities []string         // Entity IDs des tuiles révélées ce tour
+	confirmedRevealedEntities []string // Entity IDs dont l'animation de reveal est terminée
 	revealedGridIDs  []string         // GridID associé à chaque tuile révélée (pour cross-zone)
 	isProcessing     bool             // Évite les clics pendant l'animation / verrouille la grille quand 2 tuiles sont retournées
 	footstepTrackIDs []string         // FIFO des empreintes de pas (max 2 visibles)
@@ -108,6 +111,27 @@ func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
 		})
 		world.EventBus.SubscribeFunc(event.AnimationEnded, func(e event.Event) {
 			h.isProcessing = false
+			// Si c'est une animation de flip, on confirme la révélation de l'entité
+			if animType, ok := e.Payload["animation_type"].(string); ok && animType == "flip" {
+				// On vérifie si l'entité est dans la liste des révélées
+				for _, eid := range h.revealedEntities {
+					if eid == e.SourceID {
+						// On l'ajoute aux confirmées si pas déjà présente
+						alreadyConfirmed := false
+						for _, ceid := range h.confirmedRevealedEntities {
+							if ceid == eid {
+								alreadyConfirmed = true
+								break
+							}
+						}
+						if !alreadyConfirmed {
+							h.confirmedRevealedEntities = append(h.confirmedRevealedEntities, eid)
+						}
+						break
+					}
+				}
+			}
+
 			// Si un skip était en attente, on reset le timer maintenant
 			if h.skipPending {
 				if h.world != nil && h.world.TurnTimer != nil {
@@ -133,9 +157,6 @@ func NewHandler(world *domain.World, assocEng *domain.AssocEngine) *Handler {
 
 			// L'entrée est la direction OPPOSÉE
 			h.entranceDir = world.DreamPlane.OppositeDirection(arrivalDir)
-
-			// Crée une empreinte de pas à la position d'arrivée
-			h.spawnFootstepAtArrival(arrivalDir)
 
 			// Si la zone n'est pas "ouverte", on lance l'animation de scellage (Révélé -> Caché)
 			if !world.IsNavigationOpen(gridID) {
@@ -386,6 +407,7 @@ func (h *Handler) handleMouse() error {
        h.isLongPressFired = false
        h.isDragging = false
        h.touchStartScreenX, h.touchStartScreenY = h.GetInteractionPosition()
+       h.touchLastScreenX, h.touchLastScreenY = h.touchStartScreenX, h.touchStartScreenY
        return nil
     }
 
@@ -400,9 +422,11 @@ func (h *Handler) handleMouse() error {
           return nil
        }
 
+       h.touchLastScreenX, h.touchLastScreenY = currX, currY
+
        // Détection du Drag
        dist := math.Hypot(float64(currX-h.touchStartScreenX), float64(currY-h.touchStartScreenY))
-       if dist > 15.0 { // Augmenté légèrement à 15 pour la sensibilité mobile
+       if dist > 30.0 { // Augmenté à 30 pour la sensibilité mobile (éviter les faux drags lors des taps)
           h.isDragging = true
        }
 
@@ -444,13 +468,14 @@ func (h *Handler) handleMouse() error {
 
     // 3. Relâchement (Action finale)
     if h.IsJustReleased() {
-       if !h.isDragging && !h.isLongPressFired {
+       // Autorise l'action si on n'est pas en drag OU si on est en mode portail portable (drag-to-deploy)
+       if (!h.isDragging && !h.isLongPressFired) || h.portablePortalMode {
           // SUR MOBILE : Au relâchement, GetInteractionPosition() renvoie (-1, -1).
-          // On utilise donc touchStartScreenX/Y qui contiennent la position initiale du clic valide !
+          // On utilise donc touchLastScreenX/Y qui contiennent la dernière position valide !
           execX, execY := h.GetInteractionPosition()
           if execX == -1 && execY == -1 {
-             execX = h.touchStartScreenX
-             execY = h.touchStartScreenY
+             execX = h.touchLastScreenX
+             execY = h.touchLastScreenY
           }
           return h.executePrimaryActionAt(execX, execY)
        }
@@ -475,8 +500,8 @@ func (h *Handler) handleLongPress() {
 func (h *Handler) executePrimaryActionAt(x, y int) error {
     // SÉCURITÉ MOBILE : Si les coordonnées reçues suite au relâchement du doigt sont invalides
     if x == -1 && y == -1 {
-        x = h.touchStartScreenX
-        y = h.touchStartScreenY
+        x = h.touchLastScreenX
+        y = h.touchLastScreenY
     }
 
 // Priorité : gestion des clics sur les boutons d'action (même si isProcessing)
@@ -491,10 +516,12 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 	// Priorité : mode portail portable (même si isProcessing)
 	if h.portablePortalMode && h.OnUsePortablePortal != nil {
 		if pos, gridID, ok := h.renderer.ScreenToGrid(x, y, h.world); ok {
-			grid, _ := h.world.GetGrid(gridID)
-			if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
-				h.OnUsePortablePortal(gridID, pos)
-				return nil
+			if gridID != board.InventoryGridID {
+				grid, _ := h.world.GetGrid(gridID)
+				if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
+					h.OnUsePortablePortal(gridID, pos)
+					return nil
+				}
 			}
 		}
 	}
@@ -701,6 +728,7 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 					Position: pos,
 					OnSuccess: func() {
 					h.revealedEntities = nil
+					h.confirmedRevealedEntities = nil
 					h.revealedGridIDs = nil
 					h.isProcessing = false
 					h.ClearSelection()
@@ -950,6 +978,7 @@ func (h *Handler) hideRevealedTiles() {
 		}
 	}
 	h.revealedEntities = nil
+	h.confirmedRevealedEntities = nil
 	h.revealedGridIDs = nil
 }
 
@@ -1004,6 +1033,7 @@ func (h *Handler) processMergeAttempt() {
 	e2, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[1]))
 	if e1 == nil || e2 == nil {
 		h.revealedEntities = nil
+		h.confirmedRevealedEntities = nil
 		h.revealedGridIDs = nil
 		h.isProcessing = false
 		return
@@ -1020,6 +1050,7 @@ func (h *Handler) processMergeAttempt() {
 		OnSuccess: func() {
 			fmt.Printf("[MERGE] ✅ Succès !\n")
 			h.revealedEntities = nil
+			h.confirmedRevealedEntities = nil
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
@@ -1028,6 +1059,7 @@ func (h *Handler) processMergeAttempt() {
 		OnFailure: func() {
 			fmt.Printf("[MERGE] ❌ Échec !\n")
 			h.revealedEntities = nil
+			h.confirmedRevealedEntities = nil
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
@@ -1038,6 +1070,7 @@ func (h *Handler) processMergeAttempt() {
 	if err := cmd.Execute(); err != nil {
 		fmt.Printf("[MERGE] %v\n", err)
 		h.revealedEntities = nil
+		h.confirmedRevealedEntities = nil
 		h.revealedGridIDs = nil
 		h.isProcessing = false
 	}
@@ -1055,6 +1088,7 @@ func (h *Handler) processMatchAttempt() {
 	e2, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[1]))
 	if e1 == nil || e2 == nil {
 		h.revealedEntities = nil
+		h.confirmedRevealedEntities = nil
 		h.revealedGridIDs = nil
 		h.isProcessing = false
 		return
@@ -1082,6 +1116,7 @@ func (h *Handler) processMatchAttempt() {
 			h.OnVictory()
 		}
 		h.revealedEntities = nil
+		h.confirmedRevealedEntities = nil
 		h.revealedGridIDs = nil
 		h.isProcessing = false
 		h.ClearSelection()
@@ -1100,6 +1135,7 @@ func (h *Handler) processMatchAttempt() {
 		OnSuccess: func() {
 			fmt.Printf("[MATCH] ✅ Succès ! Paire de %s trouvée.\n", h.getEntityInfo(e1))
 			h.revealedEntities = nil
+			h.confirmedRevealedEntities = nil
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
@@ -1108,6 +1144,7 @@ func (h *Handler) processMatchAttempt() {
 		OnFailure: func() {
 			fmt.Printf("[MATCH] ❌ Échec ! %s et %s ne correspondent pas.\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
 			h.revealedEntities = nil
+			h.confirmedRevealedEntities = nil
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
@@ -1118,6 +1155,7 @@ func (h *Handler) processMatchAttempt() {
 	if err := cmd.Execute(); err != nil {
 		fmt.Printf("[MATCH] %v\n", err)
 		h.revealedEntities = nil
+		h.confirmedRevealedEntities = nil
 		h.revealedGridIDs = nil
 		h.isProcessing = false
 	}
@@ -1598,10 +1636,13 @@ func (h *Handler) GetCurrentGridID() string {
 	return h.world.CurrentGridID
 }
 
-// GetRevealedTiles retourne les tuiles révélées pendant le tour courant (nombre d'entités révélées).
-// Utilisé par le gestionnaire de boutons d'action pour le calcul réactif.
+// GetRevealedTiles retourne les tuiles révélées confirmées pendant le tour courant.
 func (h *Handler) GetRevealedTiles() int {
-	return len(h.revealedEntities)
+	return len(h.confirmedRevealedEntities)
+}
+
+func (h *Handler) GetRevealedEntities() []string {
+	return h.confirmedRevealedEntities
 }
 
 func (h *Handler) ClearSelection() {
@@ -1714,6 +1755,7 @@ func (h *Handler) ResetGameState() {
 	h.selectedTile = nil
 	h.selectedGridID = ""
 	h.revealedEntities = nil
+	h.confirmedRevealedEntities = nil
 	h.revealedGridIDs = nil
 	h.isProcessing = false
 	h.victoryTimer = nil
@@ -1865,49 +1907,6 @@ func (h *Handler) spawnFootstepTrack(clickX, clickY int, tilePos board.Position,
 		h.footstepTrackIDs = h.footstepTrackIDs[1:]
 		h.world.RemoveEntity(oldID)
 	}
-}
-
-// spawnFootstepAtArrival crée une empreinte de pas sur le bord de la tuile d'arrivée
-// quand le joueur entre dans une nouvelle zone.
-func (h *Handler) spawnFootstepAtArrival(arrivalDir entity.Direction) {
-	if !h.world.IsPlayerOnBoard() {
-		return
-	}
-	pos := h.world.GetPlayerPosition()
-	grid, ok := h.world.GetGrid(h.world.CurrentGridID)
-	if !ok || grid == nil {
-		return
-	}
-
-	tileSize := float64(h.renderer.GetTileSize())
-
-	// Direction vers l'intérieur du plateau (opposée à l'arrivée)
-	var dirX, dirY float64
-	switch arrivalDir {
-	case entity.DirNorth:
-		dirX, dirY = 0, 1
-	case entity.DirSouth:
-		dirX, dirY = 0, -1
-	case entity.DirEast:
-		dirX, dirY = -1, 0
-	case entity.DirWest:
-		dirX, dirY = 1, 0
-	default:
-		dirX, dirY = 0, 1
-	}
-
-	edgeDist := tileSize/2 + 4
-	offsetX := dirX * edgeDist
-	offsetY := dirY * edgeDist
-	angle := math.Atan2(-dirY, -dirX)
-
-	track := entity.NewTrack("footprints", 3, pos, pos)
-	track.SetGridID(h.world.CurrentGridID)
-	track.OffsetX = offsetX
-	track.OffsetY = offsetY
-	track.Angle = angle
-	h.world.Entities.Register(track)
-	h.footstepTrackIDs = append(h.footstepTrackIDs, string(track.GetID()))
 }
 
 // exitMatchable est un wrapper pour soumettre les sorties au moteur d'association

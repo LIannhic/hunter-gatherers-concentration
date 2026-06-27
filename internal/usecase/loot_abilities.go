@@ -250,87 +250,87 @@ func (a *StonewardenAbility) CanExecute(world *domain.World) bool {
 }
 
 func (a *StonewardenAbility) Execute(world *domain.World, level int) (string, error) {
-    gridID := world.CurrentGridID
-    grid, _ := world.GetGrid(gridID)
+	gridID := world.CurrentGridID
+	grid, _ := world.GetGrid(gridID)
 
-    var targetPlot *board.Plot
-    var sourcePos board.Position
-    maxHeight := 1
+	var targetPlot *board.Plot
+	var sourcePos board.Position
+	maxHeight := 1
 
-    // 1. Recherche de la pile la plus haute
-    for x := 0; x < grid.Width; x++ {
-       for y := 0; y < grid.Height; y++ {
-          pos := board.Position{X: x, Y: y}
-          plot, err := grid.Get(pos)
-          if err == nil && len(plot.EntitiesID) > maxHeight {
-             maxHeight = len(plot.EntitiesID)
-             targetPlot = plot
-             sourcePos = pos
-          }
-       }
-    }
+	// 1. Recherche de la pile la plus haute
+	for x := 0; x < grid.Width; x++ {
+		for y := 0; y < grid.Height; y++ {
+			pos := board.Position{X: x, Y: y}
+			plot, err := grid.Get(pos)
+			if err == nil && len(plot.EntitiesID) > maxHeight {
+				maxHeight = len(plot.EntitiesID)
+				targetPlot = plot
+				sourcePos = pos
+			}
+		}
+	}
 
-    if targetPlot == nil {
-       return "", errors.New("gardien de pierre inutilisable : aucune pile de tuiles trouvée")
-    }
+	if targetPlot == nil {
+		return "", errors.New("gardien de pierre inutilisable : aucune pile de tuiles trouvée")
+	}
 
-    directions := []board.Position{
-       {X: 0, Y: 1},   // Bas
-       {X: 1, Y: 1},   // Bas-Droite
-       {X: 1, Y: 0},   // Droite
-       {X: 1, Y: -1},  // Haut-Droite
-       {X: 0, Y: -1},  // Haut
-       {X: -1, Y: -1}, // Haut-Gauche
-       {X: -1, Y: 0},  // Gauche
-       {X: -1, Y: 1},  // Bas-Gauche
-    }
+	directions := []board.Position{
+		{X: 0, Y: 1},   // Bas
+		{X: 1, Y: 1},   // Bas-Droite
+		{X: 1, Y: 0},   // Droite
+		{X: 1, Y: -1},  // Haut-Droite
+		{X: 0, Y: -1},  // Haut
+		{X: -1, Y: -1}, // Haut-Gauche
+		{X: -1, Y: 0},  // Gauche
+		{X: -1, Y: 1},  // Bas-Gauche
+	}
 
-    dirAttempts := 0
-    maxAttempts := len(directions) * 5
+	dirAttempts := 0
+	maxAttempts := len(directions) * 5
 
-    // 2. DISPERSION LOGIQUE
-    for len(targetPlot.EntitiesID) > 0 && dirAttempts < maxAttempts {
-       offset := directions[dirAttempts%len(directions)]
-       dirAttempts++
+	// 2. DISPERSION LOGIQUE
+	for len(targetPlot.EntitiesID) > 0 && dirAttempts < maxAttempts {
+		offset := directions[dirAttempts%len(directions)]
+		dirAttempts++
 
-       adjPos := board.Position{X: sourcePos.X + offset.X, Y: sourcePos.Y + offset.Y}
-       adjPlot, err := grid.Get(adjPos)
-       if err != nil {
-          continue
-       }
+		adjPos := board.Position{X: sourcePos.X + offset.X, Y: sourcePos.Y + offset.Y}
+		adjPlot, err := grid.Get(adjPos)
+		if err != nil {
+			continue
+		}
 
-       currentAllowedHeight := 1 + (dirAttempts / len(directions))
-       if len(adjPlot.EntitiesID) > currentAllowedHeight {
-          continue
-       }
+		currentAllowedHeight := 1 + (dirAttempts / len(directions))
+		if len(adjPlot.EntitiesID) > currentAllowedHeight {
+			continue
+		}
 
-       topEntityID := targetPlot.EntitiesID[len(targetPlot.EntitiesID)-1]
+		topEntityID := targetPlot.EntitiesID[len(targetPlot.EntitiesID)-1]
 
-       // A. Notification visuelle de départ avec le mode unique "earthquake"
-       world.EventBus.PublishImmediate(event.NewCreatureMovedEvent(
-          topEntityID,
-          entity.Position(sourcePos),
-          entity.Position(adjPos),
-          "earthquake",
-          false,
-          false,
-       ))
+		// A. Notification visuelle de départ avec le mode unique "earthquake"
+		world.EventBus.PublishImmediate(event.NewCreatureMovedEvent(
+			topEntityID,
+			entity.Position(sourcePos),
+			entity.Position(adjPos),
+			"earthquake",
+			false,
+			false,
+		))
 
-       // B. Déplacement immédiat en mémoire vers la case adjacente cible
-       targetPlot.EntitiesID = targetPlot.EntitiesID[:len(targetPlot.EntitiesID)-1]
-       if ent, exists := world.Entities.Get(entity.ID(topEntityID)); exists {
-          ent.SetPosition(entity.Position(adjPos))
-          // L'état de l'entité (Revealed / Hidden) n'est PLUS modifié ici.
-          // Il reste intact pour préserver la logique du jeu après le vol.
-       }
-       adjPlot.EntitiesID = append(adjPlot.EntitiesID, topEntityID)
-       grid.Plots[adjPos] = adjPlot
-    }
+		// B. Déplacement immédiat en mémoire vers la case adjacente cible
+		targetPlot.EntitiesID = targetPlot.EntitiesID[:len(targetPlot.EntitiesID)-1]
+		if ent, exists := world.Entities.Get(entity.ID(topEntityID)); exists {
+			ent.SetPosition(entity.Position(adjPos))
+			// L'état de l'entité (Revealed / Hidden) n'est PLUS modifié ici.
+			// Il reste intact pour préserver la logique du jeu après le vol.
+		}
+		adjPlot.EntitiesID = append(adjPlot.EntitiesID, topEntityID)
+		grid.Plots[adjPos] = adjPlot
+	}
 
-    // Sauvegarde de l'état final de la parcelle d'origine
-    grid.Plots[sourcePos] = targetPlot
+	// Sauvegarde de l'état final de la parcelle d'origine
+	grid.Plots[sourcePos] = targetPlot
 
-    return fmt.Sprintf("[GARDIEN] Séisme en (%d,%d) ! Dispersion de la pile effectuée.", sourcePos.X, sourcePos.Y), nil
+	return fmt.Sprintf("[GARDIEN] Séisme en (%d,%d) ! Dispersion de la pile effectuée.", sourcePos.X, sourcePos.Y), nil
 }
 
 // --- ABILITY : FLEEING SPRITE ---
@@ -362,6 +362,7 @@ func (a *FlutterwingAbility) Execute(world *domain.World, level int) (string, er
 
 // --- ABILITY : MOSS TRUFFLE ---
 type MossTruffleAbility struct{}
+
 func (a *MossTruffleAbility) CanExecute(world *domain.World) bool { return true }
 func (a *MossTruffleAbility) Execute(world *domain.World, level int) (string, error) {
 	amount := applyLootScaling(15, level)
@@ -371,6 +372,7 @@ func (a *MossTruffleAbility) Execute(world *domain.World, level int) (string, er
 
 // --- ABILITY : ECHO CRYSTAL ---
 type EchoCrystalAbility struct{}
+
 func (a *EchoCrystalAbility) CanExecute(world *domain.World) bool { return true }
 func (a *EchoCrystalAbility) Execute(world *domain.World, level int) (string, error) {
 	amount := applyLootScaling(15, level)
@@ -380,6 +382,7 @@ func (a *EchoCrystalAbility) Execute(world *domain.World, level int) (string, er
 
 // --- ABILITY : VOID BLOOM ---
 type VoidBloomAbility struct{}
+
 func (a *VoidBloomAbility) CanExecute(world *domain.World) bool { return true }
 func (a *VoidBloomAbility) Execute(world *domain.World, level int) (string, error) {
 	amount := applyLootScaling(15, level)
@@ -389,6 +392,7 @@ func (a *VoidBloomAbility) Execute(world *domain.World, level int) (string, erro
 
 // --- ABILITY : SAND CORE ---
 type SandCoreAbility struct{}
+
 func (a *SandCoreAbility) CanExecute(world *domain.World) bool { return true }
 func (a *SandCoreAbility) Execute(world *domain.World, level int) (string, error) {
 	amount := applyLootScaling(5, level)

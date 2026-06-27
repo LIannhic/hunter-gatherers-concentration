@@ -23,14 +23,13 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/debug"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/hud"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/textutil"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/input"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/renderer"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/usecase"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/basicfont"
 )
 
 // Application est le conteneur principal du cycle de vie du jeu.
@@ -110,6 +109,7 @@ func NewApplication() (*Application, error) {
 	// 5.1 Configuration du gestionnaire réactif des boutons d'action
 	btnManager := actionbuttons.NewManager(
 		func() int { return app.Input.GetRevealedTiles() },
+		func() []string { return app.Input.GetRevealedEntities() },
 		func() *player.Player { return app.World.Player },
 		func() float64 {
 			if app.World.TurnTimer != nil {
@@ -1002,7 +1002,7 @@ func (app *Application) drawMenu(screen *ebiten.Image) {
 	app.TitleScreen.Render(screen, app.hasSaves)
 
 	if app.hasSaves {
-		text.Draw(screen, "[ CHANGER DE PROFIL ]", basicfont.Face7x13, 570, 405, color.RGBA{150, 150, 255, 255})
+		textutil.Draw(screen, "[ CHANGER DE PROFIL ]", 640-textutil.MeasureWidth("[ CHANGER DE PROFIL ]")/2, 405, color.RGBA{150, 150, 255, 255})
 	}
 
 	if app.SaveMenu.IsVisible() {
@@ -1083,7 +1083,7 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 	app.Renderer.RenderQuakeOverlay(screen, app.World)
 
 	if app.World.Entities.Count() == 0 {
-		text.Draw(screen, "Appuyez sur S pour spawner des entites", basicfont.Face7x13, 200, 300, color.RGBA{255, 255, 0, 255})
+		textutil.Draw(screen, "Appuyez sur S pour spawner des entites", 200, 300, color.RGBA{255, 255, 0, 255})
 	}
 }
 
@@ -1098,8 +1098,8 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{40, 20, 20, 255}, true)
 	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 3, color.RGBA{255, 100, 100, 255}, true)
 
-	text.Draw(screen, "GAME OVER", basicfont.Face7x13, x+250, y+50, color.RGBA{255, 100, 100, 255})
-	text.Draw(screen, "Statistiques épuisées. Votre voyage s'arrête ici.", basicfont.Face7x13, x+120, y+100, color.White)
+	textutil.Draw(screen, "GAME OVER", x+250, y+50, color.RGBA{255, 100, 100, 255})
+	textutil.Draw(screen, "Statistiques épuisées. Votre voyage s'arrête ici.", x+120, y+100, color.White)
 
 	btnW, btnH := 160, 40
 
@@ -1108,13 +1108,13 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	by := y + 300
 	vector.DrawFilledRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), color.RGBA{80, 40, 40, 255}, true)
 	vector.StrokeRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
-	text.Draw(screen, "REJOUER", basicfont.Face7x13, bx1+50, by+25, color.White)
+	textutil.Draw(screen, "REJOUER", bx1+50, by+25, color.White)
 
 	// Bouton MENU
 	bx2 := x + 340
 	vector.DrawFilledRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), color.RGBA{40, 40, 40, 255}, true)
 	vector.StrokeRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
-	text.Draw(screen, "MENU", basicfont.Face7x13, bx2+60, by+25, color.White)
+	textutil.Draw(screen, "MENU", bx2+60, by+25, color.White)
 }
 
 // findEmptyPosition localise aléatoirement une parcelle exempte d'obstacles et d'entités.

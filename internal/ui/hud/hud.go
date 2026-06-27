@@ -18,10 +18,9 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	dbg "github.com/LIannhic/hunter-gatherers-concentration/internal/ui/debug"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/textutil"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/basicfont"
 )
 
 // BoardRenderer minimal interface for HUD
@@ -474,7 +473,7 @@ func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
     ty := y + (hBox / 2) + 5
 
     // On dessine sur msgImg en coordonnées absolues (repère screen)
-    text.Draw(msgImg, active.Text, basicfont.Face7x13, int(x+active.X), int(ty), color.RGBA{255, 255, 230, 255})
+    textutil.Draw(msgImg, active.Text, int(x+active.X), int(ty), color.RGBA{255, 255, 230, 255})
 }
 
 func (h *HUD) renderJuicyCombo(screen *ebiten.Image) {
@@ -492,7 +491,7 @@ func (h *HUD) renderJuicyCombo(screen *ebiten.Image) {
 
 	// Position dans la combo zone (au-dessus des jauges)
 	baseX := ui.ComboZoneX + ui.ComboZoneW/2
-	baseY := ui.ComboZoneY + ui.ComboZoneH/2 + h.comboMsg.YOffset
+	baseY := ui.ComboZoneY + ui.ComboZoneH/2 + ui.ComboTextOffY + h.comboMsg.YOffset
 
 	fmt.Printf("[HUD] renderJuicyCombo: text=%q, baseX=%.1f, baseY=%.1f, timer=%d, juiciness=%d\n",
 		h.comboMsg.Text, float64(baseX), baseY, h.comboMsg.Timer, h.comboMsg.Juiciness)
@@ -565,16 +564,16 @@ func (h *HUD) renderJuicyCombo(screen *ebiten.Image) {
 
 	// Outline noir
 	for _, d := range [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
-		text.Draw(screen, textStr, basicfont.Face7x13, int(tx)+d[0], int(ty)+d[1], black)
+		textutil.Draw(screen, textStr, int(tx)+d[0], int(ty)+d[1], black)
 	}
 
 	// Texte coloré par-dessus
-	text.Draw(screen, textStr, basicfont.Face7x13, int(tx), int(ty), clr)
+	textutil.Draw(screen, textStr, int(tx), int(ty), clr)
 
 	// Affiche le multiplicateur
 	if h.comboMsg.Count > 1 {
 		countText := fmt.Sprintf("x%d", h.comboMsg.Count)
-		text.Draw(screen, countText, basicfont.Face7x13, int(tx+tw+5+popScale), int(ty+popScale), color.RGBA{255, 255, 255, 255})
+		textutil.Draw(screen, countText, int(tx+tw+5+popScale), int(ty+popScale), color.RGBA{255, 255, 255, 255})
 	}
 }
 
@@ -621,7 +620,7 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 	// Bouton Fermer (Style identique à I et L)
 	closeX, closeY := x+winW-30, y+10
 	vector.DrawFilledRect(screen, float32(closeX), float32(closeY), 20, 20, color.RGBA{150, 50, 50, 255}, true)
-	text.Draw(screen, "X", basicfont.Face7x13, closeX+6, closeY+15, color.White)
+	textutil.Draw(screen, "X", closeX+6, closeY+15, color.White)
 
 	// Définition des stades par ressource (pour navigation dans l'atlas)
 	resourceStages := map[string][]string{
@@ -679,7 +678,7 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 	}
 
 	title := fmt.Sprintf("ATLAS DES ASSETS - Page %d/%d", h.assetPage+1, maxPage+1)
-	text.Draw(screen, title, basicfont.Face7x13, x+20, y+30, color.RGBA{200, 200, 255, 255})
+	textutil.Draw(screen, title, x+20, y+30, color.RGBA{200, 200, 255, 255})
 
 	// Boutons de pagination
 	if h.assetPage > 0 {
@@ -741,7 +740,7 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		}
 
 		// Nom de l'asset
-		text.Draw(screen, asset.name, basicfont.Face7x13, ax, ay+105, color.White)
+		textutil.Draw(screen, asset.name, ax, ay+105, color.White)
 
 		// Affichage de la clé nettoyée (sans préfixes, en majuscules)
 		cleanKey := asset.key
@@ -750,17 +749,17 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		cleanKey = strings.TrimPrefix(cleanKey, "resource_")
 		cleanKey = strings.ToUpper(cleanKey)
 
-		text.Draw(screen, "["+cleanKey+"]", basicfont.Face7x13, ax, ay-10, color.RGBA{150, 150, 150, 255})
+		textutil.Draw(screen, "["+cleanKey+"]", ax, ay-10, color.RGBA{150, 150, 150, 255})
 
 		// Flèches de navigation de stade (pour ressources avec stades)
 		if hasStages {
 			arrowColor := color.RGBA{180, 180, 200, 255}
 			stageName := stages[stageIdx]
 			stageNameX := ax + (88-len(stageName)*7)/2
-			text.Draw(screen, stageName, basicfont.Face7x13, stageNameX, ay+85, arrowColor)
+			textutil.Draw(screen, stageName, stageNameX, ay+85, arrowColor)
 
-			text.Draw(screen, "<", basicfont.Face7x13, ax+2, ay+85, arrowColor)
-			text.Draw(screen, ">", basicfont.Face7x13, ax+78, ay+85, arrowColor)
+			textutil.Draw(screen, "<", ax+2, ay+85, arrowColor)
+			textutil.Draw(screen, ">", ax+78, ay+85, arrowColor)
 		}
 	}
 }
@@ -774,7 +773,7 @@ func (h *HUD) drawButton(screen *ebiten.Image, x, y, w, buttonH float32, label s
 	tx := int(x) + (int(w)-tw)/2
 	ty := int(y) + (int(buttonH)+10)/2
 
-	text.Draw(screen, label, basicfont.Face7x13, tx, ty, color.White)
+	textutil.Draw(screen, label, tx, ty, color.White)
 }
 
 // renderVictoryWindow dessine l'écran de victoire
@@ -790,9 +789,9 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{20, 40, 20, 255}, true)
 	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 3, color.RGBA{100, 255, 100, 255}, true)
 
-	text.Draw(screen, "VICTOIRE !", basicfont.Face7x13, x+250, y+50, color.RGBA{100, 255, 100, 255})
-	text.Draw(screen, "Vous avez franchi le portail final.", basicfont.Face7x13, x+150, y+80, color.White)
-	text.Draw(screen, "Appuyez sur ESC pour retourner au menu.", basicfont.Face7x13, x+130, y+100, color.RGBA{150, 150, 150, 255})
+	textutil.Draw(screen, "VICTOIRE !", x+250, y+50, color.RGBA{100, 255, 100, 255})
+	textutil.Draw(screen, "Vous avez franchi le portail final.", x+150, y+80, color.White)
+	textutil.Draw(screen, "Appuyez sur ESC pour retourner au menu.", x+130, y+100, color.RGBA{150, 150, 150, 255})
 
 	// Calcul des gains
 	totalValue := 0
@@ -810,9 +809,9 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	}
 
 	statsY := y + 150
-	text.Draw(screen, fmt.Sprintf("Ressources collectées : %d", resourceCount), basicfont.Face7x13, x+100, statsY, color.White)
-	text.Draw(screen, fmt.Sprintf("Créatures capturées : %d", creatureCount), basicfont.Face7x13, x+100, statsY+30, color.White)
-	text.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d XP", totalValue), basicfont.Face7x13, x+100, statsY+70, color.RGBA{255, 255, 100, 255})
+	textutil.Draw(screen, fmt.Sprintf("Ressources collectées : %d", resourceCount), x+100, statsY, color.White)
+	textutil.Draw(screen, fmt.Sprintf("Créatures capturées : %d", creatureCount), x+100, statsY+30, color.White)
+	textutil.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d XP", totalValue), x+100, statsY+70, color.RGBA{255, 255, 100, 255})
 
 	// Boutons
 	btnW, btnH := 160, 40
@@ -822,15 +821,15 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	by := y + 300
 	vector.DrawFilledRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), color.RGBA{40, 80, 40, 255}, true)
 	vector.StrokeRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
-	text.Draw(screen, "REJOUER", basicfont.Face7x13, bx1+50, by+25, color.White)
+	textutil.Draw(screen, "REJOUER", bx1+50, by+25, color.White)
 
 	// Bouton MENU
 	bx2 := x + 340
 	vector.DrawFilledRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), color.RGBA{80, 40, 40, 255}, true)
 	vector.StrokeRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
-	text.Draw(screen, "MENU", basicfont.Face7x13, bx2+60, by+25, color.White)
+	textutil.Draw(screen, "MENU", bx2+60, by+25, color.White)
 
-	text.Draw(screen, "Appuyez sur ESC pour retourner au menu.", basicfont.Face7x13, x+130, y+360, color.RGBA{150, 150, 150, 255})
+	textutil.Draw(screen, "Appuyez sur ESC pour retourner au menu.", x+130, y+360, color.RGBA{150, 150, 150, 255})
 }
 
 func (h *HUD) HandleVictoryClick(mx, my int) string {
@@ -952,28 +951,28 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	btnMColor := color.RGBA{150, 150, 150, 255}
 	// On pourrait ajouter un effet de survol ici si on avait accès à la souris
 	vector.DrawFilledRect(screen, float32(mx), float32(my), float32(ui.MenuIconSize), float32(ui.MenuIconSize), btnMColor, true)
-	text.Draw(screen, "M", basicfont.Face7x13, int(mx)+15, int(my)+25, color.Black)
+	textutil.Draw(screen, "M", int(mx)+15, int(my)+25, color.Black)
 
 	// Turn and Difficulty (aligned)
 	infoX := int(ui.PortraitX) + 60
 	infoY := int(ui.PortraitY) + 25
-	text.Draw(screen, fmt.Sprintf("T:%d", h.world.Turn), basicfont.Face7x13, infoX, infoY, color.White)
+	textutil.Draw(screen, fmt.Sprintf("T:%d", h.world.Turn), infoX, infoY, color.White)
 
 	diffLabel := fmt.Sprintf("D:%s", h.world.Difficulty.Level)
 	dx := infoX + 60
-	text.Draw(screen, diffLabel, basicfont.Face7x13, dx, infoY, color.RGBA{255, 200, 100, 255})
+	textutil.Draw(screen, diffLabel, dx, infoY, color.RGBA{255, 200, 100, 255})
 
 	// Score (XP Totale)
 	scoreLabel := fmt.Sprintf("S:%d", h.world.Player.Stats.TotalExperience)
 	sx := dx + 85
-	text.Draw(screen, scoreLabel, basicfont.Face7x13, sx, infoY, color.RGBA{100, 255, 100, 255})
+	textutil.Draw(screen, scoreLabel, sx, infoY, color.RGBA{100, 255, 100, 255})
 
 	// Zone de clic pour changer la difficulté (Cartouche)
 	// (0,0) est PortraitX, PortraitY. On capture le clic dans HandleClick
 
 	// --- COLUMN LEFT: CONTROLS ---
 	y := int(ui.PortraitY) + 85
-	text.Draw(screen, "ACTION:", basicfont.Face7x13, int(ui.PortraitX)+10, y-15, color.RGBA{100, 200, 255, 255})
+	textutil.Draw(screen, "ACTION:", int(ui.PortraitX)+10, y-15, color.RGBA{100, 200, 255, 255})
 
 	controls := []string{
 		"CLIC: Ouvrir",
@@ -988,14 +987,14 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 		"ESC: Menu",
 	}
 	for _, c := range controls {
-		text.Draw(screen, c, basicfont.Face7x13, int(ui.PortraitX)+10, y, color.RGBA{160, 160, 160, 255})
+		textutil.Draw(screen, c, int(ui.PortraitX)+10, y, color.RGBA{160, 160, 160, 255})
 		y += 18
 	}
 
 	// --- COLUMN RIGHT: CURRENT GRID DETAILS ---
 	rx := int(ui.PortraitX) + 125
 	ry := int(ui.PortraitY) + 85
-	text.Draw(screen, "SUR ZONE:", basicfont.Face7x13, rx, ry-15, color.RGBA{100, 200, 255, 255})
+	textutil.Draw(screen, "SUR ZONE:", rx, ry-15, color.RGBA{100, 200, 255, 255})
 
 	counts := h.getGridDetailedCounts(h.world.CurrentGridID)
 
@@ -1011,7 +1010,7 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 			label = label[:12]
 		}
 		info := fmt.Sprintf("%s:%d", label, counts[k])
-		text.Draw(screen, info, basicfont.Face7x13, rx, ry, color.White)
+		textutil.Draw(screen, info, rx, ry, color.White)
 		ry += 16
 		if ry > int(ui.PortraitY)+int(ui.PortraitH)-20 {
 			break
@@ -1019,14 +1018,14 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	}
 
 	if len(keys) == 0 {
-		text.Draw(screen, "(Zone vide)", basicfont.Face7x13, rx, ry, color.RGBA{150, 150, 150, 255})
+		textutil.Draw(screen, "(Zone vide)", rx, ry, color.RGBA{150, 150, 150, 255})
 	}
 
 	// Menu Icon
 	mxIcon := ui.PortraitX + ui.MenuIconRelativeX
 	myIcon := ui.PortraitY + ui.MenuIconRelativeY
 	vector.DrawFilledRect(screen, float32(mxIcon), float32(myIcon), float32(ui.MenuIconSize), float32(ui.MenuIconSize), color.RGBA{150, 150, 150, 255}, true)
-	text.Draw(screen, "M", basicfont.Face7x13, int(mxIcon)+15, int(myIcon)+25, color.Black)
+	textutil.Draw(screen, "M", int(mxIcon)+15, int(myIcon)+25, color.Black)
 
 	// Fullscreen Icon
 	fxIcon := ui.PortraitX + ui.FullscreenIconRelativeX
@@ -1036,7 +1035,7 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	if ebiten.IsFullscreen() {
 		fsLabel = "W"
 	}
-	text.Draw(screen, fsLabel, basicfont.Face7x13, int(fxIcon)+15, int(fyIcon)+25, color.Black)
+	textutil.Draw(screen, fsLabel, int(fxIcon)+15, int(fyIcon)+25, color.Black)
 }
 
 func (h *HUD) renderInventory(screen *ebiten.Image) {
@@ -1055,7 +1054,7 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 		}
 	}
 	vector.StrokeRect(screen, ui.InventoryX, ui.InventoryY, ui.InventoryW, ui.InventoryH, 1, panelClr, true)
-	text.Draw(screen, "INVENTORY", basicfont.Face7x13, int(ui.InventoryX)+10, int(ui.InventoryY)+20, color.RGBA{100, 200, 255, 255})
+	textutil.Draw(screen, "INVENTORY", int(ui.InventoryX)+10, int(ui.InventoryY)+20, color.RGBA{100, 200, 255, 255})
 
 	items := inv.Items
 
@@ -1074,7 +1073,7 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 	lcx := ui.InventoryX + ui.LootCounterRelativeX
 	lcy := ui.InventoryY + ui.LootCounterRelativeY
 	vector.DrawFilledRect(screen, float32(lcx), float32(lcy), float32(ui.LootCounterSize), float32(ui.LootCounterSize), color.RGBA{50, 50, 50, 255}, true)
-	text.Draw(screen, fmt.Sprintf("%d", len(items)), basicfont.Face7x13, int(lcx)+15, int(lcy)+25, color.White)
+	textutil.Draw(screen, fmt.Sprintf("%d", len(items)), int(lcx)+15, int(lcy)+25, color.White)
 
 	dlx := ui.InventoryX + ui.DeleteLootRelativeX
 	dly := ui.InventoryY + ui.DeleteLootRelativeY
@@ -1084,10 +1083,10 @@ func (h *HUD) renderInventory(screen *ebiten.Image) {
 		btnXClr = color.RGBA{255, 50, 50, 255} // Bright red if active
 	}
 	vector.DrawFilledRect(screen, float32(dlx), float32(dly), float32(ui.DeleteLootSize), float32(ui.DeleteLootSize), btnXClr, true)
-	text.Draw(screen, "X", basicfont.Face7x13, int(dlx)+15, int(dly)+25, color.White)
+	textutil.Draw(screen, "X", int(dlx)+15, int(dly)+25, color.White)
 
 	if inv.IsFull() {
-		text.Draw(screen, "FULL", basicfont.Face7x13, int(ui.InventoryX)+ui.InventoryW/2-15, int(ui.InventoryY)+ui.InventoryH-10, color.RGBA{255, 165, 0, 255})
+		textutil.Draw(screen, "FULL", int(ui.InventoryX)+ui.InventoryW/2-15, int(ui.InventoryY)+ui.InventoryH-10, color.RGBA{255, 165, 0, 255})
 	}
 }
 
@@ -1164,7 +1163,7 @@ func (h *HUD) drawVerticalGauge(screen *ebiten.Image, x, y float64, label string
 	vector.DrawFilledRect(screen, float32(x), float32(y+float64(totalPx-fillHeight)), float32(ui.GaugeW), fillHeight, clr, true)
 
 	// Label
-	text.Draw(screen, label, basicfont.Face7x13, int(x)+25, int(y)+int(ui.GaugeH)+15, color.White)
+	textutil.Draw(screen, label, int(x)+25, int(y)+int(ui.GaugeH)+15, color.White)
 }
 
 func (h *HUD) renderMiniMap(screen *ebiten.Image) {
@@ -1319,13 +1318,13 @@ func (h *HUD) renderDetailWindow(screen *ebiten.Image) {
 	vector.StrokeRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), 2, color.RGBA{100, 100, 150, 255}, true)
 
 	// Titre
-	text.Draw(screen, "STATISTIQUES DES ZONES", basicfont.Face7x13, winX+20, winY+30, color.RGBA{100, 200, 255, 255})
+	textutil.Draw(screen, "STATISTIQUES DES ZONES", winX+20, winY+30, color.RGBA{100, 200, 255, 255})
 
 	// Icone fermer (X)
 	closeX := winX + winW - 30
 	closeY := winY + 10
 	vector.DrawFilledRect(screen, float32(closeX), float32(closeY), 20, 20, color.RGBA{150, 50, 50, 255}, true)
-	text.Draw(screen, "X", basicfont.Face7x13, closeX+6, closeY+15, color.White)
+	textutil.Draw(screen, "X", closeX+6, closeY+15, color.White)
 
 	// Liste des zones (L'ancienne liste du portrait)
 	dy := winY + 70
@@ -1337,7 +1336,7 @@ func (h *HUD) renderDetailWindow(screen *ebiten.Image) {
 		if gridID == h.world.CurrentGridID {
 			clr = color.RGBA{255, 255, 0, 255}
 		}
-		text.Draw(screen, info, basicfont.Face7x13, winX+30, dy, clr)
+		textutil.Draw(screen, info, winX+30, dy, clr)
 		dy += 20
 	}
 }
@@ -1353,20 +1352,20 @@ func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
 	vector.StrokeRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), 2, color.RGBA{100, 150, 100, 255}, true)
 
 	// Titre
-	text.Draw(screen, "CONTENU DE L'INVENTAIRE", basicfont.Face7x13, winX+20, winY+30, color.RGBA{100, 255, 100, 255})
+	textutil.Draw(screen, "CONTENU DE L'INVENTAIRE", winX+20, winY+30, color.RGBA{100, 255, 100, 255})
 
 	// Icone fermer (X)
 	closeX := winX + winW - 30
 	closeY := winY + 10
 	vector.DrawFilledRect(screen, float32(closeX), float32(closeY), 20, 20, color.RGBA{150, 50, 50, 255}, true)
-	text.Draw(screen, "X", basicfont.Face7x13, closeX+6, closeY+15, color.White)
+	textutil.Draw(screen, "X", closeX+6, closeY+15, color.White)
 
 	// Liste des items
 	inv := h.world.Player.Inventory
 	dy := winY + 70
 
 	if len(inv.Items) == 0 {
-		text.Draw(screen, "(Inventaire vide)", basicfont.Face7x13, winX+30, dy, color.RGBA{150, 150, 150, 255})
+		textutil.Draw(screen, "(Inventaire vide)", winX+30, dy, color.RGBA{150, 150, 150, 255})
 		return
 	}
 
@@ -1384,7 +1383,7 @@ func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
 
 	for _, k := range keys {
 		info := fmt.Sprintf("%-20s x%d", k, counts[k])
-		text.Draw(screen, info, basicfont.Face7x13, winX+30, dy, color.White)
+		textutil.Draw(screen, info, winX+30, dy, color.White)
 		dy += 20
 		if dy > winY+winH-20 {
 			break
