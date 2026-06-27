@@ -45,7 +45,7 @@ func (dw *DebugWindow) initCaches() {
 	sort.Strings(dw.sortedEntities)
 
 	// Shaders purement environnementaux (Biome)
-	dw.sortedShaders = []string{"cave", "heat", "rain", "wave"}
+	dw.sortedShaders = []string{"cave", "heat", "rain", "vortex", "wave"}
 	sort.Strings(dw.sortedShaders)
 }
 

@@ -154,6 +154,21 @@ func (w *World) hasEntitiesIn3x3Area(grid *board.Grid, center board.Position) bo
 	return false
 }
 
+func (w *World) hasStructuresIn3x3Area(grid *board.Grid, center board.Position) bool {
+	for dy := 0; dy < 3; dy++ {
+		for dx := 0; dx < 3; dx++ {
+			plot, err := grid.Get(board.Position{X: center.X - 1 + dx, Y: center.Y - 1 + dy})
+			if err != nil {
+				continue
+			}
+			if plot.StructureID != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (w *World) clear3x3DeploymentArea(grid *board.Grid, center board.Position) {
 	// 1. On crée une liste pour collecter TOUTES les entités de la zone 3x3
 	idsToRemove := make([]string, 0)
@@ -272,6 +287,9 @@ func (w *World) DeployPortablePortalAt(gridID string, center board.Position) (en
 	} else {
 		if !w.isValid3x3DeploymentCenter(grid, center) {
 			return nil, errors.New("zone de déploiement invalide")
+		}
+		if w.hasStructuresIn3x3Area(grid, center) {
+			return nil, errors.New("impossible de déployer sur une case avec une structure")
 		}
 		if !w.is3x3DeploymentAreaClear(grid, center) {
 			forced = true

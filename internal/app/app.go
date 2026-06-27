@@ -777,6 +777,13 @@ func (app *Application) updatePlaying() error {
 			if prevSelectedIdx == newSelectedIdx && newSelectedIdx != -1 {
 				selectedItem := app.HUD.GetSelectedLootItem()
 
+				// Recliquer sur un portail portable désactive le mode déploiement
+				if selectedItem != nil && selectedItem.SourceID == player.PortablePortalItemSourceID {
+					app.HUD.ClearActiveLootSelection()
+					app.Input.SetPortablePortalMode(false)
+					return nil
+				}
+
 				if selectedItem != nil {
 					inventoryIdx := -1
 					for i, item := range app.World.Player.Inventory.Items {
@@ -1070,6 +1077,7 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 			UseWave:     app.World.Debug.ActiveShaders["wave"],
 			UseHeat:     app.World.Debug.ActiveShaders["heat"],
 			UseCave:     app.World.Debug.ActiveShaders["cave"],
+			UseVortex:   app.World.Debug.ActiveShaders["vortex"],
 			PortalPos:   portalPos,
 			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},

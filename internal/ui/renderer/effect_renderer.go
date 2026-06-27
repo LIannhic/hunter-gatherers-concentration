@@ -171,6 +171,7 @@ type GlobalEffectParams struct {
 	UseWave     bool
 	UseHeat     bool
 	UseCave     bool
+	UseVortex   bool
 	PortalPos   []float32 // [x, y] normalized, nil if none
 	MousePos    []float32 // [x, y] normalized
 	ScreenSize  []float32 // [width, height] pixels
@@ -182,7 +183,7 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	intensity := float32(math.Pow(float64(1.0-params.SanityRatio), 2))
 
 	// On vérifie si on doit appliquer des shaders même sans intensité de folie
-	shouldApply := intensity > 0 || params.UseBlur || params.UseBubble || params.UseRain || params.Biome != "" || params.PortalPos != nil
+	shouldApply := intensity > 0 || params.UseBlur || params.UseBubble || params.UseRain || params.Biome != "" || params.PortalPos != nil || params.UseVortex
 
 	if !shouldApply {
 		return
@@ -247,8 +248,16 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	}
 
 	// 3. Special Static Effects (Vortex for Portal)
-	if params.PortalPos != nil {
-		r.applyShader(src, dst, "vortex", 1.0, params.PortalPos, params.ScreenSize)
+	if params.UseVortex || params.PortalPos != nil {
+		vortexCenter := params.PortalPos
+		if vortexCenter == nil && params.UseVortex {
+			// Mode debug : centre du playmat comme fallback
+			vortexCenter = []float32{
+				float32(ui.PlaymatX+ui.PlaymatW/2) / params.ScreenSize[0],
+				float32(ui.PlaymatY+ui.PlaymatH/2) / params.ScreenSize[1],
+			}
+		}
+		r.applyShader(src, dst, "vortex", 1.0, vortexCenter, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}

@@ -20,7 +20,8 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	}
 
 	// 1. Transition ultra-douce (Feathering) aux bordures du vortex
-	edgeDecline := smoothstep(radius, radius-50.0, dist)
+	// smoothstep nécessite edge0 < edge1 (comportement indéfini sinon → NaN)
+	edgeDecline := 1.0 - smoothstep(radius-50.0, radius, dist)
 	eyeIncline := smoothstep(eyeRadius, eyeRadius+15.0, dist)
 	mask := edgeDecline * eyeIncline
 
@@ -56,8 +57,9 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	// Mix fluide entre la texture d'origine et la déformation
 	finalPos := mix(pos, rotatedPos, mask)
 
-	// Vérification des bornes avant échantillonnage
-	samplePos := finalPos + center
+	// Échantillonnage par déplacement (patron cohérent avec bubble/wave/blur/rain)
+	offset := finalPos - pos
+	samplePos := srcPos + offset
 	if samplePos.x < 0.0 || samplePos.x > Resolution.x || samplePos.y < 0.0 || samplePos.y > Resolution.y {
 		return imageSrc0At(srcPos)
 	}
