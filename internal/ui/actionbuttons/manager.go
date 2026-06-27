@@ -142,7 +142,11 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 		states[BtnMerge].Active = true
 		states[BtnMatch].Active = true
 	}
-	states[BtnEndTurn].Active = true
+	// TURN est actif sauf quand 2+ tuiles sont révélées (le joueur doit choisir)
+	// Exception : victoire active (END GAME)
+	if revealedCount < 2 || (m.isVictoryActive != nil && m.isVictoryActive()) {
+		states[BtnEndTurn].Active = true
+	}
 
 	// --- V0.2 : TRANSITION END GAME ---
 	if m.isVictoryActive != nil && m.isVictoryActive() {
@@ -153,13 +157,22 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 		}
 	}
 
-	// --- FEEDBACK TEMPS RÉEL : Remplissage du bouton Skip ---
+	// --- FEEDBACK TEMPS RÉEL : Remplissage des boutons Skip et Turn ---
 	if m.getTimerProgress != nil {
-		states[BtnSkip].FillProgress = m.getTimerProgress()
+		timerProgress := m.getTimerProgress()
+		states[BtnSkip].FillProgress = timerProgress
 		states[BtnSkip].FillAlert = states[BtnSkip].FillProgress >= 1.0
+		// Turn utilise le timer seulement si la victoire n'est pas active
+		if !(m.isVictoryActive != nil && m.isVictoryActive()) {
+			states[BtnEndTurn].FillProgress = timerProgress
+			states[BtnEndTurn].FillAlert = states[BtnEndTurn].FillProgress >= 1.0
+		}
 	}
 	if m.getTimerPanic != nil && m.getTimerPanic() {
 		states[BtnSkip].FillAlert = true
+		if !(m.isVictoryActive != nil && m.isVictoryActive()) {
+			states[BtnEndTurn].FillAlert = true
+		}
 	}
 
 	// --- TROUBLES COGNITIFS ---

@@ -72,6 +72,12 @@ type BoardRenderer struct {
 	// Scratch buffer pour le rendu des boutons (évite les allocations par frame)
 	buttonScratch *ebiten.Image
 
+	// Buffer pour la rotation des boutons SKIP/TURN
+	buttonRotateBuffer *ebiten.Image
+
+	// Animations d'icônes de bouton (clé = buttonID)
+	buttonIconAnims map[int]*ButtonIconAnim
+
 	// Effet Lumifly actif (nil si aucun)
 	lumiflyEffect *LumiflyEffect
 
@@ -174,6 +180,7 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		trackRenderer:        NewTrackRenderer(ui.TileSize),
 		pendingHits:          make(map[string]entity.Position),
 		buttonScratch:        ebiten.NewImage(int(math.Round(ui.ActionButtonW)), 30),
+		buttonIconAnims:      make(map[int]*ButtonIconAnim),
 	}
 	// Initialise le gestionnaire d'animations lié au renderer
 	r.AnimManager = NewAnimationManager(r)
@@ -882,15 +889,24 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 	rightFrameY := y + float32(ui.ButtonIconRelativeY)
 	vector.StrokeRect(screen, rightFrameX, rightFrameY, float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), 1, borderColor, true)
 
-	// Rendu des icônes
-	if len(s.RevealedEntities) >= 1 {
-		if ent, ok := world.Entities.Get(entity.ID(s.RevealedEntities[0])); ok {
-			r.renderButtonIcon(screen, float64(leftFrameX), float64(leftFrameY), ent)
+	// Rendu des icônes — géré par le système d'animation
+	animButtonID := r.AnimatingButtonID()
+	if animButtonID >= 0 && r.IsButtonAnimating(int(s.ID)) {
+		// Ce bouton a une animation active : dessiner les silhouettes animées
+		r.renderAnimatedButtonIcons(screen, float64(x), float64(y), int(s.ID), world)
+	} else if animButtonID >= 0 {
+		// Un autre bouton est en animation : les copies sur ce bouton sont supprimées (cadres vides)
+	} else {
+		// Pas d'animation : dessin statique normal
+		if len(s.RevealedEntities) >= 1 {
+			if ent, ok := world.Entities.Get(entity.ID(s.RevealedEntities[0])); ok {
+				r.renderButtonIcon(screen, float64(leftFrameX), float64(leftFrameY), ent)
+			}
 		}
-	}
-	if len(s.RevealedEntities) >= 2 {
-		if ent, ok := world.Entities.Get(entity.ID(s.RevealedEntities[1])); ok {
-			r.renderButtonIcon(screen, float64(rightFrameX), float64(rightFrameY), ent)
+		if len(s.RevealedEntities) >= 2 {
+			if ent, ok := world.Entities.Get(entity.ID(s.RevealedEntities[1])); ok {
+				r.renderButtonIcon(screen, float64(rightFrameX), float64(rightFrameY), ent)
+			}
 		}
 	}
 }
@@ -941,6 +957,133 @@ func (r *BoardRenderer) renderButtonIcon(screen *ebiten.Image, x, y float64, ent
 	op.ColorScale.ScaleWithColor(color.White)
 
 	screen.DrawImage(icon, op)
+}
+
+// renderAnimatedButtonIcons dessine les silhouettes animées d'un bouton d'action
+func (r *BoardRenderer) renderAnimatedButtonIcons(screen *ebiten.Image, btnX, btnY float64, buttonID int, world *domain.World) {
+	state := r.GetButtonIconAnimState(buttonID)
+	if state == nil {
+		return
+	}
+
+	// Récupérer les entités depuis l'animation
+	anim := r.buttonIconAnims[buttonID]
+	if anim == nil {
+		return
+	}
+
+	// Rendu du bouton avec rotation (SKIP/TURN)
+	if state.ButtonRotation != 0 {
+		r.renderRotatedButton(screen, btnX, btnY, buttonID, state.ButtonRotation, world)
+	}
+
+	// Dessiner la silhouette gauche si elle a une entité
+	if anim.Entity1 != nil {
+		r.renderAnimatedIcon(screen, state.LeftX, state.LeftY, state.LeftAlpha, state.LeftScale, anim.Entity1)
+	}
+
+	// Dessiner la silhouette droite si elle a une entité
+	if anim.Entity2 != nil {
+		r.renderAnimatedIcon(screen, state.RightX, state.RightY, state.RightAlpha, state.RightScale, anim.Entity2)
+	}
+}
+
+// renderAnimatedIcon dessine une icône animée avec position, alpha et scale customisés
+func (r *BoardRenderer) renderAnimatedIcon(screen *ebiten.Image, posX, posY, alpha, scale float64, ent entity.Entity) {
+	if alpha <= 0.01 {
+		return
+	}
+
+	iconSize := float64(ui.ButtonIconSize) * 0.8
+
+	var icon *ebiten.Image
+	switch e := ent.(type) {
+	case *domain.Creature:
+		icon = r.assets.GetCreatureSilhouette(e.Species)
+	case *domain.Resource:
+		stageName := e.Lifecycle.GetCurrentStageName()
+		icon = r.assets.GetResourceSilhouette(e.ResourceType, stageName)
+	case *player.LootItem:
+		if e.OriginalType == entity.TypeCreature {
+			icon = r.assets.GetCreatureSilhouette(e.SourceID)
+		} else if e.OriginalType == entity.TypeResource {
+			icon = r.assets.GetResourceSilhouette(e.SourceID, "")
+		}
+	default:
+		if ent.GetType() == entity.TypeTrap {
+			icon = r.assets.GetTrapSilhouette()
+		}
+	}
+
+	if icon == nil {
+		return
+	}
+
+	op := &ebiten.DrawImageOptions{}
+	w, h := icon.Size()
+
+	// 1. Centrer l'origine
+	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+
+	// 2. Appliquer la transformation de l'entité (orientation)
+	r.ApplyTransformation(&op.GeoM, ent.GetTransformation())
+
+	// 3. Scale avec facteur d'animation
+	finalScale := (iconSize / float64(w)) * scale
+	op.GeoM.Scale(finalScale, finalScale)
+
+	// 4. Positionner
+	op.GeoM.Translate(posX, posY)
+
+	// 5. Alpha pour fondu sortant
+	op.ColorScale.ScaleWithColor(color.RGBA{255, 255, 255, uint8(alpha * 255)})
+
+	screen.DrawImage(icon, op)
+}
+
+// renderRotatedButton redessine le bouton avec une rotation (SKIP/TURN)
+func (r *BoardRenderer) renderRotatedButton(screen *ebiten.Image, btnX, btnY float64, buttonID int, rotation float64, world *domain.World) {
+	// Taille du buffer avec marge pour la rotation
+	btnW := ui.ActionButtonW
+	btnH := ui.ActionButtonH
+	bufW := int(math.Ceil(math.Sqrt(btnW*btnW+btnH*btnH))) + 4
+	bufH := bufW
+
+	// Lazy init du buffer de rotation
+	if r.buttonRotateBuffer == nil || r.buttonRotateBuffer.Bounds().Dx() != bufW || r.buttonRotateBuffer.Bounds().Dy() != bufH {
+		r.buttonRotateBuffer = ebiten.NewImage(bufW, bufH)
+	}
+	r.buttonRotateBuffer.Clear()
+
+	// Dessiner le bouton dans le buffer (centré)
+	offX := float64(bufW)/2 - btnW/2
+	offY := float64(bufH)/2 - btnH/2
+
+	bgColor := color.RGBA{60, 60, 80, 255}
+	vector.FillRect(r.buttonRotateBuffer, float32(offX), float32(offY), float32(btnW), float32(btnH), bgColor, true)
+
+	borderColor := color.RGBA{200, 200, 255, 255}
+	vector.StrokeRect(r.buttonRotateBuffer, float32(offX), float32(offY), float32(btnW), float32(btnH), 1, borderColor, true)
+
+	// Label du bouton
+	labels := [4]string{"MATCH", "SKIP", "TURN", "MERGE"}
+	if buttonID >= 0 && buttonID < 4 {
+		label := labels[buttonID]
+		txtW := textutil.MeasureWidth(label)
+		tx := offX + (btnW-float64(txtW))/2
+		ty := offY + float64(ui.ButtonTextRelativeY) + 15
+		textutil.Draw(r.buttonRotateBuffer, label, int(tx), int(ty), color.White)
+	}
+
+	// Dessiner le buffer avec rotation sur l'écran
+	op := &ebiten.DrawImageOptions{}
+	// Pivot au centre du buffer
+	op.GeoM.Translate(-float64(bufW)/2, -float64(bufH)/2)
+	op.GeoM.Rotate(rotation)
+	// Positionner au centre du bouton à l'écran
+	op.GeoM.Translate(btnX+btnW/2, btnY+btnH/2)
+
+	screen.DrawImage(r.buttonRotateBuffer, op)
 }
 
 func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, dir entity.Direction, world *domain.World, forceReveal bool, isLocalToPlaymat bool) {

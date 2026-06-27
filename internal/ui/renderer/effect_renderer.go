@@ -168,6 +168,10 @@ type GlobalEffectParams struct {
 	UseBlur     bool
 	UseBubble   bool
 	UseRain     bool
+	UseWave     bool
+	UseHeat     bool
+	UseCave     bool
+	UseVortex   bool
 	PortalPos   []float32 // [x, y] normalized, nil if none
 	MousePos    []float32 // [x, y] normalized
 	ScreenSize  []float32 // [width, height] pixels
@@ -179,7 +183,7 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	intensity := float32(math.Pow(float64(1.0-params.SanityRatio), 2))
 
 	// On vérifie si on doit appliquer des shaders même sans intensité de folie
-	shouldApply := intensity > 0 || params.UseBlur || params.UseBubble || params.UseRain || params.Biome != "" || params.PortalPos != nil
+	shouldApply := intensity > 0 || params.UseBlur || params.UseBubble || params.UseRain || params.Biome != "" || params.PortalPos != nil || params.UseVortex
 
 	if !shouldApply {
 		return
@@ -200,36 +204,35 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	}
 
 	// Initialisation : on copie l'écran actuel dans Buffer A (Source)
+	// NOTE: Pas de ping-pong avec BlendCopy ici, on veut une source stable
 	r.bufferA.Clear()
 	r.bufferA.DrawImage(screen, nil)
 	src := r.bufferA
 	dst := r.bufferB
 
 	anyApplied := false
+	applyCave := params.Biome == "cave" || params.UseCave
 
-	// 1. Biome Effects (Wave for Swamp, Heat for Desert, Rain for Forest)
-	if params.Biome == "swamp" {
+	// 1. Biome & Environmental Effects (Cumulative)
+	if params.Biome == "swamp" || params.UseWave {
 		r.applyShader(src, dst, "wave", shaderIntensity, nil, params.ScreenSize)
-		src, dst = dst, src // Ping-pong
+		src, dst = dst, src
 		anyApplied = true
-	} else if params.Biome == "desert" {
+	}
+	if params.Biome == "desert" || params.UseHeat {
 		r.applyShader(src, dst, "heat", shaderIntensity, nil, params.ScreenSize)
-		src, dst = dst, src // Ping-pong
+		src, dst = dst, src
 		anyApplied = true
-	} else if params.Biome == "forest" {
+	}
+	if params.Biome == "forest" || params.UseRain {
 		r.applyShader(src, dst, "rain", shaderIntensity, nil, params.ScreenSize)
-		src, dst = dst, src // Ping-pong
-		anyApplied = true
-	} else if params.Biome == "cave" {
-		hudLights := r.buildHudLights()
-		r.applyCaveShader(src, dst, shaderIntensity, params.ScreenSize, hudLights)
-		src, dst = dst, src // Ping-pong
+		src, dst = dst, src
 		anyApplied = true
 	}
 
-	// 2. Creature Attack Effects — mapping linéaire [min, 1.0] sur la plage de sanité
+	// 2. Creature Attack Effects
 	if params.UseBubble {
-		bubbleMin := float32(0.45) // Min 88px radius = taille d'une tuile
+		bubbleMin := float32(0.45)
 		bubbleIntensity := bubbleMin + (1.0-bubbleMin)*intensity
 		r.applyShader(src, dst, "bubble", bubbleIntensity, params.MousePos, params.ScreenSize)
 		src, dst = dst, src
@@ -237,29 +240,41 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 	}
 
 	if params.UseBlur {
-		blurMin := float32(0.4) // Min 0.8px offset = flou léger perceptible
+		blurMin := float32(0.4)
 		blurIntensity := blurMin + (1.0-blurMin)*intensity
 		r.applyShader(src, dst, "blur", blurIntensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
-	if params.UseRain {
-		r.applyShader(src, dst, "rain", shaderIntensity, nil, params.ScreenSize)
+	// 3. Special Static Effects (Vortex for Portal)
+	if params.UseVortex || params.PortalPos != nil {
+		vortexCenter := params.PortalPos
+		if vortexCenter == nil && params.UseVortex {
+			// Mode debug : centre du playmat comme fallback
+			vortexCenter = []float32{
+				float32(ui.PlaymatX+ui.PlaymatW/2) / params.ScreenSize[0],
+				float32(ui.PlaymatY+ui.PlaymatH/2) / params.ScreenSize[1],
+			}
+		}
+		r.applyShader(src, dst, "vortex", 1.0, vortexCenter, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
-	// 3. Special Static Effects (Vortex for Portal)
-	if params.PortalPos != nil {
-		r.applyShader(src, dst, "vortex", 1.0, params.PortalPos, params.ScreenSize)
+	// 4. Cave Shader (appliqué en DERNIER, cumulatif)
+	if applyCave {
+		hudLights := r.buildHudLights()
+		r.applyCaveShader(src, dst, shaderIntensity, params.ScreenSize, hudLights)
 		src, dst = dst, src
 		anyApplied = true
 	}
 
 	// Rendu final : On recopie le dernier Buffer (src) sur l'écran
 	if anyApplied {
-		screen.DrawImage(src, nil)
+		op := &ebiten.DrawImageOptions{}
+		op.Blend = ebiten.BlendCopy // Remplace l'image sans superposition
+		screen.DrawImage(src, op)
 	}
 }
 

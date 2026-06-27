@@ -1428,28 +1428,7 @@ func (h *HUD) HandleClick(x, y int) bool {
 			return true
 		}
 
-		// Boutons Pagination
-		allAssetsCount := 32 // Nombre total d'assets dans la liste
-		itemsPerPage := 15
-		maxPage := (allAssetsCount - 1) / itemsPerPage
-
-		// Bouton Précédent
-		if h.assetPage > 0 {
-			if fx >= float32(wx+20) && fx <= float32(wx+120) && fy >= float32(wy+winH-40) && fy <= float32(wy+winH-15) {
-				h.assetPage--
-				return true
-			}
-		}
-
-		// Bouton Suivant
-		if h.assetPage < maxPage {
-			if fx >= float32(wx+winW-120) && fx <= float32(wx+winW-20) && fy >= float32(wy+winH-40) && fy <= float32(wy+winH-15) {
-				h.assetPage++
-				return true
-			}
-		}
-
-		// Flèches de navigation de stade dans les cellules
+		// Définition des stades par ressource (pour navigation dans l'atlas)
 		resourceStages := map[string][]string{
 			"resource_dreamberry":      {"bourgeon", "fleur", "fruit", "gâté"},
 			"resource_whispering_herb": {"graine", "pousse", "mature"},
@@ -1459,16 +1438,7 @@ func (h *HUD) HandleClick(x, y int) bool {
 			"resource_sand_core":       {"instable", "stable"},
 		}
 
-		colWidth := 150
-		rowHeight := 140
-		itemsPerRow := 5
-
-		startIdx := h.assetPage * itemsPerPage
-		endIdx := startIdx + itemsPerPage
-		if endIdx > allAssetsCount {
-			endIdx = allAssetsCount
-		}
-
+		// Liste des assets à montrer
 		allAssets := []struct {
 			name string
 			key  string
@@ -1505,6 +1475,36 @@ func (h *HUD) HandleClick(x, y int) bool {
 			{"Echo Crystal", "resource_echo_crystal"},
 			{"Sand Core", "resource_sand_core"},
 			{"Shadow Essence", "resource_shadow_essence"},
+		}
+
+		// Boutons Pagination
+		itemsPerPage := 15
+		maxPage := (len(allAssets) - 1) / itemsPerPage
+
+		// Bouton Précédent
+		if h.assetPage > 0 {
+			if fx >= float32(wx+20) && fx <= float32(wx+120) && fy >= float32(wy+winH-40) && fy <= float32(wy+winH-15) {
+				h.assetPage--
+				return true
+			}
+		}
+
+		// Bouton Suivant
+		if h.assetPage < maxPage {
+			if fx >= float32(wx+winW-120) && fx <= float32(wx+winW-20) && fy >= float32(wy+winH-40) && fy <= float32(wy+winH-15) {
+				h.assetPage++
+				return true
+			}
+		}
+
+		colWidth := 150
+		rowHeight := 140
+		itemsPerRow := 5
+
+		startIdx := h.assetPage * itemsPerPage
+		endIdx := startIdx + itemsPerPage
+		if endIdx > len(allAssets) {
+			endIdx = len(allAssets)
 		}
 
 		for i := startIdx; i < endIdx; i++ {

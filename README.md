@@ -179,10 +179,37 @@ Quatre boutons fixes occupent les coins du Playmat. Leur accessibilité est pure
 
 | Bouton | Position | Comportement |
 |--------|----------|--------------|
-| **MATCH** | Haut-gauche | Capture la paire. Donne du butin (Loot). |
-| **SKIP** | Haut-droite | Actif uniquement quand 2 tuiles sont retournées. Referme les tuiles et consomme le tour. |
-| **TURN** | Bas-gauche | Toujours actif. Force la fin du tour. Consomme 1 Sanité par défaut. |
-| **MERGE** | Bas-droite | Fusionne la paire en une version plus forte (Niveau +1). Se recache. |
+| **MATCH** | Haut-gauche | Capture la paire. Donne du butin (Loot). Actif quand 2+ tuiles retournées. |
+| **SKIP** | Haut-droite | Referme les tuiles et consomme le tour. Actif uniquement quand 2+ tuiles sont retournées. |
+| **TURN** | Bas-gauche | Force la fin du tour. **Désactivé** quand 2+ tuiles sont retournées (le joueur doit choisir entre MATCH/MERGE/SKIP). Toujours actif sinon. |
+| **MERGE** | Bas-droite | Fusionne la paire en une version plus forte (Niveau +1). Se recache. Actif quand 2+ tuiles retournées. |
+
+#### Remplissage des boutons (Timer)
+
+Les boutons **SKIP** et **TURN** affichent un remplissage progressif correspondant au timer du tour :
+- **Phase normale** : Remplissage violet (progression du timer)
+- **Phase de panique** (< 3s) : Fond rouge d'alerte
+- **Agnosia** : Le remplissage passe du Noir vers le Blanc, masquant progressivement le contenu du bouton
+- **Victoire active** : Le remplissage de TURN est remplacé par le progress de la victoire (barre verte)
+
+### Animations d'icônes de bouton
+
+Lorsque le joueur clique sur un bouton d'action, les mini-silhouettes des entités affichées dans les cadres d'icônes du bouton jouent une animation :
+
+| État | Bouton cible | Animation |
+|------|-------------|-----------|
+| 0 ou 1 tuile révélée | **TURN** | Le bouton pivotent (rotation 360°) et les silhouettes sont éjectées avec fondu sortante |
+| 2+ tuiles révélées | **SKIP** | Le bouton pivotent (rotation 360°) et les silhouettes sont éjectées avec fondu sortante |
+| MATCH/MERGE **valide** | **MATCH** ou **MERGE** | Les silhouettes se rapprochent du centre, se superposent, puis disparaissent en fondu |
+| MATCH/MERGE **invalide** | **MATCH** ou **MERGE** | Les silhouettes se rapprochent brièvement, puis sont éjectées hors du cadre avec fondu sortante |
+
+**Règle de suppression** : Quand un bouton joue son animation, les copies de silhouettes sur les 3 autres boutons disparaissent immédiatement. Seul le bouton activé garde ses silhouettes pendant l'animation.
+
+**Déclencheurs** :
+- Clic sur **SKIP** → animation sur SKIP (ID 1)
+- Clic sur **TURN** → animation sur TURN (ID 2)
+- Touche **Espace** → adapte le bouton selon l'état (SKIP si 2 tuiles, TURN sinon)
+- **Timer expiré** → animation sur SKIP si 2+ tuiles révélées, sur TURN sinon
 
 ### Fusion et Cumul (MERGE vs MATCH)
 
