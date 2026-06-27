@@ -749,6 +749,9 @@ func (app *Application) updatePlaying() error {
 
 	app.Engine.UpdateFrame(dt)
 
+	// Met à jour les animations d'icônes des boutons d'action
+	app.Renderer.UpdateButtonIconAnims(dt)
+
 	// Met à jour les messages HUD après le ProcessQueue pour traiter les événements fraîchement dispatchés
 	app.HUD.UpdateMessageAreas()
 
@@ -1064,16 +1067,12 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 			UseBlur:     app.World.Player.VisualEffects["blur"] > 0 || app.World.Debug.ActiveShaders["blur"],
 			UseBubble:   (app.World.Player.VisualEffects["bubble"] > 0 || app.World.Debug.ActiveShaders["bubble"]) && isOverPlaymat,
 			UseRain:     app.World.Player.VisualEffects["rain"] > 0 || app.World.Debug.ActiveShaders["rain"],
+			UseWave:     app.World.Debug.ActiveShaders["wave"],
+			UseHeat:     app.World.Debug.ActiveShaders["heat"],
+			UseCave:     app.World.Debug.ActiveShaders["cave"],
 			PortalPos:   portalPos,
 			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},
-		}
-
-		// Shaders forcés par biome
-		if app.World.Debug.ActiveShaders["wave"] {
-			params.Biome = "swamp"
-		} else if app.World.Debug.ActiveShaders["heat"] {
-			params.Biome = "desert"
 		}
 
 		app.EffectRenderer.ProcessGlobalEffects(screen, params)

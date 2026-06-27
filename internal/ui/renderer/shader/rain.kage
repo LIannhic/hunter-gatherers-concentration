@@ -9,8 +9,8 @@ func hash12(p vec2) float {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123)
 }
 
-func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
-	uv := position.xy / Resolution.y
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	uv := dstPos.xy / Resolution.y
 
 	// Colonnes : plus il y a d'intensité, plus il y a de cordes de pluie
 	cols := 5.0 + 7.0 * Intensity
@@ -56,7 +56,7 @@ func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
 		distortion = refractionDir * waterMask * distortionStrength
 	}
 
-	baseColor := imageSrc0At(position.xy + distortion)
+	baseColor := imageSrc0At(srcPos + distortion)
 
 	// Opacité générale pilotée par l'intensité (sanité)
 	alpha := (0.1 + 0.9 * Intensity) * waterMask

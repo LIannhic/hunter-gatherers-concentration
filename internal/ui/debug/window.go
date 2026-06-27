@@ -15,16 +15,38 @@ type DebugWindow struct {
 	world *domain.World
 	x, y  float32
 	w, h  float32
+
+	// Caches pour éviter les allocations/tris par frame et garantir la cohérence des clics
+	sortedEntities []string
+	sortedShaders  []string
 }
 
 func NewDebugWindow(world *domain.World) *DebugWindow {
-	return &DebugWindow{
+	dw := &DebugWindow{
 		world: world,
 		x:     100,
 		y:     50,
 		w:     1080,
 		h:     620,
 	}
+	dw.initCaches()
+	return dw
+}
+
+func (dw *DebugWindow) initCaches() {
+	dw.sortedEntities = []string{
+		// Creatures
+		"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey", "stonewarden", "flutterwing",
+		// Resources
+		"dreamberry", "moonstone", "whispering_herb", "crystal_shard", "moss_truffle", "void_bloom", "echo_crystal", "sand_core",
+		// Special
+		"trap", "start_portal", "finish_portal", "dolmen", "obelisk", "portable_portal",
+	}
+	sort.Strings(dw.sortedEntities)
+
+	// Shaders purement environnementaux (Biome)
+	dw.sortedShaders = []string{"cave", "heat", "rain", "wave"}
+	sort.Strings(dw.sortedShaders)
 }
 
 func (dw *DebugWindow) Render(screen *ebiten.Image) {
@@ -125,17 +147,7 @@ func (dw *DebugWindow) renderCreatures(screen *ebiten.Image) {
 	startY := dw.y + 250
 	textutil.Draw(screen, "ALLOWED ENTITIES (for random spawn)", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
-	entities := []string{
-		// Creatures
-		"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey", "stonewarden", "flutterwing",
-		// Resources
-		"dreamberry", "moonstone", "whispering_herb", "crystal_shard", "moss_truffle", "void_bloom", "echo_crystal", "sand_core",
-		// Special
-		"trap", "start_portal", "finish_portal", "dolmen", "obelisk", "portable_portal",
-	}
-	sort.Strings(entities)
-
-	for i, e := range entities {
+	for i, e := range dw.sortedEntities {
 		row := i / 4
 		col := i % 4
 		cx := startX + float32(col*185)
@@ -148,12 +160,9 @@ func (dw *DebugWindow) renderCreatures(screen *ebiten.Image) {
 func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
 	startX := dw.x + 800
 	startY := dw.y + 70
-	textutil.Draw(screen, "ENVIRONMENT SHADERS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "ENVIRONMENTAL SHADERS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
-	shaders := []string{"blur", "bubble", "heat", "wave", "rain"}
-	sort.Strings(shaders)
-
-	for i, s := range shaders {
+	for i, s := range dw.sortedShaders {
 		cy := startY + 30 + float32(i*30)
 		dw.drawCheckbox(screen, startX, cy, s, dw.world.Debug.ActiveShaders[s])
 	}
@@ -162,17 +171,19 @@ func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
 func (dw *DebugWindow) renderImpairments(screen *ebiten.Image) {
 	startX := dw.x + 800
 	startY := dw.y + 250
-	textutil.Draw(screen, "COGNITIVE IMPAIRMENTS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "INFLICTIONS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
 
 	p := dw.world.Player
 	if p == nil {
 		return
 	}
 
-	dw.drawCheckbox(screen, startX, startY+30, "Aphasia (Echo Hound)", p.AphasiaTurns > 0)
-	dw.drawCheckbox(screen, startX, startY+60, "Ataxia (Burrower)", p.AtaxiaTurns > 0)
-	dw.drawCheckbox(screen, startX, startY+90, "Agnosia (Moss Monkey)", p.AgnosiaTurns > 0)
-	dw.drawCheckbox(screen, startX, startY+120, "Amnesia (Specter)", p.AmnesiaTurns > 0)
+	dw.drawCheckbox(screen, startX, startY+30, "Blur (Shadowstalker)", dw.world.Debug.ActiveShaders["blur"])
+	dw.drawCheckbox(screen, startX, startY+60, "Bubble (Lumifly)", dw.world.Debug.ActiveShaders["bubble"])
+	dw.drawCheckbox(screen, startX, startY+90, "Aphasia (Echo Hound)", p.AphasiaTurns > 0)
+	dw.drawCheckbox(screen, startX, startY+120, "Ataxia (Burrower)", p.AtaxiaTurns > 0)
+	dw.drawCheckbox(screen, startX, startY+150, "Agnosia (Moss Monkey)", p.AgnosiaTurns > 0)
+	dw.drawCheckbox(screen, startX, startY+180, "Amnesia (Specter)", p.AmnesiaTurns > 0)
 }
 
 func (dw *DebugWindow) drawButton(screen *ebiten.Image, x, y float32, label, id string) {
@@ -307,20 +318,15 @@ func (dw *DebugWindow) handleClickDifficulty(mx, my float32) {
 func (dw *DebugWindow) handleClickCreatures(mx, my float32) {
 	startX := dw.x + 20
 	startY := dw.y + 250
-	entities := []string{
-		"lumifly", "shadowstalker", "burrower", "specter", "echo_hound", "fleeing_sprite", "moss_monkey", "stonewarden", "flutterwing",
-		"dreamberry", "moonstone", "whispering_herb", "crystal_shard", "moss_truffle", "void_bloom", "echo_crystal", "sand_core",
-		"trap", "start_portal", "finish_portal", "dolmen", "obelisk", "portable_portal",
-	}
-	sort.Strings(entities)
 
-	for i, e := range entities {
+	for i, e := range dw.sortedEntities {
 		row := i / 4
 		col := i % 4
 		cx := startX + float32(col*185)
 		cy := startY + 30 + float32(row*30)
 
-		if dw.isInside(mx, my, cx, cy, 16, 16) {
+		// Clique sur le checkbox OU son label (cx à cx+180)
+		if dw.isInside(mx, my, cx, cy, 180, 20) {
 			dw.world.Debug.AllowedCreatures[e] = !dw.world.Debug.AllowedCreatures[e]
 		}
 	}
@@ -329,12 +335,11 @@ func (dw *DebugWindow) handleClickCreatures(mx, my float32) {
 func (dw *DebugWindow) handleClickShaders(mx, my float32) {
 	startX := dw.x + 800
 	startY := dw.y + 70
-	shaders := []string{"blur", "bubble", "heat", "wave", "rain"}
-	sort.Strings(shaders)
 
-	for i, s := range shaders {
+	for i, s := range dw.sortedShaders {
 		cy := startY + 30 + float32(i*30)
-		if dw.isInside(mx, my, startX, cy, 16, 16) {
+		// Clique sur le checkbox OU son label
+		if dw.isInside(mx, my, startX, cy, 200, 20) {
 			dw.world.Debug.ActiveShaders[s] = !dw.world.Debug.ActiveShaders[s]
 			// Sync with player visual effects for immediate feedback
 			if dw.world.Player != nil {
@@ -356,16 +361,42 @@ func (dw *DebugWindow) handleClickImpairments(mx, my float32) {
 		return
 	}
 
-	if dw.isInside(mx, my, startX, startY+30, 16, 16) {
+	// Blur
+	if dw.isInside(mx, my, startX, startY+30, 200, 20) {
+		dw.world.Debug.ActiveShaders["blur"] = !dw.world.Debug.ActiveShaders["blur"]
+		if dw.world.Player != nil {
+			if dw.world.Debug.ActiveShaders["blur"] {
+				dw.world.Player.VisualEffects["blur"] = 999
+			} else {
+				dw.world.Player.VisualEffects["blur"] = 0
+			}
+		}
+	}
+	// Bubble
+	if dw.isInside(mx, my, startX, startY+60, 200, 20) {
+		dw.world.Debug.ActiveShaders["bubble"] = !dw.world.Debug.ActiveShaders["bubble"]
+		if dw.world.Player != nil {
+			if dw.world.Debug.ActiveShaders["bubble"] {
+				dw.world.Player.VisualEffects["bubble"] = 999
+			} else {
+				dw.world.Player.VisualEffects["bubble"] = 0
+			}
+		}
+	}
+	// Aphasia
+	if dw.isInside(mx, my, startX, startY+90, 200, 20) {
 		if p.AphasiaTurns > 0 { p.AphasiaTurns = 0 } else { p.AphasiaTurns = 10 }
 	}
-	if dw.isInside(mx, my, startX, startY+60, 16, 16) {
+	// Ataxia
+	if dw.isInside(mx, my, startX, startY+120, 200, 20) {
 		if p.AtaxiaTurns > 0 { p.AtaxiaTurns = 0 } else { p.AtaxiaTurns = 10 }
 	}
-	if dw.isInside(mx, my, startX, startY+90, 16, 16) {
+	// Agnosia
+	if dw.isInside(mx, my, startX, startY+150, 200, 20) {
 		if p.AgnosiaTurns > 0 { p.AgnosiaTurns = 0 } else { p.AgnosiaTurns = 10 }
 	}
-	if dw.isInside(mx, my, startX, startY+120, 16, 16) {
+	// Amnesia
+	if dw.isInside(mx, my, startX, startY+180, 200, 20) {
 		if p.AmnesiaTurns > 0 { p.AmnesiaTurns = 0 } else { p.AmnesiaTurns = 10 }
 	}
 }

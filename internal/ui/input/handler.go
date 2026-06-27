@@ -29,6 +29,8 @@ type Renderer interface {
 	NotifyHover(entityID string, dir entity.FlipDirection)
 	DecayHoverStates(activeThisFrame map[string]bool)
 	GetTileCenter(pos board.Position, grid *board.Grid) (float64, float64)
+	StartButtonIconAnim(animType string, isValid bool, entity1ID, entity2ID string, targetButtonID actionbuttons.ButtonID, world *domain.World)
+	IsButtonAnimating(buttonID int) bool
 }
 
 type Handler struct {
@@ -802,7 +804,7 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 		fmt.Println("[ACTION] Bouton Skip activé")
 		h.skipPending = true
 		h.isProcessing = true
-		h.processSkip()
+		h.processSkip(actionbuttons.BtnSkip)
 		// Si aucune animation n'est lancée immédiatement, on reset tout de suite
 		if h.world.TurnTimer != nil {
 			if len(h.world.Components.QueryByComponent("moving_animation")) == 0 {
@@ -824,7 +826,7 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 
 		h.skipPending = true
 		h.isProcessing = true
-		h.processSkip()
+		h.processSkip(actionbuttons.BtnEndTurn)
 
 		// Si aucune animation n'est lancée immédiatement, on reset tout de suite
 		if h.world.TurnTimer != nil {
@@ -853,7 +855,17 @@ func (h *Handler) endTurn() {
 }
 
 // processSkip recache les tuiles révélées et termine le tour.
-func (h *Handler) processSkip() {
+// skipButtonID identifie le bouton à animer (SKIP ou END TURN).
+func (h *Handler) processSkip(skipButtonID actionbuttons.ButtonID) {
+	// Animation d'éjection des silhouettes — uniquement si pas déjà déclenchée
+	if !h.renderer.IsButtonAnimating(1) && !h.renderer.IsButtonAnimating(2) {
+		if len(h.revealedEntities) >= 2 {
+			h.renderer.StartButtonIconAnim("eject", false, h.revealedEntities[0], h.revealedEntities[1], skipButtonID, h.world)
+		} else if len(h.revealedEntities) == 1 {
+			h.renderer.StartButtonIconAnim("eject", false, h.revealedEntities[0], "", skipButtonID, h.world)
+		}
+	}
+
 	// Si rien à cacher, on balance quand même TOUTES les tuiles de la grille avant la fin de tour
 	if len(h.revealedEntities) == 0 {
 		h.hideAllTilesInGrid()
@@ -1041,6 +1053,11 @@ func (h *Handler) processMergeAttempt() {
 	pos1 := e1.GetPosition()
 	pos2 := e2.GetPosition()
 
+	// Pré-calcul du résultat pour l'animation d'icônes
+	result, errAssoc := h.assocEngine.TryAssociate(e1, e2)
+	isValid := (errAssoc == nil && result.Success)
+	h.renderer.StartButtonIconAnim("merge", isValid, h.revealedEntities[0], h.revealedEntities[1], actionbuttons.BtnMerge, h.world)
+
 	cmd := &usecase.MergeTilesCommand{
 		World:    h.world,
 		AssocEng: h.assocEngine,
@@ -1124,6 +1141,11 @@ func (h *Handler) processMatchAttempt() {
 	}
 
 	fmt.Printf("[MATCH] Comparaison de la paire : %s vs %s\n", h.getEntityInfo(e1), h.getEntityInfo(e2))
+
+	// Pré-calcul du résultat pour l'animation d'icônes
+	result, errAssoc := h.assocEngine.TryAssociate(e1, e2)
+	isValid := (errAssoc == nil && result.Success)
+	h.renderer.StartButtonIconAnim("match", isValid, h.revealedEntities[0], h.revealedEntities[1], actionbuttons.BtnMatch, h.world)
 
 	cmd := &usecase.MatchTilesCommand{
 		World:    h.world,
@@ -1216,7 +1238,12 @@ func (h *Handler) handleKeyboard() {
 		fmt.Println("[ACTION] Touche Espace activée")
 		h.skipPending = true
 		h.isProcessing = true
-		h.processSkip()
+		// Space anime le bouton actif : SKIP si 2 tuiles, TURN sinon
+		if len(h.revealedEntities) >= 2 {
+			h.processSkip(actionbuttons.BtnSkip)
+		} else {
+			h.processSkip(actionbuttons.BtnEndTurn)
+		}
 
 		// Si aucune animation n'est lancée immédiatement, on reset tout de suite
 		if h.world.TurnTimer != nil {
@@ -1744,6 +1771,13 @@ func (h *Handler) formatState(state entity.TileState) string {
 // ResetTimerSkip est appelé par l'app quand le timer temps réel expire.
 // Il simule un Skip sans reset du timer (le reset est fait côté app).
 func (h *Handler) ResetTimerSkip() {
+	// Animation d'éjection : SKIP si 2+ tuiles révélées, TURN sinon
+	if len(h.revealedEntities) >= 2 {
+		h.renderer.StartButtonIconAnim("eject", false, h.revealedEntities[0], h.revealedEntities[1], actionbuttons.BtnSkip, h.world)
+	} else if len(h.revealedEntities) == 1 {
+		h.renderer.StartButtonIconAnim("eject", false, h.revealedEntities[0], "", actionbuttons.BtnEndTurn, h.world)
+	}
+
 	h.hideAllTilesInGrid()
 	h.isProcessing = false
 	h.ClearSelection()
