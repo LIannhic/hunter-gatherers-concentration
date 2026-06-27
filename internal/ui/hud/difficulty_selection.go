@@ -4,10 +4,9 @@ import (
 	"image/color"
 
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/meta"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/textutil"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/basicfont"
 )
 
 // DifficultySelection est une petite modal pour choisir la difficulté.
@@ -44,7 +43,7 @@ func (d *DifficultySelection) Render(screen *ebiten.Image) {
 	vector.StrokeRect(screen, d.x, d.y, d.w, d.h, 2, color.RGBA{100, 100, 200, 255}, true)
 
 	title := "CHOISISSEZ VOTRE DESTIN"
-	text.Draw(screen, title, basicfont.Face7x13, int(d.x)+100, int(d.y)+35, color.RGBA{255, 220, 100, 255})
+	textutil.Draw(screen, title, int(d.x)+100, int(d.y)+35, color.RGBA{255, 220, 100, 255})
 
 	mx, my := ebiten.CursorPosition()
 
@@ -68,7 +67,7 @@ func (d *DifficultySelection) Render(screen *ebiten.Image) {
 			vector.StrokeRect(screen, float32(rect.X), float32(rect.Y), float32(rect.W), float32(rect.H), 1, color.White, true)
 		}
 
-		text.Draw(screen, string(o), basicfont.Face7x13, rect.X+110, rect.Y+20, textColor)
+		textutil.Draw(screen, string(o), rect.X+110, rect.Y+20, textColor)
 	}
 }
 

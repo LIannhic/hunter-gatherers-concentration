@@ -279,6 +279,7 @@ func (m *Manager) generateAllAssets() {
 
 	m.images["silhouette_resource_shadow_essence"] = generateShadowEssenceSilhouette(size)
 	m.images["silhouette_resource_crystal_shard"] = generateCrystalShardSilhouette(size)
+	m.images["silhouette_trap"] = generateTrapSilhouette(size)
 
 	// === EFFETS DE FLIP ===
 	m.images["flip_overlay_top"] = generateFlipEffectOverlay(size, "top")
@@ -429,6 +430,10 @@ func (m *Manager) GetResourceSilhouette(resourceType string, stage string) *ebit
 		return img
 	}
 	return nil
+}
+
+func (m *Manager) GetTrapSilhouette() *ebiten.Image {
+	return m.images["silhouette_trap"]
 }
 
 // GetFlipOverlay retourne l'overlay d'effet de flip pour une direction

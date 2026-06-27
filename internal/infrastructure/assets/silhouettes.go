@@ -410,3 +410,15 @@ func generateCrystalShardSilhouette(size int) *ebiten.Image {
 	vector.DrawFilledCircle(img, cx+3, cy-5, 2, sparkleColor, true)
 	return img
 }
+
+func generateTrapSilhouette(size int) *ebiten.Image {
+	img := ebiten.NewImage(size, size)
+	centerX, centerY := float32(size)/2, float32(size)/2
+	trapColor := color.RGBA{180, 50, 50, 255}
+
+	// Un X stylisé et épais
+	vector.StrokeLine(img, centerX-15, centerY-15, centerX+15, centerY+15, 4, trapColor, true)
+	vector.StrokeLine(img, centerX+15, centerY-15, centerX-15, centerY+15, 4, trapColor, true)
+
+	return img
+}

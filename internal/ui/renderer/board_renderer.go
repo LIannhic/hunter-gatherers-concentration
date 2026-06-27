@@ -17,10 +17,9 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/actionbuttons"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/textutil"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/basicfont"
 )
 
 // BoardRenderer dessine le plateau de jeu
@@ -69,6 +68,9 @@ type BoardRenderer struct {
 
 	// Debug: entités révélées visuellement sans modifier l'état réel
 	debugRevealed map[entity.ID]bool
+
+	// Scratch buffer pour le rendu des boutons (évite les allocations par frame)
+	buttonScratch *ebiten.Image
 
 	// Effet Lumifly actif (nil si aucun)
 	lumiflyEffect *LumiflyEffect
@@ -171,6 +173,7 @@ func NewBoardRenderer(am *assets.Manager) *BoardRenderer {
 		bounceStates:         make(map[string]*BounceState),
 		trackRenderer:        NewTrackRenderer(ui.TileSize),
 		pendingHits:          make(map[string]entity.Position),
+		buttonScratch:        ebiten.NewImage(int(math.Round(ui.ActionButtonW)), 30),
 	}
 	// Initialise le gestionnaire d'animations lié au renderer
 	r.AnimManager = NewAnimationManager(r)
@@ -626,18 +629,17 @@ func (r *BoardRenderer) Render(screen *ebiten.Image, world *domain.World) {
 		r.renderTracksOver(screen, world, getCenter)
 		r.renderMovementsOver(screen, world)
 
-		// Aperçu de l'empreinte de pas au curseur (semi-transparent)
-		// if world.Player != nil && world.Player.IsAlive() {
-		// 	cursorX, cursorY := ebiten.CursorPosition()
-		// 	r.trackRenderer.DrawFootstepPreview(screen, float64(cursorX), float64(cursorY), world, getCenter)
-		// }
+		// Empreinte de pas sur la position actuelle du joueur
+		if world.Player != nil && world.Player.IsAlive() {
+			r.trackRenderer.DrawPlayerPosition(screen, world, getCenter)
+		}
 
 		// Le scanner glisse au-dessus de tout le monde sur le plateau
 		r.renderEffectsOver(screen, world)
 	}
 
 	// 6. On dessine l'interface utilisateur tout en haut
-	r.renderActionButtons(screen)
+	r.renderActionButtons(screen, world)
 
 	// 7. Capture du playmat À LA FIN (pour le fantôme de la prochaine frame)
 	//    Le snapshot contient l'état de cette frame, qui sera le "ancien" lors de la prochaine rotation
@@ -765,17 +767,17 @@ func (r *BoardRenderer) renderPlaymat(screen *ebiten.Image, world *domain.World)
 	r.renderExitTiles(screen, ui.ExitWestX, ui.ExitWestY, board.West, world, false, false)
 }
 
-func (r *BoardRenderer) renderActionButtons(screen *ebiten.Image) {
+func (r *BoardRenderer) renderActionButtons(screen *ebiten.Image, world *domain.World) {
 	if r.ActionButtons == nil {
 		return
 	}
 	states := r.ActionButtons.ComputeStates()
 	for i := 0; i < 4; i++ {
-		r.renderSingleButton(screen, states[i])
+		r.renderSingleButton(screen, states[i], world)
 	}
 }
 
-func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons.ButtonState) {
+func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons.ButtonState, world *domain.World) {
 	var bgColor color.Color
 
 	if s.IsAgnosia {
@@ -811,7 +813,7 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 		} else {
 			fillColor = color.RGBA{100, 80, 150, 160}
 		}
-		vector.DrawFilledRect(screen, x, y, fillW, h, fillColor, true)
+		vector.FillRect(screen, x, y, fillW, h, fillColor, true)
 	}
 
 	var borderColor color.Color
@@ -834,27 +836,30 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 	}
 
 	// Application du TextScale pour l'effet pulsé (Aphasia)
-	tx := x + float32(ui.ButtonTextRelativeX)
+	// Calcul du centrage horizontal
+	txtW := textutil.MeasureWidth(s.Label)
+	tx := x + (w-float32(txtW))/2
 	ty := y + float32(ui.ButtonTextRelativeY) + 15
 
 	if s.TextScale != 1.0 {
-		// On dessine le texte sur une image temporaire pour pouvoir le scaler
-		txtW, txtH := int(math.Ceil(float64(ui.ActionButtonW))), 30
-		txtImg := ebiten.NewImage(txtW, txtH)
-		text.Draw(txtImg, s.Label, basicfont.Face7x13, 0, 15, color.White)
+		// On dessine le texte sur un buffer réutilisable pour pouvoir le scaler sans allouer d'image
+		r.buttonScratch.Clear()
+		canvasW := r.buttonScratch.Bounds().Dx()
+		// On centre le texte dans le buffer
+		textutil.Draw(r.buttonScratch, s.Label, (canvasW-txtW)/2, 15, color.White)
 
 		op := &ebiten.DrawImageOptions{}
-		// Point de pivot au centre du bouton (approximatif pour le texte)
-		op.GeoM.Translate(-float64(txtW)/4, -15)
+		// Point de pivot au centre du bouton
+		op.GeoM.Translate(-float64(canvasW)/2, -15)
 		op.GeoM.Scale(s.TextScale, s.TextScale)
-		op.GeoM.Translate(float64(tx)+float64(txtW)/4, float64(ty))
+		op.GeoM.Translate(float64(x)+float64(w)/2, float64(ty))
 		op.ColorScale.ScaleWithColor(labelColor)
-		screen.DrawImage(txtImg, op)
+		screen.DrawImage(r.buttonScratch, op)
 	} else {
-		text.Draw(screen, s.Label, basicfont.Face7x13, int(tx), int(ty), labelColor)
+		textutil.Draw(screen, s.Label, int(tx), int(ty), labelColor)
 	}
 
-	if s.Active || s.IsAgnosia || s.IsAtaxia {
+	if s.IsAgnosia || s.IsAtaxia {
 		ix := x + float32(ui.ButtonIconRelativeX)
 		iy := y + float32(ui.ButtonIconRelativeY)
 		var indicatorColor color.Color
@@ -862,11 +867,80 @@ func (r *BoardRenderer) renderSingleButton(screen *ebiten.Image, s actionbuttons
 			indicatorColor = color.White
 		} else if s.IsAtaxia {
 			indicatorColor = color.RGBA{240, 170, 90, 200}
-		} else {
-			indicatorColor = color.RGBA{100, 255, 100, 200}
 		}
 		vector.FillRect(screen, ix, iy, float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), indicatorColor, true)
 	}
+
+	// --- CADRES D'ICÔNES POUR LES TUILES RÉVÉLÉES ---
+	// Cadre de gauche (1ère tuile)
+	leftFrameX := x + float32(ui.ButtonIconLeftRelativeX)
+	leftFrameY := y + float32(ui.ButtonIconRelativeY)
+	vector.StrokeRect(screen, leftFrameX, leftFrameY, float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), 1, borderColor, true)
+
+	// Cadre de droite (2ème tuile) - se superpose à l'indicateur d'activation
+	rightFrameX := x + float32(ui.ButtonIconRelativeX)
+	rightFrameY := y + float32(ui.ButtonIconRelativeY)
+	vector.StrokeRect(screen, rightFrameX, rightFrameY, float32(ui.ButtonIconSize), float32(ui.ButtonIconSize), 1, borderColor, true)
+
+	// Rendu des icônes
+	if len(s.RevealedEntities) >= 1 {
+		if ent, ok := world.Entities.Get(entity.ID(s.RevealedEntities[0])); ok {
+			r.renderButtonIcon(screen, float64(leftFrameX), float64(leftFrameY), ent)
+		}
+	}
+	if len(s.RevealedEntities) >= 2 {
+		if ent, ok := world.Entities.Get(entity.ID(s.RevealedEntities[1])); ok {
+			r.renderButtonIcon(screen, float64(rightFrameX), float64(rightFrameY), ent)
+		}
+	}
+}
+
+// renderButtonIcon dessine l'icône d'une entité dans un cadre de bouton d'action
+func (r *BoardRenderer) renderButtonIcon(screen *ebiten.Image, x, y float64, ent entity.Entity) {
+	iconSize := float64(ui.ButtonIconSize) * 0.8
+
+	var icon *ebiten.Image
+	switch e := ent.(type) {
+	case *domain.Creature:
+		icon = r.assets.GetCreatureSilhouette(e.Species)
+	case *domain.Resource:
+		stageName := e.Lifecycle.GetCurrentStageName()
+		icon = r.assets.GetResourceSilhouette(e.ResourceType, stageName)
+	case *player.LootItem:
+		if e.OriginalType == entity.TypeCreature {
+			icon = r.assets.GetCreatureSilhouette(e.SourceID)
+		} else if e.OriginalType == entity.TypeResource {
+			icon = r.assets.GetResourceSilhouette(e.SourceID, "")
+		}
+	default:
+		// Gestion générique pour les autres types (Trap, Artefact, etc.)
+		if ent.GetType() == entity.TypeTrap {
+			icon = r.assets.GetTrapSilhouette()
+		}
+	}
+
+	if icon == nil {
+		return
+	}
+
+	op := &ebiten.DrawImageOptions{}
+	w, h := icon.Size()
+
+	// 1. Centrer l'origine
+	op.GeoM.Translate(-float64(w)/2, -float64(h)/2)
+
+	// 2. Appliquer la transformation de l'entité (orientation)
+	r.ApplyTransformation(&op.GeoM, ent.GetTransformation())
+
+	// 3. Scale
+	op.GeoM.Scale(iconSize/float64(w), iconSize/float64(h))
+
+	// 4. Positionner dans le cadre
+	op.GeoM.Translate(x+float64(ui.ButtonIconSize)/2, y+float64(ui.ButtonIconSize)/2)
+
+	op.ColorScale.ScaleWithColor(color.White)
+
+	screen.DrawImage(icon, op)
 }
 
 func (r *BoardRenderer) renderExitTiles(screen *ebiten.Image, rx, ry float64, dir entity.Direction, world *domain.World, forceReveal bool, isLocalToPlaymat bool) {
@@ -1860,6 +1934,10 @@ func (r *BoardRenderer) renderSilhouetteOnBack(screen *ebiten.Image, geo thickGe
 			silhouette = r.assets.GetCreatureSilhouette(e.SourceID)
 		} else if e.OriginalType == entity.TypeResource {
 			silhouette = r.assets.GetResourceSilhouette(e.SourceID, "")
+		}
+	default:
+		if ent.GetType() == entity.TypeTrap {
+			silhouette = r.assets.GetTrapSilhouette()
 		}
 	}
 

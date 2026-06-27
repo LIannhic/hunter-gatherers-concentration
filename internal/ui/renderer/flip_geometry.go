@@ -9,10 +9,9 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/entity"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui/textutil"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-	"golang.org/x/image/font/basicfont"
 )
 
 // Constantes pour l'animation de flip
@@ -277,7 +276,7 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 		ty := (vFace[0].DstY + vFace[1].DstY) / 2
 		bx := tx + (cx-tx)*0.25
 		by := ty + (cy-ty)*0.25
-		vector.DrawFilledCircle(screen, bx, by, 4*currentScale, behaviorColor, true)
+		vector.FillCircle(screen, bx, by, 4*currentScale, behaviorColor, true)
 
 		// --- NOUVEAU: BARRE D'AGRESSIVITÉ (Feedback Visuel) ---
 		if cre, ok := e.(*domain.Creature); ok && cre.Behavior.Aggression > 0 {
@@ -304,7 +303,7 @@ func (r *BoardRenderer) renderFlippingEntityTriangles(screen *ebiten.Image, vFac
 	if label != "" {
 		lx := vFace[2].DstX - 12*currentScale
 		ly := vFace[2].DstY - 5*currentScale
-		text.Draw(screen, label, basicfont.Face7x13, int(lx), int(ly), color.White)
+		textutil.Draw(screen, label, int(lx), int(ly), color.White)
 	}
 }
 
