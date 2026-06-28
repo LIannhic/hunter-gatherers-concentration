@@ -19,12 +19,23 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
+// TileActionState alias pour ui.TileActionState (évite la duplication)
+type TileActionState = ui.TileActionState
+
+const (
+	TileActionNone         = ui.TileActionNone
+	TileActionInteractive  = ui.TileActionInteractive
+	TileActionImpossible   = ui.TileActionImpossible
+	TileActionUnavailable  = ui.TileActionUnavailable
+)
+
 type Renderer interface {
 	GetTileSize() int
 	GetGridOffset() (int, int)
 	ScreenToGrid(screenX, screenY int, world *domain.World) (board.Position, string, bool)
 	ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool)
 	RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, color color.Color, world *domain.World)
+	RenderTileActionFrame(screen *ebiten.Image, pos board.Position, gridID string, state TileActionState, world *domain.World)
 	RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World)
 	NotifyHover(entityID string, dir entity.FlipDirection)
 	DecayHoverStates(activeThisFrame map[string]bool)
@@ -1603,52 +1614,25 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 		}
 	}
 
-	// Highlight de la tuile survolée (ne s'affiche que si entité présente ET pas inventaire)
-	if hovered, gridID, ok := h.getHoveredTile(); ok {
-		if gridID == board.InventoryGridID {
-			return
+	// 1. CADRE PERMANENT sur la 1ère tuile révélée ce tour
+	if len(h.revealedEntities) == 1 {
+		ent, ok := h.world.Entities.Get(entity.ID(h.revealedEntities[0]))
+		if ok {
+			pos := ent.GetPosition()
+			gridID := h.revealedGridIDs[0]
+			if gridID == "" {
+				gridID = h.world.CurrentGridID
+			}
+			h.renderer.RenderTileActionFrame(screen, pos, gridID, TileActionInteractive, h.world)
 		}
-		grid, ok := h.world.GetGrid(gridID)
-		if !ok {
-			return
-		}
-
-		tile, err := grid.Get(hovered)
-		if err != nil {
-			return
-		}
-
-		if len(tile.EntitiesID) == 0 {
-			return
-		}
-
-		topID := tile.EntitiesID[len(tile.EntitiesID)-1]
-		ent, ok := h.world.Entities.Get(entity.ID(topID))
-		if !ok {
-			return
-		}
-
-		var highlightColor color.Color
-		state := ent.GetState()
-		if state&entity.Hidden != 0 {
-			highlightColor = color.RGBA{255, 255, 0, 100}
-		} else if state&entity.Revealed != 0 {
-			highlightColor = color.RGBA{0, 255, 255, 100}
-		} else {
-			highlightColor = color.RGBA{255, 255, 255, 50}
-		}
-
-		h.renderer.RenderSelectionHighlight(screen, hovered, gridID, highlightColor, h.world)
 	}
 
-	if h.selectedTile != nil {
-		h.renderer.RenderSelectionHighlight(
-			screen,
-			*h.selectedTile,
-			h.selectedGridID,
-			color.RGBA{255, 0, 0, 150},
-			h.world,
-		)
+	// 2. CADRE AU SURVOL sur la case survolée
+	if hovered, gridID, ok := h.getHoveredTile(); ok && gridID != board.InventoryGridID {
+		actionState := h.computeTileActionState(hovered, gridID)
+		if actionState != TileActionNone {
+			h.renderer.RenderTileActionFrame(screen, hovered, gridID, actionState, h.world)
+		}
 	}
 }
 
@@ -1670,6 +1654,68 @@ func (h *Handler) GetRevealedTiles() int {
 
 func (h *Handler) GetRevealedEntities() []string {
 	return h.confirmedRevealedEntities
+}
+
+// computeTileActionState évalue l'état d'action d'une tuile pour le cadre coloré
+func (h *Handler) computeTileActionState(pos board.Position, gridID string) TileActionState {
+	grid, ok := h.world.GetGrid(gridID)
+	if !ok {
+		return TileActionNone
+	}
+
+	plot, err := grid.Get(pos)
+	if err != nil || len(plot.EntitiesID) == 0 {
+		return TileActionNone
+	}
+
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	ent, ok := h.world.Entities.Get(entity.ID(topID))
+	if !ok {
+		return TileActionNone
+	}
+
+	// Rouge : traitement en cours (flip d'une autre tuile)
+	if h.isProcessing {
+		return TileActionImpossible
+	}
+
+	state := ent.GetState()
+
+	// Orange : immunité active (Shadowstalker)
+	if h.world.Player != nil && h.world.Player.ImmunityTurns > 0 {
+		return TileActionUnavailable
+	}
+
+	// Orange : créature en mouvement sur cette case
+	for _, movingID := range h.world.Components.QueryByComponent("moving_animation") {
+		if movingID == topID {
+			return TileActionUnavailable
+		}
+	}
+
+	// Rouge : déjà révélée, appairée ou bloquée
+	if state&entity.Revealed != 0 || state&entity.Matched != 0 || state&entity.Blocked != 0 {
+		// Exception : piège révélé qu'on peut défausser (1 seul révélé)
+		if ent.GetType() == entity.TypeTrap && state&entity.Revealed != 0 && state&entity.Matched == 0 {
+			if len(h.revealedEntities) == 1 && h.revealedEntities[0] == string(ent.GetID()) {
+				return TileActionInteractive
+			}
+		}
+		return TileActionImpossible
+	}
+
+	// Rouge : 2 tuiles déjà révélées ce tour
+	if len(h.revealedEntities) >= 2 {
+		return TileActionImpossible
+	}
+
+	// Rouge : mana insuffisant pour tuile cumulée
+	if ent.GetCumulationLevel() > 0 && h.world.Player.Stats.Mana < ent.GetCumulationLevel() {
+		return TileActionImpossible
+	}
+
+	// Vert : action possible
+	return TileActionInteractive
 }
 
 func (h *Handler) ClearSelection() {

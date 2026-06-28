@@ -1,5 +1,15 @@
 package ui
 
+// TileActionState représente l'état d'action d'une tuile pour le cadre coloré
+type TileActionState int
+
+const (
+	TileActionNone         TileActionState = iota // Pas de cadre
+	TileActionInteractive                         // Vert : action possible
+	TileActionImpossible                          // Rouge : action impossible
+	TileActionUnavailable                         // Orange : temporairement indisponible
+)
+
 // Layout constants for 1280x720 screen
 const (
 	ScreenWidth  = 1280

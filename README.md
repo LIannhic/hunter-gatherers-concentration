@@ -310,6 +310,36 @@ L'interface assiste le joueur dans sa gestion des ressources via un système de 
 - **Anti-Triche** : Aucun feedback de coût n'est affiché au survol des tuiles cachées pour éviter de divulguer des informations sur leur nature (créature vs ressource).
 - **Rendu Sélectif** : Les tuiles cumulées n'apparaissent plus grandes et dorées que lorsqu'elles sont **Révélées**. À l'état caché, elles sont identiques aux tuiles normales. **Bordures de cumul** : Les tuiles cumulées affichent des bordures concentriques fines dont la couleur évolue avec le niveau (vert → jaune → orange → rouge).
 
+### Cadres d'Action (Tile Action Frames)
+
+Un système de **cadres colorés** guide le joueur en indiquant l'état d'interaction possible sur chaque tuile. Le rendu est **hybride** :
+
+| Situation | Affichage |
+|-----------|-----------|
+| **1ère tuile révélée ce tour** | Cadre **vert permanent** — montre ce que le joueur a fait |
+| **Survol d'une tuile** | Cadre coloré selon l'état d'action |
+| **Autres tuiles** | Aucun cadre |
+
+#### Couleurs des cadres
+
+| Couleur | État | Condition |
+|---------|------|-----------|
+| **Vert** | Interactive | Tuile cachée, non bloquée, mana suffisant, tour disponible |
+| **Rouge** | Impossible | Tuile révélée/appairée/bloquée, mana insuffisant, 2 tuiles déjà révélées, traitement en cours |
+| **Orange** | Indisponible | Immunité active (Shadowstalker), créature en mouvement sur la case |
+
+#### Logique d'évaluation
+
+L'état est calculé par `computeTileActionState()` dans `handler.go` en croisant les mêmes conditions que `RevealTileCommand.CanExecute()` :
+- `isProcessing` → Rouge (flip en cours)
+- `ImmunityTurns > 0` → Orange
+- Entité en mouvement (`moving_animation`) → Orange
+- `Revealed` / `Matched` / `Blocked` → Rouge
+- `len(revealedEntities) >= 2` → Rouge
+- Mana insuffisant pour tuile cumulée → Rouge
+- Piège révélé avec 1 seule tuile révélée → Vert (défaussable)
+- Sinon → Vert
+
 ### Notifications Défilantes (HUD)
 
 Pour maintenir l'immersion tout en informant le joueur, le HUD intègre deux zones de messages dynamiques :

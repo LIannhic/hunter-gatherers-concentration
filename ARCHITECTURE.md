@@ -353,6 +353,7 @@ Système de traces visuelles laissées par les créatures lors de leurs déplace
 ### 4. UI
 
 Le jeu utilise une résolution logique fixe de **1280x720**. L'interface est divisée en plusieurs zones gérées par le `HUD` :
+- **`ui/layout.go`** : Constantes de disposition et types UI partagés (ex: `TileActionState` pour les cadres d'action).
 - **Portrait** (270x270) : Affiche les statistiques du personnage, les contrôles et le contenu dynamique de la zone.
 - **Inventaire** (270x420) : Grille 3x4 pour les objets récoltés.
 - **Playmat** (700x700) : Zone centrale contenant le plateau de jeu (525x525), les boutons d'action et les indicateurs de sortie.
@@ -371,9 +372,11 @@ Séparation des responsabilités :
     - **Plateau (Board)** : 525x525. Contient les tuiles et les traces.
     - **Tapis de Jeu (Playmat)** : 700x700. Contient le plateau, les boutons et les **Effets Plein Écran** (ex: Scanner de l'Echo Hound).
   - **Barre d'Agressivité** : Sur les créatures révélées (`Aggression > 0`), dessine une barre horizontale (40x4px) en bas de la tuile. Couleur dégradée : Orange (faible) → Rouge (100%). Fond semi-transparent noir.
+  - **Cadres d'Action** : Rendu des cadres colorés (`StrokeRect` 3px) via `RenderTileActionFrame()`. Couleurs : Vert (interactive), Rouge (impossible), Orange (indisponible). Cadre permanent sur la 1ère tuile révélée, au survol pour les autres.
 - **Input**: Capture les événements (clavier, souris, tactile), gère la navigation entre les zones et les raccourcis clavier. 
   - **Unification Cross-Platform** : Utilise `GetInteractionPosition()` (priorise le tactile sur le curseur) et `IsJustPressed()` / `IsJustReleased()` pour garantir une réactivité identique entre Desktop et WASM/Mobile.
   - **Interactions Tactiles** : Supporte le défilement de l'inventaire par glissement (Drag-to-scroll) et l'appui long pour la suppression.
+  - **Cadres d'Action** : Système hybride de feedback visuel sur les tuiles. `computeTileActionState()` évalue l'état d'interaction (vert/rouge/orange) en croisant `isProcessing`, `TileState`, `ImmunityTurns`, animations de mouvement et mana. Rendu via `RenderTileActionFrame()` dans le renderer (cadre `StrokeRect` 3px). Cadre permanent sur la 1ère tuile révélée, au survol pour les autres.
 - **HUD**: Orchestre l'affichage des informations fixes et des fenêtres volantes (ex: Statistiques des zones).
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
     - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets (ex: "Vous êtes déboussolé.", "Vous toussez du sang.", "La mémoire revient...").
