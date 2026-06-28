@@ -105,7 +105,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **TrackSystem** : Gère la décomposition temporelle des traces (décrément de `Duration` à chaque tour, suppression définitive à 0).
   - **AggressionSystem** : Calcule l'agressivité modulaire des créatures (Priority 1, avant mouvement). S'abonne à `TileRevealed` (reason: "player_action") pour incrémenter `RevealCount` et mettre à jour le facteur "reveals". S'abonne à `CreatureMoved` pour gérer la "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité totale ≥ 100 à la fin de l'animation de flip.
 
-- **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques réussies. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden, déclenchement des troubles cognitifs Aphasia, Ataxia, Agnosia, Amnesia — uniquement si `hit_target` présent dans le payload, i.e. attaque qui touche le joueur).
+- **CreatureAttackEffectSystem** : Centralise les conséquences logiques mondiales des attaques réussies. S'abonne à `CreatureAttacked` et applique des changements permanents ou majeurs au monde (ex: rotation de grille du Stonewarden, déclenchement des troubles cognitifs Aphasia, Ataxia, Agnosia, Amnesia, Vertigo — uniquement si `hit_target` présent dans le payload, i.e. attaque qui touche le joueur).
 
 - **ComboSystem** (Priority 10) : Gère le système de combo (associations consécutives). S'abonne à `TileMatched` pour incrémenter le compteur et calculer la juiciness (1-5). S'abonne à `TileMerged` pour publier un message sans incrémenter. S'abonne à `PlayerDamaged` pour réinitialiser le combo en cas d'erreur (`invalid_match`, `skipped_valid_match`). Publie `ComboTriggered` via `PublishImmediate` (sinon perdu dans `ProcessQueue`). Le message est rendu par le HUD dans la `ComboZone` (270×40px, en haut à droite) avec un fond coloré par niveau, un outline noir 8-directions, et un slide-in depuis la droite.
 
@@ -140,7 +140,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - `ImmunityTurns` : Géré dans `Player`, permet de bloquer tous les dégâts. Utilisé par l'effet du Shadowstalker.
 
 - **StatusEffects** (`player/status.go`) : Altérations mentales du joueur
-  - `Aphasia`, `Agnosia`, `Ataxia`, `Amnesia`
+  - `Aphasia`, `Agnosia`, `Ataxia`, `Amnesia`, `Vertigo`
   - Interceptées par le rendu UI pour scrambler les coordonnées/labels des boutons d'action
 
 - **Types d'entités** :
@@ -381,7 +381,11 @@ Séparation des responsabilités :
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
     - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets (ex: "Vous êtes déboussolé.", "Vous toussez du sang.", "La mémoire revient...").
     - **Zone Droite**: Affiche les feedbacks de gameplay immédiats (ex: "CONFRONTATION ! -10 HP", "TOXICITÉ ! -X HP", "AMNÉSIE ! X tours.", "MATCH INVALIDE !").
-- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux (Wave, Heat, Bubble, Blur, Lumifly, Cave) avec un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
+- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux via un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
+  - **Séparation Attack/Biome** : Les shaders sont splités en deux méthodes pour un rendu correct :
+    - `ProcessCreatureAttackEffects()` : Blur, Bubble, Vertige — appliqués **AVANT** le HUD pour ne pas affecter les fenêtres UI.
+    - `ProcessBiomeEffects()` : Wave, Heat, Rain, Cave, Vortex — appliqués **APRÈS** le HUD (comportement original).
+  - **Quake Shader** : Rendu **AVANT** tous les shaders (comme Scanner/Lumifly).
   - **Lumifly Shader** (`renderer/shader/lumifly.kage`) : Onde lumineuse dorée circulaire avec silhouettes d'entités. Centre calculé via `calculateTileScreenPos` pour un alignement parfait avec les tuiles. Rayon basé sur la diagonale d'une case (`√2`).
   - **Silhouettes sur le Dos** : Chaque tuile affiche la silhouette de son entité sur le dos (alpha variable), utilisée par le shader Lumifly pour les effets de révélation. Les UVs du dos sont transformés par la D4 avec miroir horizontal.
 
@@ -389,7 +393,7 @@ Séparation des responsabilités :
   - **Snapshot** (`playmatSnapshot`) : Capture de 990×990 (playmat 700×700 + `QuakePadding` = 145px par côté) pour éviter les espaces vides lors de la rotation.
   - **Frame Buffer** (`quakeFrameBuffer`) : 990×990, reçoit la sortie du shader, puis `SubImage` centre 700×700 affiché à `(PlaymatX, PlaymatY)`.
   - **Uniforms** : `RotationAngle` (Pi/2 ou -Pi/2), `Clockwise` (bool), `GhostSize` [990,990], `Resolution` [990,990].
-  - **Rendu** : `RenderQuakeOverlay` appelé après `ProcessGlobalEffects` pour le plus haut z-index.
+  - **Rendu** : `RenderQuakeOverlay` appelé **AVANT** les shaders globaux (comme Scanner/Lumifly), puis shaders attack, puis HUD, puis shaders biome.
 
 - **Cave Shader** (`renderer/shader/cave.kage`) : Effet d'ambiance oppressive pour le biome grotte. Couplé à la **Santé Mentale** du joueur via le paramètre `Intensity` (0.0 = sane, 1.0 = folie totale).
   - **Obscurité de fond** : Assombrit uniformément l'écran (55% à sanity满 → 98% à sanity 0). La torche centrale crée un cercle de lumière proportionnel à la folie.
@@ -601,7 +605,7 @@ type MovementProfile struct {
 | **Stonewarden** | OnReveal         | Orientation            | Manifest | Normal | 40 | attaque = rotation grille 90° + shader quake |
 | **Moss Monkey** | Proximité (4)    | Attraction (Empty)     | Manifest | Normal | 0 (dynamique) |
 | **Flutterwing** | Proximité (2)    | Répulsion (Player)     | Manifest | Over | 0 |
-| **Fleeing Sprite** | Proximité (3)    | Répulsion (Player)     | Manifest | Normal | 0 |
+| **Fleeing Sprite** | Proximité (3)    | Répulsion (Player)     | Manifest | Normal | 0 | Fuit le joueur. Attaque : **Vertige** (distorsion + aberration chromatique). Butin : Vision des Intentions. |
 
 #### Types de navigation
 
@@ -690,7 +694,7 @@ Chaque créature a un composant `Behavior` enrichi :
 L'attaque ne se produit **pas** à la révélation, mais à la **fin de l'animation de flip** (`AnimationEnded`, type="flip", state=Revealed). Si `Aggression >= 100` :
 1. Vérifie si le joueur est dans la `ThreatZone` (même logique périphérique qu'avant).
 2. Publie `CreatureAttacked` (payload: `hit_target` = position joueur si menacé, nil sinon) → Renderer lance l'animation de lunge.
-3. Si joueur menacé et pas de *Grâce* : `TakeDamage(10, "physical")` + `PlayerDamaged` event + effets visuels (Blur Shadowstalker, Bulle Lumifly).
+3. Si joueur menacé et pas de *Grâce* : `TakeDamage(10, "physical")` + `PlayerDamaged` event + effets visuels (Blur Shadowstalker, Bulle Lumifly, Vertige Fleeing Sprite).
 
 #### Difficulté
 `MaxSafeReveals` et `AggressionMult` dans `DifficultySettings` contrôlent la tolérance et l'intensité globale.

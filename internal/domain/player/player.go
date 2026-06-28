@@ -153,6 +153,7 @@ type Player struct {
 	AphasiaTurns int // Durée de l'aphasie (Echo Hound)
 	AtaxiaTurns  int // Durée de l'ataxie (Burrower)
 	AgnosiaTurns int // Durée de l'agnosie (Moss Monkey)
+	VertigoTurns int // Durée du vertige (Fleeing Sprite)
 
 	// Effets visuels (Shaders)
 	VisualEffects map[string]int // "blur", "bubble", etc. -> Durée en tours
@@ -618,6 +619,9 @@ func (p *Player) ConsumeSanity(amount int) {
 	}
 	if amount > 0 && p.AgnosiaTurns > 0 {
 		p.AgnosiaTurns--
+	}
+	if amount > 0 && p.VertigoTurns > 0 {
+		p.VertigoTurns--
 	}
 }
 

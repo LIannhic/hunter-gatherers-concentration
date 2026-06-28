@@ -1030,13 +1030,37 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 
 	app.Renderer.Render(screen, app.World)
 	app.Input.Draw(screen)
-	app.HUD.Render(screen)
 
-	if app.World.Debug.Visible {
-		app.DebugWindow.Render(screen)
+	// Quake AVANT tous les shaders (comme scanner/lumifly)
+	app.Renderer.RenderQuakeOverlay(screen, app.World)
+
+	// Application des shaders d'attaque AVANT le HUD (pas d'impact sur les fenêtres UI)
+	if app.EffectRenderer != nil && app.World.Player != nil {
+		ratio := float32(app.World.Player.Stats.Sanity) / float32(app.World.Player.Stats.MaxSanity)
+
+		mx, my := ebiten.CursorPosition()
+		sw := float32(screen.Bounds().Dx())
+		sh := float32(screen.Bounds().Dy())
+
+		isOverPlaymat := float64(mx) >= ui.PlaymatX && float64(mx) < ui.PlaymatX+ui.PlaymatW &&
+			float64(my) >= ui.PlaymatY && float64(my) < ui.PlaymatY+ui.PlaymatH
+
+		attackParams := renderer.GlobalEffectParams{
+			SanityRatio: ratio,
+			UseBlur:     app.World.Player.VisualEffects["blur"] > 0 || app.World.Debug.ActiveShaders["blur"],
+			UseBubble:   (app.World.Player.VisualEffects["bubble"] > 0 || app.World.Debug.ActiveShaders["bubble"]) && isOverPlaymat,
+			UseVertige:  app.World.Player.VisualEffects["vertige"] > 0 || app.World.Debug.ActiveShaders["vertige"],
+			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
+			ScreenSize:  []float32{sw, sh},
+		}
+
+		app.EffectRenderer.ProcessCreatureAttackEffects(screen, attackParams)
 	}
 
-	// Application des shaders globaux (Biome + Attaques créatures + Sanité)
+	// HUD APRÈS les shaders d'attaque (pas d'impact visuel des attaques sur l'UI)
+	app.HUD.Render(screen)
+
+	// Shaders biome APRÈS le HUD (comportement original : affectent tout y compris les panneaux)
 	if app.EffectRenderer != nil && app.World.Player != nil {
 		ratio := float32(app.World.Player.Stats.Sanity) / float32(app.World.Player.Stats.MaxSanity)
 
@@ -1046,21 +1070,14 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 			biome = string(grid.Biome)
 		}
 
-		mx, my := ebiten.CursorPosition()
 		sw := float32(screen.Bounds().Dx())
 		sh := float32(screen.Bounds().Dy())
 
-		// La bulle n'apparaît que sur le Playmat (700x700 à partir de ui.PlaymatX)
-		isOverPlaymat := float64(mx) >= ui.PlaymatX && float64(mx) < ui.PlaymatX+ui.PlaymatW &&
-			float64(my) >= ui.PlaymatY && float64(my) < ui.PlaymatY+ui.PlaymatH
-
 		// Recherche d'un portail portable déployé pour l'effet de vortex
-		// On n'affiche le vortex QUE si le timer de victoire est actif (portail en cours d'extraction)
 		var portalPos []float32
 		if grid != nil && app.Input.IsVictoryTimerActive() {
 			for _, e := range app.World.Entities.GetAllActive() {
 				if e.GetGridID() == grid.ID && e.HasTag("portable_portal") {
-					// Calcul de la position écran du centre de la tuile
 					px, py := app.Renderer.GetTileCenter(board.Position(e.GetPosition()), grid)
 					portalPos = []float32{float32(px) / sw, float32(py) / sh}
 					break
@@ -1068,26 +1085,25 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 			}
 		}
 
-		params := renderer.GlobalEffectParams{
+		biomeParams := renderer.GlobalEffectParams{
 			SanityRatio: ratio,
 			Biome:       biome,
-			UseBlur:     app.World.Player.VisualEffects["blur"] > 0 || app.World.Debug.ActiveShaders["blur"],
-			UseBubble:   (app.World.Player.VisualEffects["bubble"] > 0 || app.World.Debug.ActiveShaders["bubble"]) && isOverPlaymat,
 			UseRain:     app.World.Player.VisualEffects["rain"] > 0 || app.World.Debug.ActiveShaders["rain"],
 			UseWave:     app.World.Debug.ActiveShaders["wave"],
 			UseHeat:     app.World.Debug.ActiveShaders["heat"],
 			UseCave:     app.World.Debug.ActiveShaders["cave"],
 			UseVortex:   app.World.Debug.ActiveShaders["vortex"],
 			PortalPos:   portalPos,
-			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},
 		}
 
-		app.EffectRenderer.ProcessGlobalEffects(screen, params)
+		app.EffectRenderer.ProcessBiomeEffects(screen, biomeParams)
 	}
 
-	// Ré-affiche le quake effect au-dessus des shaders globaux
-	app.Renderer.RenderQuakeOverlay(screen, app.World)
+	// DebugWindow APRÈS les shaders biome (pas traité par les shaders = meilleure performance avec F12)
+	if app.World.Debug.Visible {
+		app.DebugWindow.Render(screen)
+	}
 
 	if app.World.Entities.Count() == 0 {
 		textutil.Draw(screen, "Appuyez sur S pour spawner des entites", 200, 300, color.RGBA{255, 255, 0, 255})

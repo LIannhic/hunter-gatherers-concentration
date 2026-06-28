@@ -89,5 +89,12 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 		if s.world.Player != nil {
 			s.world.Player.VisualEffects["bubble"] = 2
 		}
+
+	case "fleeing_sprite":
+		if s.world.Player != nil {
+			s.world.Player.VertigoTurns = 3
+			s.world.Player.VisualEffects["vertige"] = 3
+			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Le monde tourne autour de vous..."))
+		}
 	}
 }

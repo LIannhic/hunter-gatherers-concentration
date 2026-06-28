@@ -184,6 +184,7 @@ func (dw *DebugWindow) renderImpairments(screen *ebiten.Image) {
 	dw.drawCheckbox(screen, startX, startY+120, "Ataxia (Burrower)", p.AtaxiaTurns > 0)
 	dw.drawCheckbox(screen, startX, startY+150, "Agnosia (Moss Monkey)", p.AgnosiaTurns > 0)
 	dw.drawCheckbox(screen, startX, startY+180, "Amnesia (Specter)", p.AmnesiaTurns > 0)
+	dw.drawCheckbox(screen, startX, startY+210, "Vertige (Fleeing Sprite)", dw.world.Debug.ActiveShaders["vertige"])
 }
 
 func (dw *DebugWindow) drawButton(screen *ebiten.Image, x, y float32, label, id string) {
@@ -399,6 +400,17 @@ func (dw *DebugWindow) handleClickImpairments(mx, my float32) {
 	if dw.isInside(mx, my, startX, startY+180, 200, 20) {
 		if p.AmnesiaTurns > 0 { p.AmnesiaTurns = 0 } else { p.AmnesiaTurns = 10 }
 	}
+	// Vertige
+	if dw.isInside(mx, my, startX, startY+210, 200, 20) {
+		dw.world.Debug.ActiveShaders["vertige"] = !dw.world.Debug.ActiveShaders["vertige"]
+		if dw.world.Player != nil {
+			if dw.world.Debug.ActiveShaders["vertige"] {
+				dw.world.Player.VisualEffects["vertige"] = 999
+			} else {
+				dw.world.Player.VisualEffects["vertige"] = 0
+			}
+		}
+	}
 }
 
 func (dw *DebugWindow) isInside(mx, my, x, y, w, h float32) bool {
@@ -414,6 +426,7 @@ func (dw *DebugWindow) ResetDefaults() {
 		dw.world.Player.AtaxiaTurns = 0
 		dw.world.Player.AgnosiaTurns = 0
 		dw.world.Player.AmnesiaTurns = 0
+		dw.world.Player.VertigoTurns = 0
 		dw.world.Player.VisualEffects = make(map[string]int)
 	}
 	dw.world.Debug.AllowedCreatures = map[string]bool{

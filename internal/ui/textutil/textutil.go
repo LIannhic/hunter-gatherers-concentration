@@ -32,13 +32,16 @@ func init() {
 
 // Draw draws text at (x, y) with the given color.
 // y is treated as the baseline position (like text v1), not the top of the text.
+var sharedDrawOp = &text.DrawOptions{}
+
 func Draw(dst *ebiten.Image, str string, x, y int, clr color.Color) {
-	op := &text.DrawOptions{}
+	sharedDrawOp.GeoM.Reset()
 	// text v1 y was the baseline; text/v2 y is the top of the rendering region.
 	// Subtract ascent to convert baseline -> top-left.
-	op.GeoM.Translate(float64(x), float64(y)-Face.Metrics().HAscent)
-	op.ColorScale.ScaleWithColor(clr)
-	text.Draw(dst, str, Face, op)
+	sharedDrawOp.GeoM.Translate(float64(x), float64(y)-Face.Metrics().HAscent)
+	sharedDrawOp.ColorScale.Reset()
+	sharedDrawOp.ColorScale.ScaleWithColor(clr)
+	text.Draw(dst, str, Face, sharedDrawOp)
 }
 
 // MeasureWidth returns the width in pixels of the given text.

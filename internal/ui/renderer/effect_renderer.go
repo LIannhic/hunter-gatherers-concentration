@@ -30,6 +30,8 @@ var (
 	rainShaderSource []byte
 	//go:embed shader/cave.kage
 	caveShaderSource []byte
+	//go:embed shader/vertige.kage
+	vertigeShaderSource []byte
 )
 
 type EffectRenderer struct {
@@ -57,6 +59,7 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 		"lumifly": lumiflyShaderSource,
 		"rain":    rainShaderSource,
 		"cave":    caveShaderSource,
+		"vertige": vertigeShaderSource,
 	}
 
 	for name, src := range sources {
@@ -172,65 +175,31 @@ type GlobalEffectParams struct {
 	UseHeat     bool
 	UseCave     bool
 	UseVortex   bool
+	UseVertige  bool
 	PortalPos   []float32 // [x, y] normalized, nil if none
 	MousePos    []float32 // [x, y] normalized
 	ScreenSize  []float32 // [width, height] pixels
 }
 
-// ProcessGlobalEffects applique les effets cumulatifs sur l'image entière.
-func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params GlobalEffectParams) {
-	// L'intensité est nulle à Sanity 1.0 et max à 0.0.
+// ProcessCreatureAttackEffects applique les effets visuels d'attaque de créatures
+// (blur, bubble, vertige) sur l'image entière.
+// Doit être appelé AVANT le rendu du HUD pour ne pas affecter les fenêtres UI.
+func (r *EffectRenderer) ProcessCreatureAttackEffects(screen *ebiten.Image, params GlobalEffectParams) {
 	intensity := float32(math.Pow(float64(1.0-params.SanityRatio), 2))
 
-	// On vérifie si on doit appliquer des shaders même sans intensité de folie
-	shouldApply := intensity > 0 || params.UseBlur || params.UseBubble || params.UseRain || params.Biome != "" || params.PortalPos != nil || params.UseVortex
-
-	if !shouldApply {
+	if !params.UseBlur && !params.UseBubble && !params.UseVertige {
 		return
 	}
 
-	// On s'assure d'une intensité minimale pour que les shaders biome soient visibles
-	// même si la santé mentale est haute.
-	shaderIntensity := intensity
-	if shaderIntensity < 0.15 {
-		shaderIntensity = 0.15
-	}
+	r.ensureBuffers(screen)
 
-	// Redimensionnement dynamique des buffers si nécessaire
-	sw, sh := screen.Bounds().Dx(), screen.Bounds().Dy()
-	if r.bufferA.Bounds().Dx() != sw || r.bufferA.Bounds().Dy() != sh {
-		r.bufferA = ebiten.NewImage(sw, sh)
-		r.bufferB = ebiten.NewImage(sw, sh)
-	}
-
-	// Initialisation : on copie l'écran actuel dans Buffer A (Source)
-	// NOTE: Pas de ping-pong avec BlendCopy ici, on veut une source stable
 	r.bufferA.Clear()
 	r.bufferA.DrawImage(screen, nil)
 	src := r.bufferA
 	dst := r.bufferB
 
 	anyApplied := false
-	applyCave := params.Biome == "cave" || params.UseCave
 
-	// 1. Biome & Environmental Effects (Cumulative)
-	if params.Biome == "swamp" || params.UseWave {
-		r.applyShader(src, dst, "wave", shaderIntensity, nil, params.ScreenSize)
-		src, dst = dst, src
-		anyApplied = true
-	}
-	if params.Biome == "desert" || params.UseHeat {
-		r.applyShader(src, dst, "heat", shaderIntensity, nil, params.ScreenSize)
-		src, dst = dst, src
-		anyApplied = true
-	}
-	if params.Biome == "forest" || params.UseRain {
-		r.applyShader(src, dst, "rain", shaderIntensity, nil, params.ScreenSize)
-		src, dst = dst, src
-		anyApplied = true
-	}
-
-	// 2. Creature Attack Effects
 	if params.UseBubble {
 		bubbleMin := float32(0.45)
 		bubbleIntensity := bubbleMin + (1.0-bubbleMin)*intensity
@@ -247,11 +216,65 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 		anyApplied = true
 	}
 
-	// 3. Special Static Effects (Vortex for Portal)
+	if params.UseVertige {
+		vertigeMin := float32(0.45)
+		vertigeIntensity := vertigeMin + (1.0-vertigeMin)*intensity
+		r.applyShader(src, dst, "vertige", vertigeIntensity, nil, params.ScreenSize)
+		src, dst = dst, src
+		anyApplied = true
+	}
+
+	if anyApplied {
+		op := &ebiten.DrawImageOptions{}
+		op.Blend = ebiten.BlendCopy
+		screen.DrawImage(src, op)
+	}
+}
+
+// ProcessBiomeEffects applique les effets de biome et environnementaux
+// (wave, heat, rain, cave, vortex) sur l'image entière.
+func (r *EffectRenderer) ProcessBiomeEffects(screen *ebiten.Image, params GlobalEffectParams) {
+	intensity := float32(math.Pow(float64(1.0-params.SanityRatio), 2))
+
+	shouldApply := intensity > 0 || params.UseRain || params.Biome != "" || params.PortalPos != nil || params.UseVortex
+	if !shouldApply {
+		return
+	}
+
+	shaderIntensity := intensity
+	if shaderIntensity < 0.15 {
+		shaderIntensity = 0.15
+	}
+
+	r.ensureBuffers(screen)
+
+	r.bufferA.Clear()
+	r.bufferA.DrawImage(screen, nil)
+	src := r.bufferA
+	dst := r.bufferB
+
+	anyApplied := false
+	applyCave := params.Biome == "cave" || params.UseCave
+
+	if params.Biome == "swamp" || params.UseWave {
+		r.applyShader(src, dst, "wave", shaderIntensity, nil, params.ScreenSize)
+		src, dst = dst, src
+		anyApplied = true
+	}
+	if params.Biome == "desert" || params.UseHeat {
+		r.applyShader(src, dst, "heat", shaderIntensity, nil, params.ScreenSize)
+		src, dst = dst, src
+		anyApplied = true
+	}
+	if params.Biome == "forest" || params.UseRain {
+		r.applyShader(src, dst, "rain", shaderIntensity, nil, params.ScreenSize)
+		src, dst = dst, src
+		anyApplied = true
+	}
+
 	if params.UseVortex || params.PortalPos != nil {
 		vortexCenter := params.PortalPos
 		if vortexCenter == nil && params.UseVortex {
-			// Mode debug : centre du playmat comme fallback
 			vortexCenter = []float32{
 				float32(ui.PlaymatX+ui.PlaymatW/2) / params.ScreenSize[0],
 				float32(ui.PlaymatY+ui.PlaymatH/2) / params.ScreenSize[1],
@@ -262,7 +285,6 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 		anyApplied = true
 	}
 
-	// 4. Cave Shader (appliqué en DERNIER, cumulatif)
 	if applyCave {
 		hudLights := r.buildHudLights()
 		r.applyCaveShader(src, dst, shaderIntensity, params.ScreenSize, hudLights)
@@ -270,11 +292,19 @@ func (r *EffectRenderer) ProcessGlobalEffects(screen *ebiten.Image, params Globa
 		anyApplied = true
 	}
 
-	// Rendu final : On recopie le dernier Buffer (src) sur l'écran
 	if anyApplied {
 		op := &ebiten.DrawImageOptions{}
-		op.Blend = ebiten.BlendCopy // Remplace l'image sans superposition
+		op.Blend = ebiten.BlendCopy
 		screen.DrawImage(src, op)
+	}
+}
+
+// ensureBuffers redimensionne les buffers ping-pong si nécessaire.
+func (r *EffectRenderer) ensureBuffers(screen *ebiten.Image) {
+	sw, sh := screen.Bounds().Dx(), screen.Bounds().Dy()
+	if r.bufferA.Bounds().Dx() != sw || r.bufferA.Bounds().Dy() != sh {
+		r.bufferA = ebiten.NewImage(sw, sh)
+		r.bufferB = ebiten.NewImage(sw, sh)
 	}
 }
 

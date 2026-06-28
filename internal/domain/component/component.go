@@ -53,7 +53,10 @@ func (s *Store) Remove(entityID string, componentType string) {
 }
 
 func (s *Store) Has(entityID string, componentType string) bool {
-	_, ok := s.Get(entityID, componentType)
+	if s.components[entityID] == nil {
+		return false
+	}
+	_, ok := s.components[entityID][componentType]
 	return ok
 }
 
@@ -68,13 +71,16 @@ func (s *Store) GetAll(entityID string) []Component {
 	return result
 }
 
+// queryBuf est un buffer réutilisable pour QueryByComponent避免 les allocations.
+var queryBuf = make([]string, 0, 64)
+
 func (s *Store) QueryByComponent(componentType string) []string {
 	ids := s.byComponent[componentType]
-	result := make([]string, 0, len(ids))
+	queryBuf = queryBuf[:0]
 	for entityID := range ids {
-		result = append(result, entityID)
+		queryBuf = append(queryBuf, entityID)
 	}
-	return result
+	return queryBuf
 }
 
 func (s *Store) RemoveEntity(entityID string) {
