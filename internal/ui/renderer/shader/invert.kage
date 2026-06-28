@@ -1,0 +1,93 @@
+//kage:unit pixels
+
+package main
+
+var Time float
+var Intensity float
+
+func rgb2hsl(c vec3) vec3 {
+	maxVal := max(c.r, max(c.g, c.b))
+	minVal := min(c.r, min(c.g, c.b))
+	l := (maxVal + minVal) / 2.0
+	h, s := 0.0, 0.0
+
+	if maxVal != minVal {
+		d := maxVal - minVal
+		if l > 0.5 {
+			s = d / (2.0 - maxVal - minVal)
+		} else {
+			s = d / (maxVal + minVal)
+		}
+
+		if maxVal == c.r {
+			h = (c.g - c.b) / d
+			if c.g < c.b {
+				h += 6.0
+			}
+		} else if maxVal == c.g {
+			h = (c.b - c.r) / d + 2.0
+		} else {
+			h = (c.r - c.g) / d + 4.0
+		}
+		h /= 6.0
+	}
+	return vec3(h, s, l)
+}
+
+func hue2rgb(p, q, t float) float {
+	if t < 0.0 {
+		t += 1.0
+	}
+	if t > 1.0 {
+		t -= 1.0
+	}
+	if t < 1.0/6.0 {
+		return p + (q-p)*6.0*t
+	}
+	if t < 1.0/2.0 {
+		return q
+	}
+	if t < 2.0/3.0 {
+		return p + (q-p)*(2.0/3.0-t)*6.0
+	}
+	return p
+}
+
+func hsl2rgb(c vec3) vec3 {
+	r, g, b := 0.0, 0.0, 0.0
+	if c.y == 0.0 {
+		r, g, b = c.z, c.z, c.z
+	} else {
+		q, p := 0.0, 0.0
+		if c.z < 0.5 {
+			q = c.z * (1.0 + c.y)
+		} else {
+			q = c.z + c.y - c.z*c.y
+		}
+		p = 2.0*c.z - q
+		r = hue2rgb(p, q, c.x+1.0/3.0)
+		g = hue2rgb(p, q, c.x)
+		b = hue2rgb(p, q, c.x-1.0/3.0)
+	}
+	return vec3(r, g, b)
+}
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	clr := imageSrc0At(srcPos)
+
+	if clr.a == 0.0 {
+		return clr
+	}
+
+	hsl := rgb2hsl(clr.rgb)
+
+	hueShift := 0.5
+	hueShift += 0.2 * sin(Time*2.0)
+	psychosedelicHue := fract(hsl.x + hueShift)
+
+	psychosedelicHSL := vec3(psychosedelicHue, hsl.y, hsl.z)
+	psychosedelicRGB := hsl2rgb(psychosedelicHSL)
+
+	inverted := vec4(psychosedelicRGB, clr.a)
+	return mix(clr, inverted, Intensity)
+}

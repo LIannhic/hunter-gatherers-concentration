@@ -32,6 +32,8 @@ var (
 	caveShaderSource []byte
 	//go:embed shader/vertige.kage
 	vertigeShaderSource []byte
+	//go:embed shader/invert.kage
+	invertShaderSource []byte
 )
 
 type EffectRenderer struct {
@@ -60,6 +62,7 @@ func NewEffectRenderer() (*EffectRenderer, error) {
 		"rain":    rainShaderSource,
 		"cave":    caveShaderSource,
 		"vertige": vertigeShaderSource,
+		"invert":  invertShaderSource,
 	}
 
 	for name, src := range sources {
@@ -176,6 +179,7 @@ type GlobalEffectParams struct {
 	UseCave     bool
 	UseVortex   bool
 	UseVertige  bool
+	UseInvert   bool
 	PortalPos   []float32 // [x, y] normalized, nil if none
 	MousePos    []float32 // [x, y] normalized
 	ScreenSize  []float32 // [width, height] pixels
@@ -187,7 +191,7 @@ type GlobalEffectParams struct {
 func (r *EffectRenderer) ProcessCreatureAttackEffects(screen *ebiten.Image, params GlobalEffectParams) {
 	intensity := float32(math.Pow(float64(1.0-params.SanityRatio), 2))
 
-	if !params.UseBlur && !params.UseBubble && !params.UseVertige {
+	if !params.UseBlur && !params.UseBubble && !params.UseVertige && !params.UseInvert {
 		return
 	}
 
@@ -220,6 +224,14 @@ func (r *EffectRenderer) ProcessCreatureAttackEffects(screen *ebiten.Image, para
 		vertigeMin := float32(0.45)
 		vertigeIntensity := vertigeMin + (1.0-vertigeMin)*intensity
 		r.applyShader(src, dst, "vertige", vertigeIntensity, nil, params.ScreenSize)
+		src, dst = dst, src
+		anyApplied = true
+	}
+
+	if params.UseInvert {
+		invertMin := float32(0.5)
+		invertIntensity := invertMin + (1.0-invertMin)*intensity
+		r.applyShader(src, dst, "invert", invertIntensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}

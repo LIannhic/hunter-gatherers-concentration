@@ -519,8 +519,6 @@ func (app *Application) setupEventSubscriptions() {
 		gridID, ok4 := e.Payload["grid_id"].(string)
 		flipDir, ok5 := e.Payload["flip_direction"].(entity.FlipDirection)
 
-		fmt.Printf("[EVENT-DEBUG] TileRevealed reçu: ID=%s, Grid=%s, Pos=%v, Dir=%v\n", entityID, gridID, position, flipDir)
-
 		if ok1 && ok3 && ok4 && ok5 {
 			var entState entity.TileState
 			var startTrans, endTrans entity.Transformation
@@ -931,6 +929,7 @@ func (app *Application) StartGame() {
 
 	app.Input.ResetGameState()
 	app.HUD.ClearMessages()
+	app.World.RevealedBySpecies = make(map[string]int)
 
 	app.World.Turn = 0
 	app.World.MaxTurns = app.World.Player.Stats.MaxSanity
@@ -940,7 +939,7 @@ func (app *Application) StartGame() {
 	_ = app.World.AddLootItem(player.NewPortablePortalItem(0))
 	app.World.Player.Inventory.ScrollOffset = 0
 
-	app.Engine.ResetPreviews()
+	app.Engine.Reset()
 	fmt.Println("[ENGINE] Ready")
 
 	if app.World.TurnTimer != nil {
@@ -1050,6 +1049,7 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 			UseBlur:     app.World.Player.VisualEffects["blur"] > 0 || app.World.Debug.ActiveShaders["blur"],
 			UseBubble:   (app.World.Player.VisualEffects["bubble"] > 0 || app.World.Debug.ActiveShaders["bubble"]) && isOverPlaymat,
 			UseVertige:  app.World.Player.VisualEffects["vertige"] > 0 || app.World.Debug.ActiveShaders["vertige"],
+			UseInvert:   app.World.Player.VisualEffects["invert"] > 0 || app.World.Debug.ActiveShaders["invert"],
 			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},
 		}

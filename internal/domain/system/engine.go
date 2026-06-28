@@ -75,11 +75,18 @@ func NewEngine(world *World) *Engine {
 	return e
 }
 
-// ResetPreviews réinitialise le suivi des prévisualisations (pour une nouvelle partie)
-func (e *Engine) ResetPreviews() {
+// Reset réinitialise tous les systèmes ayant un état interne (pour une nouvelle partie)
+func (e *Engine) Reset() {
 	if e.previewSystem != nil {
 		e.previewSystem.Reset()
 	}
+	if e.movementSystem != nil {
+		e.movementSystem.Reset()
+	}
+	if e.comboSystem != nil {
+		e.comboSystem.Reset()
+	}
+	e.hasMatchableEntities = true
 }
 
 // Update fait progresser le tour de jeu

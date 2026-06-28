@@ -750,35 +750,43 @@ func (m *Manager) GetByType(t Type) []Entity {
 		return m.cacheByType[t]
 	}
 
-	result := make([]Entity, 0, len(m.byType[t]))
+	// Réutilise la capacité du slice cache existant
+	cached := m.cacheByType[t]
+	if cached == nil {
+		cached = make([]Entity, 0, len(m.byType[t]))
+	}
+	cached = cached[:0]
 	for _, e := range m.byType[t] {
-		result = append(result, e)
+		cached = append(cached, e)
 	}
 	// Trie par ID pour avoir un ordre stable entre les frames
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].GetID() < result[j].GetID()
+	sort.Slice(cached, func(i, j int) bool {
+		return cached[i].GetID() < cached[j].GetID()
 	})
 
 	// Met à jour le cache
-	m.cacheByType[t] = result
+	m.cacheByType[t] = cached
 	m.dirtyTypes[t] = false
 
-	return result
+	return cached
 }
 
 func (m *Manager) GetAllActive() []Entity {
 	if !m.dirtyActive && m.activeCache != nil {
 		return m.activeCache
 	}
-	result := make([]Entity, 0)
+	// Réutilise la capacité du cache existant au lieu de créer un nouveau slice
+	if m.activeCache == nil {
+		m.activeCache = make([]Entity, 0, len(m.entities))
+	}
+	m.activeCache = m.activeCache[:0]
 	for _, e := range m.entities {
 		if e.IsActive() {
-			result = append(result, e)
+			m.activeCache = append(m.activeCache, e)
 		}
 	}
-	m.activeCache = result
 	m.dirtyActive = false
-	return result
+	return m.activeCache
 }
 
 func (m *Manager) QueryByTag(tag string) []Entity {

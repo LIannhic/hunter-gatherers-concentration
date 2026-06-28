@@ -58,13 +58,10 @@ func (s *ComboSystem) onMatch(e event.Event) {
 	s.lastMatchTurn = s.world.Turn
 	s.comboCount++
 
-	fmt.Printf("[COMBO] onMatch called! comboCount=%d, turn=%d, payload=%v\n", s.comboCount, s.world.Turn, e.Payload)
-
 	// Récupère les types d'association pour le bonus de synergie
 	assocTypes, _ := e.Payload["assoc_types"].([]string)
 	isSynergy := len(assocTypes) > 1
 
-	fmt.Printf("[COMBO] assocTypes=%v, isSynergy=%v\n", assocTypes, isSynergy)
 
 	// Calcul de la "Juiciness" (1 à 5)
 	juiciness := 1
@@ -99,7 +96,6 @@ func (s *ComboSystem) onMatch(e event.Event) {
 	s.world.Player.GainExperience(scoreBonus)
 
 	// Publie l'événement de combo
-	fmt.Printf("[COMBO] Publishing ComboTriggered: text=%q, count=%d, score=%d, juiciness=%d\n", msg, s.comboCount, scoreBonus, juiciness)
 	s.world.EventBus.PublishImmediate(event.NewComboTriggeredEvent(msg, s.comboCount, scoreBonus, juiciness))
 }
 

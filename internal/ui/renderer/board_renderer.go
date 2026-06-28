@@ -264,7 +264,6 @@ func (r *BoardRenderer) ClearDebugReveal() {
 // StartFlipAnimation démarre une animation de flip pour une tuile
 func (r *BoardRenderer) StartFlipAnimation(gridID string, pos board.Position, flipDir entity.FlipDirection, entityID string, finalState entity.TileState, startTrans, endTrans entity.Transformation) {
 	key := gridID + ":" + fmt.Sprint(pos.X) + "," + fmt.Sprint(pos.Y) + ":" + entityID
-	fmt.Printf("[ANIM-DEBUG] StartFlipAnimation: Key=%s, Dir=%v, State=%s\n", key, flipDir, finalState.String())
 	r.flipAnimations[key] = &FlipAnimation{
 		GridID:         gridID,
 		Position:       pos,
