@@ -115,6 +115,7 @@ func (s *LifecycleSystem) Update(world *World) {
 - Un système plus flexible pour les entités spéciales (ex: les portails de commencement qui se bloquent après un délai)
 - **Unification de l'interface `Hoverable`** : Toutes les entités interactives (tuiles, butin) et les sorties implémentent `Hoverable`, permettant un effet d'inclinaison (tilt) unifié au survol.
 - **Système de Cumul (Merge)** : Une mécanique permettant de fusionner des paires identiques pour augmenter leur valeur visuelle et stratégique avant la capture.
+- **Système de Cadres d'Action** : Feedback hybride (permanent sur sélection + au survol) indiquant l'état d'interaction via `TileActionState` (None/Interactive/Impossible/Unavailable). Logique centralisée dans `handler.go:computeTileActionState()`, rendu dans `board_renderer.go:RenderTileActionFrame()`.
 
 ---
 

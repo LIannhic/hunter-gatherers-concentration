@@ -1774,6 +1774,38 @@ func (r *BoardRenderer) RenderSelectionHighlight(screen *ebiten.Image, pos board
 	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, finalColor, true)
 }
 
+// RenderTileActionFrame dessine un cadre coloré autour d'une tuile selon son état d'action
+func (r *BoardRenderer) RenderTileActionFrame(screen *ebiten.Image, pos board.Position, gridID string, state ui.TileActionState, world *domain.World) {
+	if state == ui.TileActionNone {
+		return
+	}
+
+	grid, ok := world.GetGrid(gridID)
+	if !ok {
+		return
+	}
+
+	isPortalZone := world.DreamPlane != nil && (gridID == world.DreamPlane.StartZoneID || gridID == world.DreamPlane.EndZoneID)
+	x, y := r.calculateTileScreenPos(pos, grid, isPortalZone)
+
+	var frameColor color.Color
+	switch state {
+	case ui.TileActionInteractive:
+		frameColor = color.RGBA{80, 200, 120, 220} // Vert
+	case ui.TileActionImpossible:
+		frameColor = color.RGBA{220, 60, 60, 200} // Rouge
+	case ui.TileActionUnavailable:
+		frameColor = color.RGBA{220, 150, 40, 200} // Orange
+	}
+
+	// Effet d'immunité : couleur remplacée par gris
+	if world.Player != nil && world.Player.ImmunityTurns > 0 {
+		frameColor = color.RGBA{150, 150, 160, 200}
+	}
+
+	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, frameColor, true)
+}
+
 func (r *BoardRenderer) RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World) {
 	grid, ok := world.GetGrid(gridID)
 	if !ok {
