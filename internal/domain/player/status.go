@@ -9,6 +9,7 @@ const (
 	ImpairmentAgnosia   // Difficulté de reconnaissance visuelle
 	ImpairmentAtaxia    // Perturbation de la coordination / position
 	ImpairmentAmnesia   // Perturbation de la mémoire / séquence
+	ImpairmentVertigo   // Vertige / distorsion visuelle (Fleeing Sprite)
 )
 
 func (c CognitiveImpairment) String() string {
@@ -21,6 +22,8 @@ func (c CognitiveImpairment) String() string {
 		return "ataxia"
 	case ImpairmentAmnesia:
 		return "amnesia"
+	case ImpairmentVertigo:
+		return "vertigo"
 	default:
 		return "none"
 	}

@@ -58,12 +58,13 @@ Lorsqu'une créature est révélée (fin d'animation de flip), si son **Agressiv
 - **Condition de Succès** : Les dégâts et effets ne s'appliquent que si l'attaque **touche** le joueur. Si l'attaque ne touche pas, le joueur n'a rien.
 - Inflige **10 dégâts physiques** (sauf si *Grâce* active).
 - **Effets Spécifiques au Monde** : Centralisés par le `CreatureAttackEffectSystem`.
-  - **Stonewarden** : Son attaque provoque un séisme de rotation (pivote la grille de 90°).
-  - **Echo Hound** : Déclenche l'état **Aphasia** (3 tours).
-  - **Burrower** : Déclenche l'état **Ataxia** (3 tours).
-  - **Moss Monkey** : Déclenche l'état **Agnosia** et l'effet visuel de **Mousse Coulante** (3 tours).
-  - **Specter** : Déclenche l'état **Amnesia** (5 tours).
-- Déclenche des effets visuels selon l'espèce (Blur pour Shadowstalker, Bulle pour Lumifly).
+- **Stonewarden** : Son attaque provoque un séisme de rotation (pivote la grille de 90°).
+   - **Echo Hound** : Déclenche l'état **Aphasia** (3 tours).
+   - **Burrower** : Déclenche l'état **Ataxia** (3 tours).
+   - **Moss Monkey** : Déclenche l'état **Agnosia** et l'effet visuel de **Mousse Coulante** (3 tours).
+   - **Specter** : Déclenche l'état **Amnesia** (5 tours).
+   - **Fleeing Sprite** : Déclenche l'état **Vertige** et le shader **Vertige** (3 tours).
+- Déclenche des effets visuels selon l'espèce (Blur pour Shadowstalker, Bulle pour Lumifly, Vertige pour Fleeing Sprite).
 - Publie l'événement `CreatureAttacked` pour l'animation et `PlayerDamaged` pour le HUD.
 
 #### Feedback Visuel
@@ -356,8 +357,7 @@ Le joueur peut subir des altérations mentales qui déforment radicalement l'int
 - **Agnosia** (Moss Monkey) – Rend les boutons visuellement indifférenciés via un **Thème Monochrome standardisé**. Les boutons deviennent noirs avec un contenu blanc, et leurs labels affichent tous **"BOUTON"**.
 - **Effacement par le Timer** (Agnosia) – La jauge de remplissage du timer s'applique aux 4 boutons et progresse du **Noir vers le BLANC**. À 100%, elle masque totalement le texte et l'icône, rendant le bouton anonyme.
 - **Amnesia** (Specter) – Les tuiles butins sont face cachée. Déclenché par le Spectre lorsqu'une attaque touche le joueur ou la proximité d'une void bloom. Les tuiles de l'inventaire se retournent vers une direction dictée par l'ancrage du joueur (le Spectre "frotte" les objets dans le sens de son passage). Affiche "AMNÉSIE ! X tours." sur la zone droite et "Vous avez du mal à vous souvenir." sur la zone gauche. À la fin, "La mémoire revient..." et l'inventaire est révélé automatiquement.
-
-Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
+- **Vertige** (Fleeing Sprite) – Le monde tourne autour de vous. Déclenche un shader de **distorsion radiale** avec aberration chromatique (séparation R/G/B) et pulsation de panique. Les couleurs se séparent et l'image tremble, simulant une désorientation visuelle.
 
 Ces effets sont interceptés par le système de rendu **avant** l'affichage, forçant le joueur à lutter contre sa propre interface.
 
@@ -469,7 +469,7 @@ Le joueur dispose d'un indicateur visuel persistant montrant sa position actuell
 | **Echo Hound** | Marais | Auto | Relatif | Swap | Rebond | 50 | Chien rapide qui échange de place avec la cible et rebondit 180° quand bloqué (Exclusif). |
 | **Moss Monkey** | Forêt | Proximité (4) | Target Empty | Normal | Glisse | 0 (dynamique) | Saboteur qui rebouche les cases vides. Agressivité = % cases vides. Fuit si saturé. |
 | **Flutterwing** | Global | Proximité (2) | Répulsion joueur | Over | Glisse | 0 | Créature timide dont l'essence apaise l'esprit. |
-| **Fleeing Sprite** | Global | Proximité (3) | Répulsion joueur | Normal | Glisse | 0 | Étincelle d'énergie vive révélant les dangers. |
+| **Fleeing Sprite** | Global | Proximité (3) | Répulsion joueur | Normal | Glisse | 0 | Étincelle d'énergie vive qui fuit le joueur. Attaque : **Vertige** (distorsion + aberration chromatique). Butin : Vision des Intentions (révèle les zones de menace). |
 
 ### Système de Cycle Cyclique (Lifecycle)
 
