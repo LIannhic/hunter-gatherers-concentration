@@ -330,6 +330,7 @@ func (w *World) GenerateLayout(id string) {
 	w.GridOrder = make([]string, 0)
 	w.Entities = entity.NewManager() // Reset des entités
 	w.Components = component.NewStore()
+	w.RevealedBySpecies = make(map[string]int)
 
 	// Enregistre les zones dans World
 	// Priorité au début et à la fin
@@ -398,6 +399,7 @@ func (w *World) GeneratePlaytestLayout(id string) {
 	w.GridOrder = make([]string, 0)
 	w.Entities = entity.NewManager()
 	w.Components = component.NewStore()
+	w.RevealedBySpecies = make(map[string]int)
 
 	grid := w.DreamPlane.Zones[w.DreamPlane.StartZoneID]
 	w.Grids[grid.ID] = grid

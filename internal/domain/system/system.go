@@ -40,12 +40,6 @@ func (s *LifecycleSystem) Update(world *World) {
 
 		if lifecycle.Progress() {
 			stageName := lifecycle.GetCurrentStageName()
-			ent, _ := world.Entities.Get(entity.ID(entityID))
-			entType := "unknown"
-			if ent != nil {
-				entType = ent.GetType().String()
-			}
-			fmt.Printf("[LIFECYCLE] Entité %s (%s) a mûri au stade %d: %s\n", entityID, entType, lifecycle.CurrentStage, stageName)
 			world.EventBus.Publish(event.NewResourceMaturedEvent(
 				entityID,
 				stageName,
@@ -54,7 +48,6 @@ func (s *LifecycleSystem) Update(world *World) {
 
 		if lifecycle.ShouldCycle() {
 			lifecycle.Cycle()
-			fmt.Printf("[LIFECYCLE] Entité %s a cyclé au stade 0\n", entityID)
 		}
 	}
 }
@@ -395,9 +388,6 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 						_, _ = world.FlipTile(gridID, tile.Position, flipDir, "system_hide")
 						e.SetState(entity.Hidden | entity.Blocked)
 
-						world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-							e.GetPosition(), string(e.GetID()), gridID, flipDir,
-							map[string]interface{}{"reason": "system_hide"}))
 						continue
 					}
 					continue
@@ -405,10 +395,6 @@ func (s *PreviewSystem) hideGrid(world *World, gridID string) {
 
 				if e.GetState()&entity.Revealed != 0 {
 					_, _ = world.FlipTile(gridID, tile.Position, tile.Tilt.ToFlipDirection(), "system_hide")
-
-					world.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-						e.GetPosition(), string(e.GetID()), gridID, tile.Tilt.ToFlipDirection(),
-						map[string]interface{}{"reason": "system_hide"}))
 				}
 			}
 		}
@@ -655,6 +641,7 @@ type RevealedTile struct {
 type CreatureMovementSystem struct {
 	world         *World
 	recentReveals []RevealedTile
+	reusableWA    worldAdapter // Reusable adapter to avoid per-call allocation
 }
 
 func NewCreatureMovementSystem(world *World) *CreatureMovementSystem {
@@ -689,6 +676,10 @@ func (s *CreatureMovementSystem) TrackReveal(pos board.Position, gridID string) 
 }
 
 func (s *CreatureMovementSystem) ClearReveals() {
+	s.recentReveals = s.recentReveals[:0]
+}
+
+func (s *CreatureMovementSystem) Reset() {
 	s.recentReveals = s.recentReveals[:0]
 }
 
@@ -810,8 +801,9 @@ func (s *CreatureMovementSystem) hasTarget(profile *creature.MovementProfile, c 
 	if !ok {
 		return false
 	}
-	wa := &worldAdapter{world: world, grid: grid}
-	target := wa.FindNearestTarget(c.GetPosition(), profile.Navigation.Target, profile.Navigation.TargetName, profile.Navigation.ExcludedStages)
+	s.reusableWA.world = world
+	s.reusableWA.setGrid(grid)
+	target := s.reusableWA.FindNearestTarget(c.GetPosition(), profile.Navigation.Target, profile.Navigation.TargetName, profile.Navigation.ExcludedStages)
 	return target != nil
 }
 
@@ -826,10 +818,11 @@ func (s *CreatureMovementSystem) executeWander(c *creature.Creature, profile *cr
 	})
 
 	currentPos := c.GetPosition()
+	s.reusableWA.world = world
+	s.reusableWA.setGrid(grid)
 	for _, dir := range directions {
 		newPos := entity.Position{X: currentPos.X + dir.X, Y: currentPos.Y + dir.Y}
-		wa := &worldAdapter{world: world, grid: grid}
-		if wa.IsWalkable(c, newPos) {
+		if s.reusableWA.IsWalkable(c, newPos) {
 			s.applyMoveMode(profile.Mode, c, currentPos, newPos, world, grid)
 			return
 		}
@@ -847,8 +840,9 @@ func sign(val int) int {
 }
 
 func (s *CreatureMovementSystem) executeMove(c *creature.Creature, profile *creature.MovementProfile, world *World, grid *board.Grid) bool {
-	wa := &worldAdapter{world: world, grid: grid}
-	direction := profile.Navigation.DecideDirection(wa, c)
+	s.reusableWA.world = world
+	s.reusableWA.setGrid(grid)
+	direction := profile.Navigation.DecideDirection(&s.reusableWA, c)
 	if direction == (entity.Position{X: 0, Y: 0}) {
 		return true
 	}
@@ -859,11 +853,11 @@ func (s *CreatureMovementSystem) executeMove(c *creature.Creature, profile *crea
 		Y: currentPos.Y + direction.Y,
 	}
 
-	if !wa.IsWalkable(c, newPos) {
+	if !s.reusableWA.IsWalkable(c, newPos) {
 		if profile.Navigation.Type == creature.NavOrientation {
 			dir := direction
-			hitH := !wa.IsWalkable(c, entity.Position{X: currentPos.X + dir.X, Y: currentPos.Y})
-			hitV := !wa.IsWalkable(c, entity.Position{X: currentPos.X, Y: currentPos.Y + dir.Y})
+			hitH := !s.reusableWA.IsWalkable(c, entity.Position{X: currentPos.X + dir.X, Y: currentPos.Y})
+			hitV := !s.reusableWA.IsWalkable(c, entity.Position{X: currentPos.X, Y: currentPos.Y + dir.Y})
 
 			rotateDegrees := 90
 			if hitH && hitV {
@@ -890,7 +884,7 @@ func (s *CreatureMovementSystem) executeMove(c *creature.Creature, profile *crea
 			return false
 		}
 
-		finalPos, success := profile.Collision.HandleCollision(wa, c, newPos)
+		finalPos, success := profile.Collision.HandleCollision(&s.reusableWA, c, newPos)
 		if !success {
 			return false
 		}
@@ -964,8 +958,9 @@ func (s *CreatureMovementSystem) MoveSpeciesOneStepTowards(species string, targe
 }
 
 func (s *CreatureMovementSystem) isWalkable(c *creature.Creature, pos entity.Position, grid *board.Grid, world *World) bool {
-	wa := &worldAdapter{world: world, grid: grid}
-	return wa.IsWalkable(c, pos)
+	s.reusableWA.world = world
+	s.reusableWA.setGrid(grid)
+	return s.reusableWA.IsWalkable(c, pos)
 }
 
 func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler, c *creature.Creature, newPos, currentPos entity.Position, world *World, grid *board.Grid) (entity.Position, bool) {
@@ -975,8 +970,9 @@ func (s *CreatureMovementSystem) handleCollision(coll creature.CollisionHandler,
 		}
 	}
 
-	wa := &worldAdapter{world: world, grid: grid}
-	return coll.HandleCollision(wa, c, newPos)
+	s.reusableWA.world = world
+	s.reusableWA.setGrid(grid)
+	return coll.HandleCollision(&s.reusableWA, c, newPos)
 }
 
 func (s *CreatureMovementSystem) applyMoveMode(mode creature.MovementMode, c *creature.Creature, oldPos, newPos entity.Position, world *World, grid *board.Grid) bool {
@@ -1130,6 +1126,11 @@ func directionToOrientation(dir entity.Position) creature.Orientation {
 type worldAdapter struct {
 	world *World
 	grid  *board.Grid
+}
+
+// setGrid updates the grid reference on a reusable adapter
+func (wa *worldAdapter) setGrid(g *board.Grid) {
+	wa.grid = g
 }
 
 func (wa *worldAdapter) GetPlayerPosition() entity.Position {

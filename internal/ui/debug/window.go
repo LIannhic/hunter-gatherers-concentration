@@ -45,7 +45,7 @@ func (dw *DebugWindow) initCaches() {
 	sort.Strings(dw.sortedEntities)
 
 	// Shaders purement environnementaux (Biome)
-	dw.sortedShaders = []string{"cave", "heat", "rain", "vortex", "wave"}
+	dw.sortedShaders = []string{"cave", "heat", "rain", "wave"}
 	sort.Strings(dw.sortedShaders)
 }
 
@@ -185,6 +185,7 @@ func (dw *DebugWindow) renderImpairments(screen *ebiten.Image) {
 	dw.drawCheckbox(screen, startX, startY+150, "Agnosia (Moss Monkey)", p.AgnosiaTurns > 0)
 	dw.drawCheckbox(screen, startX, startY+180, "Amnesia (Specter)", p.AmnesiaTurns > 0)
 	dw.drawCheckbox(screen, startX, startY+210, "Vertige (Fleeing Sprite)", dw.world.Debug.ActiveShaders["vertige"])
+	dw.drawCheckbox(screen, startX, startY+240, "Invert (Flutterwing)", dw.world.Debug.ActiveShaders["invert"])
 }
 
 func (dw *DebugWindow) drawButton(screen *ebiten.Image, x, y float32, label, id string) {
@@ -408,6 +409,17 @@ func (dw *DebugWindow) handleClickImpairments(mx, my float32) {
 				dw.world.Player.VisualEffects["vertige"] = 999
 			} else {
 				dw.world.Player.VisualEffects["vertige"] = 0
+			}
+		}
+	}
+	// Invert
+	if dw.isInside(mx, my, startX, startY+240, 200, 20) {
+		dw.world.Debug.ActiveShaders["invert"] = !dw.world.Debug.ActiveShaders["invert"]
+		if dw.world.Player != nil {
+			if dw.world.Debug.ActiveShaders["invert"] {
+				dw.world.Player.VisualEffects["invert"] = 999
+			} else {
+				dw.world.Player.VisualEffects["invert"] = 0
 			}
 		}
 	}

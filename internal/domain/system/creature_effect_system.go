@@ -96,5 +96,11 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 			s.world.Player.VisualEffects["vertige"] = 3
 			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Le monde tourne autour de vous..."))
 		}
+
+	case "flutterwing":
+		if s.world.Player != nil {
+			s.world.Player.VisualEffects["invert"] = 2
+			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Les couleurs s'inversent autour de vous..."))
+		}
 	}
 }

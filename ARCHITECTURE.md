@@ -93,7 +93,8 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2+). Cela influence les règles de match et le rendu (échelle x1.15 par niveau + bordures concentriques colorées si révélé).
 
 - **Systems** : Mettent à jour l'état du monde via l'**Engine** (`engine.go`).
-  - **Engine** : Chef d'orchestre du domaine. Il sépare la logique en deux cycles :
+  - **Engine** : Chef d'orchestre du domaine. Il sépare la logique en trois cycles :
+    - `Reset()` : Nettoie l'état interne de tous les systèmes (Previews, Mouvements, Combos) lors du démarrage d'une nouvelle session. Garantit qu'aucune donnée de la partie précédente ne persiste (ex: déclencheurs de mouvement des Stonewardens).
     - `Update()` : Cycle par tour (IA, maturation, fin de tour).
     - `UpdateFrame(dt)` : Cycle temps réel à 60 FPS (Timers, évènements UI, prévisualisation).
   - **CreatureAISystem** : Gère les comportements de base des créatures

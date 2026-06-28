@@ -336,6 +336,8 @@ func (s *AggressionSystem) triggerExceededAttack(c *creature.Creature) {
 			s.world.Player.VisualEffects["bubble"] = 3
 		} else if c.Species == "fleeing_sprite" {
 			s.world.Player.VisualEffects["vertige"] = 3
+		} else if c.Species == "flutterwing" {
+			s.world.Player.VisualEffects["invert"] = 3
 		}
 
 		// Publie l'événement de dégâts pour les retours HUD/Console

@@ -12,7 +12,6 @@ import (
 
 // FlipTile bascule une entité entre caché et révélé et applique la transformation géométrique
 func (w *World) FlipTile(gridID string, pos board.Position, flipDir entity.FlipDirection, reason string) (entity.Entity, error) {
-	fmt.Printf("[WORLD-DEBUG] FlipTile appelé: Grid=%s, Pos=%v, Reason=%s\n", gridID, pos, reason)
 	grid, ok := w.Grids[gridID]
 	if !ok {
 		// Tentative de récupération via InventoryGrid si c'est l'ID réservé

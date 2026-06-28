@@ -3,7 +3,6 @@ package hud
 
 import (
 	"fmt"
-	"image"
 	"image/color"
 	"math"
 	"sort"
@@ -64,6 +63,17 @@ type HUD struct {
 
 	inventoryOffscreen *ebiten.Image // Buffer pour le clipping de l'inventaire
 
+	// Pre-allocated overlay buffers for modal windows (avoid per-frame allocation)
+	overlayBuffer    *ebiten.Image // Full-screen overlay for modals
+	modalWindowCache *ebiten.Image // Cache for modal window background
+
+	// Pre-allocated offscreen buffers for message areas (clipping)
+	messageLeftBuffer  *ebiten.Image
+	messageRightBuffer *ebiten.Image
+
+	// Cached entity counts (reused across frames to avoid map allocation)
+	cachedDetailedCounts map[string]int
+
 	// NOUVEAU: Fenêtres de debug et difficulté
 	debugWindow   *dbg.DebugWindow
 	DiffSelection *DifficultySelection
@@ -82,15 +92,20 @@ type HUD struct {
 	queueLeft     []string
 	queueRight    []string
 	activeLeft    *NotificationMessage
-	activeRight          *NotificationMessage
-	toxicIntensity       float64 // Intensité de la toxicité pour le feedback visuel
-	lastToxicTurn        int     // Dernier tour où on a reçu des dégâts de poison
+	activeRight   *NotificationMessage
+	toxicIntensity float64 // Intensité de la toxicité pour le feedback visuel
+	lastToxicTurn  int     // Dernier tour où on a reçu des dégâts de poison
 
 	// Combo Juicy
 	comboMsg *ComboMessage
 
 	// Navigation des stades dans l'atlas des assets
 	resourceStageIndex map[string]int
+
+	// Cached sorted keys for grid counts
+	cachedGridCountsKeys []string
+	cachedGridCountsGrid string
+	cachedGridCountsTurn int
 }
 
 // NewHUD crée un nouveau HUD
@@ -104,6 +119,12 @@ func NewHUD(world *domain.World) *HUD {
 		showVictory:          false,
 		fullFeedbackTimer:    0,
 		inventoryOffscreen:   ebiten.NewImage(int(ui.InventoryW), 331),
+		// Pre-allocate overlay buffers for modal windows
+		overlayBuffer:    ebiten.NewImage(ui.ScreenWidth, ui.ScreenHeight),
+		modalWindowCache: ebiten.NewImage(800, 500), // Max modal size
+		// Pre-allocate offscreen buffers for message area clipping
+		messageLeftBuffer:  ebiten.NewImage(ui.MessageBoxWLeft, ui.MessageBoxHLeft),
+		messageRightBuffer: ebiten.NewImage(ui.MessageBoxWRight, ui.MessageBoxHRight),
 		selectedLoots:        make(map[int]bool),
 		selectedLootIndex:    -1,
 		confirmClearAll:      false,
@@ -112,6 +133,7 @@ func NewHUD(world *domain.World) *HUD {
 		queueLeft:            make([]string, 0),
 		queueRight:           make([]string, 0),
 		resourceStageIndex:   make(map[string]int),
+		cachedDetailedCounts: make(map[string]int),
 	}
 
 	// S'abonne aux événements d'inventaire plein
@@ -170,8 +192,6 @@ func NewHUD(world *domain.World) *HUD {
 		txt, _ := e.Payload["text"].(string)
 		count, _ := e.Payload["count"].(int)
 		juiciness, _ := e.Payload["juiciness"].(int)
-
-		fmt.Printf("[HUD] ComboTriggered received! text=%q, count=%d, juiciness=%d\n", txt, count, juiciness)
 
 		h.comboMsg = &ComboMessage{
 			Text:        txt,
@@ -447,33 +467,32 @@ func (h *HUD) Render(screen *ebiten.Image) {
 func (h *HUD) renderMessageArea(screen *ebiten.Image, area string) {
 	var x, y, w, hBox float64
 	var active *NotificationMessage
+	var buf *ebiten.Image
 
 	if area == "left" {
 		x, y, w, hBox = ui.MessageBoxXLeft, ui.MessageBoxYLeft, ui.MessageBoxWLeft, ui.MessageBoxHLeft
 		active = h.activeLeft
+		buf = h.messageLeftBuffer
 	} else {
 		x, y, w, hBox = ui.MessageBoxXRight, ui.MessageBoxYRight, ui.MessageBoxWRight, ui.MessageBoxHRight
 		active = h.activeRight
+		buf = h.messageRightBuffer
 	}
 
-	// 1. Fond de la boîte de message
-	vector.DrawFilledRect(screen, float32(x), float32(y), float32(w), float32(hBox), color.RGBA{20, 20, 30, 180}, true)
-	vector.StrokeRect(screen, float32(x), float32(y), float32(w), float32(hBox), 1, color.RGBA{100, 100, 150, 100}, true)
+	// Draw background + text to offscreen buffer (automatic clipping at buffer edges)
+	buf.Fill(color.RGBA{20, 20, 30, 180})
+	vector.StrokeRect(buf, 0, 0, float32(w), float32(hBox), 1, color.RGBA{100, 100, 150, 100}, true)
 
-	if active == nil {
-		return
+	if active != nil {
+		ty := (hBox / 2) + 5
+		// Position relative to buffer origin — anything outside [0, w] is clipped
+		textutil.Draw(buf, active.Text, int(active.X), int(ty), color.RGBA{255, 255, 230, 255})
 	}
 
-    // 2. Texte défilant (avec clipping)
-    // On crée une sous-image pour le clipping (le repère reste celui de 'screen')
-    rect := image.Rect(int(x), int(y), int(x+w), int(y+hBox))
-    msgImg := screen.SubImage(rect).(*ebiten.Image)
-
-    // Calcul de la position Y centrée (relative à l'écran, donc on ajoute 'y')
-    ty := y + (hBox / 2) + 5
-
-    // On dessine sur msgImg en coordonnées absolues (repère screen)
-    textutil.Draw(msgImg, active.Text, int(x+active.X), int(ty), color.RGBA{255, 255, 230, 255})
+	// Blit buffer to screen at message box position
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(x, y)
+	screen.DrawImage(buf, op)
 }
 
 func (h *HUD) renderJuicyCombo(screen *ebiten.Image) {
@@ -492,9 +511,6 @@ func (h *HUD) renderJuicyCombo(screen *ebiten.Image) {
 	// Position dans la combo zone (au-dessus des jauges)
 	baseX := ui.ComboZoneX + ui.ComboZoneW/2
 	baseY := ui.ComboZoneY + ui.ComboZoneH/2 + ui.ComboTextOffY + h.comboMsg.YOffset
-
-	fmt.Printf("[HUD] renderJuicyCombo: text=%q, baseX=%.1f, baseY=%.1f, timer=%d, juiciness=%d\n",
-		h.comboMsg.Text, float64(baseX), baseY, h.comboMsg.Timer, h.comboMsg.Juiciness)
 
 	// Fond coloré selon juiciness
 	var bgClr color.RGBA
@@ -604,10 +620,10 @@ func hsvToRgb(h, s, v float64) color.RGBA {
 
 // renderAssetsWindow dessine une fenêtre montrant tous les assets chargés
 func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
-	// Fond semi-transparent couvrant l'aire de jeu
-	overlay := ebiten.NewImage(ui.ScreenWidth, ui.ScreenHeight)
-	overlay.Fill(color.RGBA{0, 0, 0, 200})
-	screen.DrawImage(overlay, nil)
+	// Fond semi-transparent couvrant l'aire de jeu - use pre-allocated buffer
+	h.overlayBuffer.Clear()
+	h.overlayBuffer.Fill(color.RGBA{0, 0, 0, 200})
+	screen.DrawImage(h.overlayBuffer, nil)
 
 	// Fenêtre centrale
 	winW, winH := 800, 500
@@ -778,9 +794,8 @@ func (h *HUD) drawButton(screen *ebiten.Image, x, y, w, buttonH float32, label s
 
 // renderVictoryWindow dessine l'écran de victoire
 func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
-	overlay := ebiten.NewImage(ui.ScreenWidth, ui.ScreenHeight)
-	overlay.Fill(color.RGBA{0, 0, 0, 220})
-	screen.DrawImage(overlay, nil)
+	// Use vector.DrawFilledRect for overlay instead of creating new image
+	vector.DrawFilledRect(screen, 0, 0, float32(ui.ScreenWidth), float32(ui.ScreenHeight), color.RGBA{0, 0, 0, 220}, true)
 
 	winW, winH := 600, 400
 	x := (ui.ScreenWidth - winW) / 2
@@ -884,13 +899,16 @@ func (h *HUD) HandleGameOverClick(mx, my int) string {
 
 // getGridDetailedCounts retourne le nombre d'entités par type/espèce pour une grille donnée
 func (h *HUD) getGridDetailedCounts(gridID string) map[string]int {
-	counts := make(map[string]int)
+	// Reuse cached map instead of allocating a new one each frame
+	for k := range h.cachedDetailedCounts {
+		delete(h.cachedDetailedCounts, k)
+	}
 
 	// Ressources
 	for _, e := range h.world.Entities.GetByType(entity.TypeResource) {
 		if e.GetGridID() == gridID && e.GetState() != entity.Matched {
 			if r, ok := e.(*domain.Resource); ok {
-				counts[r.ResourceType]++
+				h.cachedDetailedCounts[r.ResourceType]++
 			}
 		}
 	}
@@ -898,7 +916,7 @@ func (h *HUD) getGridDetailedCounts(gridID string) map[string]int {
 	for _, e := range h.world.Entities.GetByType(entity.TypeCreature) {
 		if e.GetGridID() == gridID && e.GetState() != entity.Matched {
 			if c, ok := e.(*domain.Creature); ok {
-				counts[c.Species]++
+				h.cachedDetailedCounts[c.Species]++
 			}
 		}
 	}
@@ -915,10 +933,10 @@ func (h *HUD) getGridDetailedCounts(gridID string) map[string]int {
 			} else if e.HasTag("obelisk") {
 				label = "obelisque"
 			}
-			counts[label]++
+			h.cachedDetailedCounts[label]++
 		}
 	}
-	return counts
+	return h.cachedDetailedCounts
 }
 
 // getGridEntityCounts retourne le nombre total de ressources, créatures et structures sur un grid

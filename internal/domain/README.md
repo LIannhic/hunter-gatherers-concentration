@@ -93,7 +93,10 @@ func (s *LifecycleSystem) Update(world *World) {
   - `Behavior` : Composant IA enrichi — `AggressionBase` (statique), `Aggression` (total calculé), `AggressionFactors` (map[string]int : "reveals", "inventory", "species_anger", "empty_plots", "toxic_dreamberry"), `RevealCount` (compteur révélations manuelles).
 - **`component/`** : Stockage et définition des composants (`Store`)
 - **`world.go`** : Agrégateur de l'état global (Grids, Entities, Player).
-- **`engine.go`** : Orchestrateur des systèmes. Sépare le cycle par tour (`Update`) du cycle temps réel (`UpdateFrame`).
+- **`engine.go`** : Orchestrateur des systèmes. Sépare la logique en trois cycles :
+  - `Reset()` : Réinitialise l'état interne de tous les systèmes (Previews, Mouvements, Combos) lors du démarrage d'une nouvelle session. Garantit un état propre (ex: effacement des "révélations récentes" qui pourraient déclencher les Stonewardens).
+  - `Update()` : Cycle par tour.
+  - `UpdateFrame(dt)` : Cycle temps réel à 60 FPS.
 - **`system.go`** : Implémentation des systèmes ECS qui traitent les données.
   - `CreatureAISystem` : Gère les comportements de base des créatures
   - `CreatureMovementSystem` : Implémente le mouvement avancé avec triggers, navigation, modes. **Filtre les déclencheurs par grille** : `TriggerOnReveal`, `TriggerOnEcho`, `TriggerProximity` ne réagissent qu'aux événements sur la grille de la créature. Stocke les révélations avec `RevealedTile{Position, GridID}`. **Validation du swap** : Le mode `ModeSwap` est soumis à une validation bidirectionnelle avant exécution — retrait temporaire des deux entités, vérification `IsWalkable` (règles de cohabitation créature) et `HasResourceAt` (interdiction de doublon ressource). Si une validation échoue, le mouvement est annulé.

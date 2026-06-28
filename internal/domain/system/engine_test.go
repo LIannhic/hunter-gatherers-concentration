@@ -66,3 +66,27 @@ func TestEngineUpdateFrame(t *testing.T) {
 		t.Error("Timer should have reset after expiration")
 	}
 }
+
+func TestEngineReset(t *testing.T) {
+	w := NewWorld()
+	engine := NewEngine(w)
+
+	// Simulate state in systems
+	engine.movementSystem.TrackReveal(board.Position{X: 1, Y: 1}, "test")
+	engine.previewSystem.OnEnterGrid(w, "test")
+	engine.comboSystem.Reset() // Ensure it's in a known state (though it's already empty)
+	engine.comboSystem.CheatIncreaseCombo()
+
+	if len(engine.movementSystem.recentReveals) == 0 {
+		t.Error("movementSystem should have state")
+	}
+
+	engine.Reset()
+
+	if len(engine.movementSystem.recentReveals) != 0 {
+		t.Error("movementSystem state should be cleared after Reset")
+	}
+
+	// For PreviewSystem, we check if s.previewed is empty (indirectly via a second call)
+	// We'd need to expose more or check behavior.
+}
