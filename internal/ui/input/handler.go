@@ -36,6 +36,7 @@ type Renderer interface {
 	ScreenToLocalTile(screenX, screenY int, world *domain.World) (localX, localY int, gridID string, ok bool)
 	RenderSelectionHighlight(screen *ebiten.Image, pos board.Position, gridID string, color color.Color, world *domain.World)
 	RenderTileActionFrame(screen *ebiten.Image, pos board.Position, gridID string, state TileActionState, world *domain.World)
+	RenderExitTileActionFrame(screen *ebiten.Image, dir entity.Direction, index int, state TileActionState, world *domain.World)
 	RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World)
 	NotifyHover(entityID string, dir entity.FlipDirection)
 	DecayHoverStates(activeThisFrame map[string]bool)
@@ -1629,9 +1630,28 @@ func (h *Handler) renderHighlights(screen *ebiten.Image) {
 
 	// 2. CADRE AU SURVOL sur la case survolée
 	if hovered, gridID, ok := h.getHoveredTile(); ok && gridID != board.InventoryGridID {
-		actionState := h.computeTileActionState(hovered, gridID)
-		if actionState != TileActionNone {
-			h.renderer.RenderTileActionFrame(screen, hovered, gridID, actionState, h.world)
+		if strings.HasPrefix(gridID, "exit_") {
+			dirStr := strings.TrimPrefix(gridID, "exit_")
+			var dir entity.Direction
+			switch dirStr {
+			case "north":
+				dir = entity.DirNorth
+			case "east":
+				dir = entity.DirEast
+			case "south":
+				dir = entity.DirSouth
+			case "west":
+				dir = entity.DirWest
+			}
+			actionState := h.computeExitTileActionState(dir, hovered.X)
+			if actionState != TileActionNone {
+				h.renderer.RenderExitTileActionFrame(screen, dir, hovered.X, actionState, h.world)
+			}
+		} else {
+			actionState := h.computeTileActionState(hovered, gridID)
+			if actionState != TileActionNone {
+				h.renderer.RenderTileActionFrame(screen, hovered, gridID, actionState, h.world)
+			}
 		}
 	}
 }
@@ -1715,6 +1735,46 @@ func (h *Handler) computeTileActionState(pos board.Position, gridID string) Tile
 	}
 
 	// Vert : action possible
+	return TileActionInteractive
+}
+
+// computeExitTileActionState évalue l'état d'action d'une tuile de sortie pour le cadre coloré
+func (h *Handler) computeExitTileActionState(dir entity.Direction, index int) TileActionState {
+	if h.world.DreamPlane == nil {
+		return TileActionNone
+	}
+
+	_, hasExit := h.world.DreamPlane.GetConnectedZone(h.world.CurrentGridID, dir)
+	if !hasExit {
+		return TileActionNone
+	}
+
+	if h.isProcessing {
+		return TileActionImpossible
+	}
+
+	if h.world.Player != nil && h.world.Player.ImmunityTurns > 0 {
+		return TileActionUnavailable
+	}
+
+	grid, ok := h.world.GetGrid(h.world.CurrentGridID)
+	if !ok {
+		return TileActionNone
+	}
+
+	tileState := grid.ExitsState[dir][index]
+
+	// Orange : tuile révélée en attente de sa paire
+	if tileState&entity.Revealed != 0 && tileState&entity.Matched == 0 {
+		return TileActionUnavailable
+	}
+
+	// Rouge : navigation scellée (pas encore ouverte)
+	if !h.world.IsNavigationOpen(h.world.CurrentGridID) {
+		return TileActionImpossible
+	}
+
+	// Vert : tuile cachée (retournable) ou appairée (navigable)
 	return TileActionInteractive
 }
 

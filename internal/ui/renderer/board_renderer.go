@@ -1805,6 +1805,51 @@ func (r *BoardRenderer) RenderTileActionFrame(screen *ebiten.Image, pos board.Po
 	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, frameColor, true)
 }
 
+// getExitTileScreenPos retourne la position écran d'une tuile de sortie
+func (r *BoardRenderer) getExitTileScreenPos(dir entity.Direction, index int) (float64, float64) {
+	var ex, ey float64
+	switch dir {
+	case entity.DirNorth:
+		ex = ui.ExitNorthX + float64(index)*r.tileSize
+		ey = ui.ExitNorthY
+	case entity.DirEast:
+		ex = ui.ExitEastX
+		ey = ui.ExitEastY + float64(index)*r.tileSize
+	case entity.DirSouth:
+		ex = ui.ExitSouthX + float64(index)*r.tileSize
+		ey = ui.ExitSouthY
+	case entity.DirWest:
+		ex = ui.ExitWestX
+		ey = ui.ExitWestY + float64(index)*r.tileSize
+	}
+	return ui.PlaymatX + ex, ui.PlaymatY + ey
+}
+
+// RenderExitTileActionFrame dessine un cadre coloré autour d'une tuile de sortie selon son état d'action
+func (r *BoardRenderer) RenderExitTileActionFrame(screen *ebiten.Image, dir entity.Direction, index int, state ui.TileActionState, world *domain.World) {
+	if state == ui.TileActionNone {
+		return
+	}
+
+	x, y := r.getExitTileScreenPos(dir, index)
+
+	var frameColor color.Color
+	switch state {
+	case ui.TileActionInteractive:
+		frameColor = color.RGBA{80, 200, 120, 220} // Vert
+	case ui.TileActionImpossible:
+		frameColor = color.RGBA{220, 60, 60, 200} // Rouge
+	case ui.TileActionUnavailable:
+		frameColor = color.RGBA{220, 150, 40, 200} // Orange
+	}
+
+	if world.Player != nil && world.Player.ImmunityTurns > 0 {
+		frameColor = color.RGBA{150, 150, 160, 200}
+	}
+
+	vector.StrokeRect(screen, float32(x), float32(y), float32(r.tileSize), float32(r.tileSize), 3, frameColor, true)
+}
+
 func (r *BoardRenderer) RenderPortalPlacementPreview(screen *ebiten.Image, center board.Position, gridID string, world *domain.World) {
 	grid, ok := world.GetGrid(gridID)
 	if !ok {
