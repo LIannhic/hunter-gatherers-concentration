@@ -476,7 +476,7 @@ Le joueur dispose d'un indicateur visuel persistant montrant sa position actuell
 Les ressources peuvent désormais suivre un **cycle circulaire** au lieu d'un cycle linéaire :
 
 - **Cycle linéaire (défaut)** : Les ressources progressent de stade en stade jusqu'au stade maximum.
-- **Cycle circulaire** : Les ressources progressent normalement, mais atteignent le stade maximum, elles **reviennent au stade 0** (bourgeon) au lieu de rester bloquées. La propagation a lieu **avant** le reset du cycle.
+- **Cycle circulaire** : Les ressources progressent normalement, mais atteignent le stade maximum, elles **reviennent au stade 0** (bourgeon) au lieu de rester bloquées. La propagation a lieu **au début du dernier stade** avant le reset du cycle.
 
 | Ressource | Cycle | Comportement |
 |-----------|-------|--------------|

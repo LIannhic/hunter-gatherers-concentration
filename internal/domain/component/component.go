@@ -139,6 +139,7 @@ func (l *Lifecycle) ShouldCycle() bool {
 func (l *Lifecycle) Cycle() {
 	l.CurrentStage = 0
 	l.TurnsInStage = 0
+	l.PropagationsDone = 0
 }
 
 // Hazard définit les propriétés toxiques ou dangereuses d'une entité

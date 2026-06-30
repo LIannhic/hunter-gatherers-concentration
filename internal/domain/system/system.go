@@ -163,7 +163,6 @@ func (s *PropagationSystem) Update(world *World) {
 		}
 
 		if propagatedCount > 0 {
-			lifecycle.TurnsInStage = 0
 			lifecycle.PropagationsDone++
 		}
 	}
@@ -171,7 +170,7 @@ func (s *PropagationSystem) Update(world *World) {
 
 func shouldPropagate(l *component.Lifecycle) bool {
 	isLastStage := l.CurrentStage == l.MaxStages-1
-	return isLastStage && l.TurnsInStage >= l.TurnsToNext
+	return isLastStage && l.TurnsInStage == 0
 }
 
 func getResourceType(e entity.Entity) string {
