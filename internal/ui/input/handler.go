@@ -1076,6 +1076,8 @@ func (h *Handler) processMergeAttempt() {
 		GridID:   gridID,
 		Pos1:     pos1,
 		Pos2:     pos2,
+		EntityID1: h.revealedEntities[0],
+		EntityID2: h.revealedEntities[1],
 		OnSuccess: func() {
 			fmt.Printf("[MERGE] ✅ Succès !\n")
 			h.revealedEntities = nil
@@ -1166,6 +1168,8 @@ func (h *Handler) processMatchAttempt() {
 		GridID2:  gridID2,
 		Pos1:     pos1,
 		Pos2:     pos2,
+		EntityID1: h.revealedEntities[0],
+		EntityID2: h.revealedEntities[1],
 		OnSuccess: func() {
 			fmt.Printf("[MATCH] ✅ Succès ! Paire de %s trouvée.\n", h.getEntityInfo(e1))
 			h.revealedEntities = nil
@@ -1499,6 +1503,8 @@ func (h *Handler) tryMatchSelected() {
 				GridID:   h.selectedGridID,
 				Pos1:     *h.selectedTile,
 				Pos2:     plot.Position,
+				EntityID1: id1,
+				EntityID2: topID,
 				OnSuccess: func() {
 					fmt.Println("[MATCH] ✅ Succès !")
 					h.ClearSelection()

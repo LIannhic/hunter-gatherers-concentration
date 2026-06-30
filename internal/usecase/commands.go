@@ -140,6 +140,8 @@ type MatchTilesCommand struct {
 	GridID   string // GridID pour la première tuile (backward compat)
 	GridID2  string // GridID pour la seconde tuile (vide = même grid que GridID)
 	Pos1, Pos2 board.Position
+	EntityID1 string // ID de la 1ère entité révélée (prioritaire sur la résolution par position)
+	EntityID2 string // ID de la 2ème entité révélée
 	OnSuccess func()
 	OnFailure func()
 }
@@ -151,28 +153,40 @@ func (c *MatchTilesCommand) CanExecute() bool {
 		gridID2 = gridID1
 	}
 
-	grid1, ok1 := c.World.GetGrid(gridID1)
-	grid2, ok2 := c.World.GetGrid(gridID2)
-	if !ok1 || !ok2 {
-		return false
-	}
+	// Résolution des entités : priorité aux EntityIDs fournis (résilient au swap Shadowstalker)
+	var e1, e2 entity.Entity
+	if c.EntityID1 != "" && c.EntityID2 != "" {
+		var ok1, ok2 bool
+		e1, ok1 = c.World.Entities.Get(entity.ID(c.EntityID1))
+		e2, ok2 = c.World.Entities.Get(entity.ID(c.EntityID2))
+		if !ok1 || !ok2 {
+			return false
+		}
+	} else {
+		// Fallback : résolution par position (backward compat)
+		grid1, ok1 := c.World.GetGrid(gridID1)
+		grid2, ok2 := c.World.GetGrid(gridID2)
+		if !ok1 || !ok2 {
+			return false
+		}
 
-	tile1, err1 := grid1.Get(c.Pos1)
-	tile2, err2 := grid2.Get(c.Pos2)
-	if err1 != nil || err2 != nil {
-		return false
-	}
+		tile1, err1 := grid1.Get(c.Pos1)
+		tile2, err2 := grid2.Get(c.Pos2)
+		if err1 != nil || err2 != nil {
+			return false
+		}
 
-	if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
-		return false
-	}
+		if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
+			return false
+		}
 
-	topID1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
-	topID2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
-	e1, ok1 := c.World.Entities.Get(entity.ID(topID1))
-	e2, ok2 := c.World.Entities.Get(entity.ID(topID2))
-	if !ok1 || !ok2 {
-		return false
+		topID1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+		topID2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+		e1, ok1 = c.World.Entities.Get(entity.ID(topID1))
+		e2, ok2 = c.World.Entities.Get(entity.ID(topID2))
+		if !ok1 || !ok2 {
+			return false
+		}
 	}
 
 	// Vérifie que les entités sont bien révélées
@@ -202,15 +216,23 @@ func (c *MatchTilesCommand) Execute() error {
 
 	grid1, _ := c.World.GetGrid(gridID1)
 	grid2, _ := c.World.GetGrid(gridID2)
-	tile1, _ := grid1.Get(c.Pos1)
-	tile2, _ := grid2.Get(c.Pos2)
 
-	topID1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
-	topID2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+	// Résolution des entités : priorité aux EntityIDs (résilient au swap Shadowstalker)
+	var entity1, entity2 entity.Entity
+	if c.EntityID1 != "" && c.EntityID2 != "" {
+		entity1, _ = c.World.Entities.Get(entity.ID(c.EntityID1))
+		entity2, _ = c.World.Entities.Get(entity.ID(c.EntityID2))
+	} else {
+		tile1, _ := grid1.Get(c.Pos1)
+		tile2, _ := grid2.Get(c.Pos2)
+		topID1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+		topID2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+		entity1, _ = c.World.Entities.Get(entity.ID(topID1))
+		entity2, _ = c.World.Entities.Get(entity.ID(topID2))
+	}
 
-	entity1, _ := c.World.Entities.Get(entity.ID(topID1))
-	entity2, _ := c.World.Entities.Get(entity.ID(topID2))
-
+	pos1 := entity1.GetPosition()
+	pos2 := entity2.GetPosition()
 	level := entity1.GetCumulationLevel()
 
 	c.World.Player.ConsumeMana(1)
@@ -220,8 +242,8 @@ func (c *MatchTilesCommand) Execute() error {
 
 	if err == nil && result.Success {
 		// --- LOGIQUE DE MATCH FINAL (LOOT) ---
-		c.World.MatchTile(gridID1, c.Pos1)
-		c.World.MatchTile(gridID2, c.Pos2)
+		entity1.SetState(entity.Matched)
+		entity2.SetState(entity.Matched)
 
 		if entity1.GetType() == entity.TypeCreature || entity1.GetType() == entity.TypeResource {
 			grid1.MatchedTargetsCount += 1
@@ -246,7 +268,7 @@ func (c *MatchTilesCommand) Execute() error {
 			Type:     event.TileMatched,
 			SourceID: string(entity1.GetID()),
 			Payload: map[string]interface{}{
-				"position":    c.Pos1,
+				"position":    pos1,
 				"entity_id":   string(entity1.GetID()),
 				"other_id":    string(entity2.GetID()),
 				"grid_id":     gridID1,
@@ -310,25 +332,44 @@ func (c *MatchTilesCommand) Execute() error {
 		))
 	}
 
-	// Recacher les entités avec l'animation de pente (Slope)
-	plot1, _ := grid1.Get(c.Pos1)
-	plot2, _ := grid2.Get(c.Pos2)
-
-	_, _ = c.World.FlipTile(gridID1, c.Pos1, plot1.Tilt.ToFlipDirection(), "system_hide")
-	_, _ = c.World.FlipTile(gridID2, c.Pos2, plot2.Tilt.ToFlipDirection(), "system_hide")
-
-	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos1), string(entity1.GetID()), gridID1, plot1.Tilt.ToFlipDirection(),
-		map[string]interface{}{"reason": "system_hide"}))
-	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos2), string(entity2.GetID()), gridID2, plot2.Tilt.ToFlipDirection(),
-		map[string]interface{}{"reason": "system_hide"}))
+	// Recacher les entités — gère le cas où une entité n'est plus au sommet (swap Shadowstalker)
+	c.hideEntityOnFail(entity1, gridID1, pos1)
+	c.hideEntityOnFail(entity2, gridID2, pos2)
 
 	if c.OnFailure != nil {
 		c.OnFailure()
 	}
 
 	return errors.New("association échouée")
+}
+
+// hideEntityOnFail recache une entité en cas d'échec de match.
+// Si l'entité est au sommet de la tuile, utilise FlipTile (animation intégrée).
+// Sinon, change l'état directement (entité couverte par une autre, ex: Shadowstalker).
+func (c *MatchTilesCommand) hideEntityOnFail(ent entity.Entity, gridID string, pos board.Position) {
+	grid, ok := c.World.GetGrid(gridID)
+	if !ok {
+		ent.SetState(entity.Hidden)
+		return
+	}
+
+	plot, err := grid.Get(pos)
+	if err != nil || len(plot.EntitiesID) == 0 {
+		ent.SetState(entity.Hidden)
+		return
+	}
+
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	if topID == string(ent.GetID()) {
+		// L'entité est au sommet : FlipTile gère l'animation + la transformation
+		_, _ = c.World.FlipTile(gridID, pos, plot.Tilt.ToFlipDirection(), "system_hide")
+		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(pos), string(ent.GetID()), gridID, plot.Tilt.ToFlipDirection(),
+			map[string]interface{}{"reason": "system_hide"}))
+	} else {
+		// L'entité est couverte (ex: Shadowstalker swap) : on change l'état directement
+		ent.SetState(entity.Hidden)
+	}
 }
 
 // --- MERGE TILES COMMAND ---
@@ -338,6 +379,8 @@ type MergeTilesCommand struct {
 	AssocEng   *domain.AssocEngine
 	GridID     string
 	Pos1, Pos2 board.Position
+	EntityID1  string // ID de la 1ère entité révélée (prioritaire sur la résolution par position)
+	EntityID2  string // ID de la 2ème entité révélée
 	OnSuccess  func()
 	OnFailure  func()
 }
@@ -348,22 +391,37 @@ func (c *MergeTilesCommand) CanExecute() bool {
 		return false
 	}
 
-	tile1, err1 := grid.Get(c.Pos1)
-	tile2, err2 := grid.Get(c.Pos2)
-	if err1 != nil || err2 != nil {
-		return false
-	}
+	// Résolution des entités : priorité aux EntityIDs fournis (résilient au swap Shadowstalker)
+	var e1, e2 entity.Entity
+	if c.EntityID1 != "" && c.EntityID2 != "" {
+		var ok1, ok2 bool
+		e1, ok1 = c.World.Entities.Get(entity.ID(c.EntityID1))
+		e2, ok2 = c.World.Entities.Get(entity.ID(c.EntityID2))
+		if !ok1 || !ok2 {
+			return false
+		}
+	} else {
+		// Fallback : résolution par position (backward compat)
+		tile1, err1 := grid.Get(c.Pos1)
+		tile2, err2 := grid.Get(c.Pos2)
+		if err1 != nil || err2 != nil {
+			return false
+		}
 
-	if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
-		return false
-	}
+		if len(tile1.EntitiesID) == 0 || len(tile2.EntitiesID) == 0 {
+			return false
+		}
 
-	id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
-	id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
-	e1, ok1 := c.World.Entities.Get(entity.ID(id1))
-	e2, ok2 := c.World.Entities.Get(entity.ID(id2))
-	if !ok1 || !ok2 {
-		return false
+		id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+		id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+		e1, ok = c.World.Entities.Get(entity.ID(id1))
+		if !ok {
+			return false
+		}
+		e2, ok = c.World.Entities.Get(entity.ID(id2))
+		if !ok {
+			return false
+		}
 	}
 
 	// Uniquement si les entités sont bien révélées
@@ -392,14 +450,22 @@ func (c *MergeTilesCommand) Execute() error {
 	}
 
 	grid, _ := c.World.GetGrid(c.GridID)
-	tile1, _ := grid.Get(c.Pos1)
-	tile2, _ := grid.Get(c.Pos2)
 
-	id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
-	id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
-	e1, _ := c.World.Entities.Get(entity.ID(id1))
-	e2, _ := c.World.Entities.Get(entity.ID(id2))
+	// Résolution des entités : priorité aux EntityIDs (résilient au swap Shadowstalker)
+	var e1, e2 entity.Entity
+	if c.EntityID1 != "" && c.EntityID2 != "" {
+		e1, _ = c.World.Entities.Get(entity.ID(c.EntityID1))
+		e2, _ = c.World.Entities.Get(entity.ID(c.EntityID2))
+	} else {
+		tile1, _ := grid.Get(c.Pos1)
+		tile2, _ := grid.Get(c.Pos2)
+		id1 := tile1.EntitiesID[len(tile1.EntitiesID)-1]
+		id2 := tile2.EntitiesID[len(tile2.EntitiesID)-1]
+		e1, _ = c.World.Entities.Get(entity.ID(id1))
+		e2, _ = c.World.Entities.Get(entity.ID(id2))
+	}
 
+	pos1 := e1.GetPosition()
 	level := e1.GetCumulationLevel()
 	cost := 3 * (level + 1)
 	c.World.Player.ConsumeMana(cost)
@@ -409,7 +475,7 @@ func (c *MergeTilesCommand) Execute() error {
 	isMatch := (err == nil && result.Success)
 
 	if isMatch {
-		fmt.Printf("[ALCHIMIE] Fusion réussie en %v (Niveau %d -> %d)\n", c.Pos1, level, level+1)
+		fmt.Printf("[ALCHIMIE] Fusion réussie en %v (Niveau %d -> %d)\n", pos1, level, level+1)
 
 		// Mise à jour de l'entité survivante
 		e1.SetCumulationLevel(level + 1)
@@ -425,7 +491,7 @@ func (c *MergeTilesCommand) Execute() error {
 
 		// Notification de fusion
 		c.World.EventBus.Publish(event.NewTileMergedEvent(
-			entity.Position(c.Pos1),
+			entity.Position(pos1),
 			string(e1.GetID()),
 			e1.GetMatchID(),
 			e1.GetType(),
@@ -433,16 +499,17 @@ func (c *MergeTilesCommand) Execute() error {
 		))
 
 		// Animation visuelle de retournement (fermeture)
+		// Utilise le Tilt de la tuile si l'entité est au sommet, sinon direction par défaut
+		flipDir := c.resolveFlipDir(e1, grid)
 		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-			entity.Position(c.Pos1),
+			entity.Position(pos1),
 			string(e1.GetID()),
 			c.GridID,
-			tile1.Tilt.ToFlipDirection(),
+			flipDir,
 			map[string]interface{}{"reason": "system_hide"},
 		))
 
-		// NOUVEAU : Après une fusion, on referme TOUTES les tuiles révélées
-		// (Maintenu car utile pour le gameplay memory)
+		// Après une fusion, on referme TOUTES les tuiles révélées
 		if grid, ok := c.World.GetGrid(c.GridID); ok {
 			for pos, plot := range grid.Plots {
 				if len(plot.EntitiesID) == 0 {
@@ -482,24 +549,53 @@ func (c *MergeTilesCommand) Execute() error {
 		c.World.Player.ConsumeMana(5)
 	}
 
-	// Recache les deux
-	p1, _ := grid.Get(c.Pos1)
-	p2, _ := grid.Get(c.Pos2)
-	_, _ = c.World.FlipTile(c.GridID, c.Pos1, p1.Tilt.ToFlipDirection(), "system_hide")
-	_, _ = c.World.FlipTile(c.GridID, c.Pos2, p2.Tilt.ToFlipDirection(), "system_hide")
-
-	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos1), id1, c.GridID, p1.Tilt.ToFlipDirection(),
-		map[string]interface{}{"reason": "system_hide"}))
-	c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
-		entity.Position(c.Pos2), id2, c.GridID, p2.Tilt.ToFlipDirection(),
-		map[string]interface{}{"reason": "system_hide"}))
+	// Recacher les entités — gère le cas où une entité n'est plus au sommet (swap Shadowstalker)
+	c.hideEntityOnFailMerge(e1, grid, c.Pos1)
+	c.hideEntityOnFailMerge(e2, grid, c.Pos2)
 
 	if c.OnFailure != nil {
 		c.OnFailure()
 	}
 
 	return errors.New("fusion échouée")
+}
+
+// resolveFlipDir retourne la direction de flip en se basant sur le Tilt de la tuile si l'entité est au sommet.
+func (c *MergeTilesCommand) resolveFlipDir(ent entity.Entity, grid *board.Grid) entity.FlipDirection {
+	pos := ent.GetPosition()
+	plot, err := grid.Get(pos)
+	if err != nil || len(plot.EntitiesID) == 0 {
+		return entity.FlipCenter
+	}
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	if topID == string(ent.GetID()) {
+		return plot.Tilt.ToFlipDirection()
+	}
+	return entity.FlipCenter
+}
+
+// hideEntityOnFailMerge recache une entité en cas d'échec de merge.
+// Si l'entité est au sommet de la tuile, utilise FlipTile (animation intégrée).
+// Sinon, change l'état directement (entité couverte par une autre, ex: Shadowstalker).
+func (c *MergeTilesCommand) hideEntityOnFailMerge(ent entity.Entity, grid *board.Grid, fallbackPos board.Position) {
+	pos := ent.GetPosition()
+	plot, err := grid.Get(pos)
+	if err != nil || len(plot.EntitiesID) == 0 {
+		ent.SetState(entity.Hidden)
+		return
+	}
+
+	topID := plot.EntitiesID[len(plot.EntitiesID)-1]
+	if topID == string(ent.GetID()) {
+		// L'entité est au sommet : FlipTile gère l'animation + la transformation
+		_, _ = c.World.FlipTile(c.GridID, pos, plot.Tilt.ToFlipDirection(), "system_hide")
+		c.World.EventBus.PublishImmediate(event.NewEntityRevealedEvent(
+			entity.Position(pos), string(ent.GetID()), c.GridID, plot.Tilt.ToFlipDirection(),
+			map[string]interface{}{"reason": "system_hide"}))
+	} else {
+		// L'entité est couverte (ex: Shadowstalker swap) : on change l'état directement
+		ent.SetState(entity.Hidden)
+	}
 }
 
 // --- DISCARD TRAP COMMAND ---
