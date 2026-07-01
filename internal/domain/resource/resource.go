@@ -64,7 +64,7 @@ func (r *Resource) GetMatchTypes() []string { return r.Matchable.MatchTypes }
 func (r *Resource) Update() {
 	if r.Lifecycle.Progress() {
 		// Le stade a changé, met à jour la valeur
-		r.updateValueByStage()
+		r.UpdateValueByStage()
 	}
 
 	// Dégradation naturelle
@@ -76,7 +76,7 @@ func (r *Resource) Update() {
 	}
 }
 
-func (r *Resource) updateValueByStage() {
+func (r *Resource) UpdateValueByStage() {
 	stage := r.Lifecycle.GetCurrentStageName()
 	switch stage {
 	case "bourgeon":
@@ -122,6 +122,7 @@ func (f *Factory) Create(rtype string, pos entity.Position) *Resource {
 			TurnsToNext:      3,
 			Cyclic:           true,
 			CanPropagate:     true,
+			PropagationStage: 2, // Se propage au stade "fruit"
 			PropagationCount: 2,
 			MaxPropagations:  1,
 			PropagationLevel: 0,

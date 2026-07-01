@@ -105,6 +105,7 @@ type Lifecycle struct {
 	TurnsToNext      int  // -1 pour infini
 	Cyclic           bool // Cycle circulaire : après le dernier stade, revient au stade 0
 	CanPropagate     bool
+	PropagationStage int // Stade auquel la propagation se déclenche (-1 pour désactivé, 0 par défaut = dernier stade)
 	PropagationCount int // Nombre de nouvelles entités créées lors de la propagation par cycle
 	MaxPropagations  int // Nombre total de cycles de propagation possibles (-1 pour infini)
 	PropagationsDone int // Nombre de cycles déjà effectués

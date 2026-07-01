@@ -44,10 +44,26 @@ func (s *LifecycleSystem) Update(world *World) {
 				entityID,
 				stageName,
 			))
+
+			if ent, ok := world.Entities.Get(entity.ID(entityID)); ok {
+				if r, ok := ent.(*resource.Resource); ok {
+					r.UpdateValueByStage()
+				}
+			}
 		}
 
 		if lifecycle.ShouldCycle() {
 			lifecycle.Cycle()
+			world.EventBus.Publish(event.NewResourceMaturedEvent(
+				entityID,
+				lifecycle.GetCurrentStageName(),
+			))
+
+			if ent, ok := world.Entities.Get(entity.ID(entityID)); ok {
+				if r, ok := ent.(*resource.Resource); ok {
+					r.UpdateValueByStage()
+				}
+			}
 		}
 	}
 }
@@ -169,8 +185,11 @@ func (s *PropagationSystem) Update(world *World) {
 }
 
 func shouldPropagate(l *component.Lifecycle) bool {
-	isLastStage := l.CurrentStage == l.MaxStages-1
-	return isLastStage && l.TurnsInStage == 0
+	target := l.PropagationStage
+	if target <= 0 {
+		target = l.MaxStages - 1
+	}
+	return l.CurrentStage == target && l.TurnsInStage == 0
 }
 
 func getResourceType(e entity.Entity) string {
