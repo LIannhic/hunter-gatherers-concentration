@@ -382,9 +382,10 @@ Séparation des responsabilités :
   - **Système de Messages Défilants**: Gère deux zones de notification indépendantes (**Gauche** et **Droite**) avec des files d'attente prioritaires. Chaque message défile de droite à gauche deux fois avant de disparaître.
     - **Zone Gauche**: Affiche les messages narratifs et les effets d'utilisation d'objets (ex: "Vous êtes déboussolé.", "Vous toussez du sang.", "La mémoire revient...").
     - **Zone Droite**: Affiche les feedbacks de gameplay immédiats (ex: "CONFRONTATION ! -10 HP", "TOXICITÉ ! -X HP", "AMNÉSIE ! X tours.", "MATCH INVALIDE !").
-- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux via un système de ping-pong buffers. L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur. Peut être forcé via la **Console de Debug**.
+- **EffectRenderer** (`renderer/effect_renderer.go`) : Gère les shaders globaux via un système de ping-pong buffers (`bufferA`, `bufferB`). L'intensité des effets est couplée dynamiquement à la **Santé Mentale** du joueur.
+  - **Gestion sélective** : Supporte l'activation/désactivation individuelle des shaders via `GlobalEffectParams.DisabledShaders`.
   - **Séparation Attack/Biome** : Les shaders sont splités en deux méthodes pour un rendu correct :
-    - `ProcessCreatureAttackEffects()` : Blur, Bubble, Vertige — appliqués **AVANT** le HUD pour ne pas affecter les fenêtres UI.
+    - `ProcessCreatureAttackEffects()` : Blur, Bubble, Vertige, Invert — appliqués **AVANT** le HUD pour ne pas affecter les fenêtres UI.
     - `ProcessBiomeEffects()` : Wave, Heat, Rain, Cave, Vortex — appliqués **APRÈS** le HUD (comportement original).
   - **Quake Shader** : Rendu **AVANT** tous les shaders (comme Scanner/Lumifly).
   - **Lumifly Shader** (`renderer/shader/lumifly.kage`) : Onde lumineuse dorée circulaire avec silhouettes d'entités. Centre calculé via `calculateTileScreenPos` pour un alignement parfait avec les tuiles. Rayon basé sur la diagonale d'une case (`√2`).
@@ -397,9 +398,8 @@ Séparation des responsabilités :
   - **Rendu** : `RenderQuakeOverlay` appelé **AVANT** les shaders globaux (comme Scanner/Lumifly), puis shaders attack, puis HUD, puis shaders biome.
 
 - **Cave Shader** (`renderer/shader/cave.kage`) : Effet d'ambiance oppressive pour le biome grotte. Couplé à la **Santé Mentale** du joueur via le paramètre `Intensity` (0.0 = sane, 1.0 = folie totale).
-  - **Obscurité de fond** : Assombrit uniformément l'écran (55% à sanity满 → 98% à sanity 0). La torche centrale crée un cercle de lumière proportionnel à la folie.
-  - **Torche centre** : Rayon de 175px (sanity满) → 13px (sanity 0). Force de 35% (sanity满) → 95% (sanity 0). Vacillement procédural (`hash12`) avec amplitude croissante.
-  - **Lights HUD** : Cercles de lumière fixes sur les panneaux HUD (Portrait, Inventaire, Jauges, Minimap). Le rayon est contraint aux dimensions du panneau (`smoothstep(r*edge, r, dist)`). L'ombre interne rétrécit avec l'intensité (0.85 → 0.15), étendant la zone éclairée du centre vers les bords.
+  - **Obscurité de fond** : Assombrit uniformément l'écran. La torche centrale crée un cercle de lumière dont le rayon rétrécit avec la folie.
+  - **Lights HUD** : Cercles de lumière fixes sur les panneaux HUD (Portrait, Inventaire, Jauges, Minimap) calculés via `buildHudLights()`. L'éclairage s'adapte à l'intensité de la folie.
   - **Uniforms** : `Time`, `Intensity`, `Resolution`, `HudLights [16]float` (4 × `[cx, cy, radius, _]`).
   - **Application** : Appliqué dans `ProcessGlobalEffects` via `applyCaveShader()`, après les biomes (wave/heat/rain) et avant les effets créatures.
 

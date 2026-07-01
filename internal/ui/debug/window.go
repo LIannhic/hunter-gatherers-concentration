@@ -19,6 +19,7 @@ type DebugWindow struct {
 	// Caches pour éviter les allocations/tris par frame et garantir la cohérence des clics
 	sortedEntities []string
 	sortedShaders  []string
+	shaderToBiome  map[string]string // Correspondance shader name -> biome name
 }
 
 func NewDebugWindow(world *domain.World) *DebugWindow {
@@ -45,7 +46,14 @@ func (dw *DebugWindow) initCaches() {
 	sort.Strings(dw.sortedEntities)
 
 	// Shaders purement environnementaux (Biome)
+	// Note : vortex (effet de tuile butin portail portable) n'est pas un shader d'environnement
 	dw.sortedShaders = []string{"cave", "heat", "rain", "wave"}
+	dw.shaderToBiome = map[string]string{
+		"cave": "cave",
+		"heat": "desert",
+		"rain": "forest",
+		"wave": "swamp",
+	}
 	sort.Strings(dw.sortedShaders)
 }
 
@@ -119,7 +127,7 @@ func (dw *DebugWindow) renderDifficulty(screen *ebiten.Image) {
 		settings = &dw.world.Debug.Difficulty
 	}
 
-	dw.drawCheckbox(screen, startX, startY+30, "Override Game Settings", dw.world.Debug.OverrideDifficulty)
+	dw.drawCheckbox(screen, startX, startY+30, "Override Game Settings", dw.world.Debug.OverrideDifficulty, false)
 
 	y := startY + 70
 	textutil.Draw(screen, fmt.Sprintf("Turn Timer: %.1fs", settings.TurnTimerDuration), int(startX), int(y)+15, color.White)
@@ -153,7 +161,7 @@ func (dw *DebugWindow) renderCreatures(screen *ebiten.Image) {
 		cx := startX + float32(col*185)
 		cy := startY + 30 + float32(row*30)
 
-		dw.drawCheckbox(screen, cx, cy, e, dw.world.Debug.AllowedCreatures[e])
+		dw.drawCheckbox(screen, cx, cy, e, dw.world.Debug.AllowedCreatures[e], false)
 	}
 }
 
@@ -161,10 +169,23 @@ func (dw *DebugWindow) renderShaders(screen *ebiten.Image) {
 	startX := dw.x + 800
 	startY := dw.y + 70
 	textutil.Draw(screen, "ENVIRONMENTAL SHADERS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "Active", int(startX)+20, int(startY)+17, color.RGBA{0, 200, 0, 255})
+	textutil.Draw(screen, "Block", int(startX)+200, int(startY)+17, color.RGBA{255, 80, 80, 255})
+
+	grid, _ := dw.world.GetCurrentGrid()
+	biome := ""
+	if grid != nil {
+		biome = string(grid.Biome)
+	}
 
 	for i, s := range dw.sortedShaders {
 		cy := startY + 30 + float32(i*30)
-		dw.drawCheckbox(screen, startX, cy, s, dw.world.Debug.ActiveShaders[s])
+		isBiomeActive := biome == dw.shaderToBiome[s]
+		isForceActive := dw.world.Debug.ActiveShaders[s]
+		isDisabled := dw.world.Debug.DisabledShaders[s]
+		isActive := (isBiomeActive || isForceActive) && !isDisabled
+		dw.drawCheckbox(screen, startX, cy, s, isActive, !isBiomeActive && !isForceActive)
+		dw.drawCheckbox(screen, startX+200, cy, "", isDisabled, false)
 	}
 }
 
@@ -172,20 +193,36 @@ func (dw *DebugWindow) renderImpairments(screen *ebiten.Image) {
 	startX := dw.x + 800
 	startY := dw.y + 250
 	textutil.Draw(screen, "INFLICTIONS", int(startX), int(startY), color.RGBA{255, 255, 0, 255})
+	textutil.Draw(screen, "Active", int(startX)+20, int(startY)+17, color.RGBA{0, 200, 0, 255})
+	textutil.Draw(screen, "Block", int(startX)+200, int(startY)+17, color.RGBA{255, 80, 80, 255})
 
 	p := dw.world.Player
 	if p == nil {
 		return
 	}
 
-	dw.drawCheckbox(screen, startX, startY+30, "Blur (Shadowstalker)", dw.world.Debug.ActiveShaders["blur"])
-	dw.drawCheckbox(screen, startX, startY+60, "Bubble (Lumifly)", dw.world.Debug.ActiveShaders["bubble"])
-	dw.drawCheckbox(screen, startX, startY+90, "Aphasia (Echo Hound)", p.AphasiaTurns > 0)
-	dw.drawCheckbox(screen, startX, startY+120, "Ataxia (Burrower)", p.AtaxiaTurns > 0)
-	dw.drawCheckbox(screen, startX, startY+150, "Agnosia (Moss Monkey)", p.AgnosiaTurns > 0)
-	dw.drawCheckbox(screen, startX, startY+180, "Amnesia (Specter)", p.AmnesiaTurns > 0)
-	dw.drawCheckbox(screen, startX, startY+210, "Vertige (Fleeing Sprite)", dw.world.Debug.ActiveShaders["vertige"])
-	dw.drawCheckbox(screen, startX, startY+240, "Invert (Flutterwing)", dw.world.Debug.ActiveShaders["invert"])
+	type effectInfo struct {
+		key      string
+		yOff     float32
+		isActive bool
+	}
+
+	effects := []effectInfo{
+		{"blur", 30, p.VisualEffects["blur"] > 0},
+		{"bubble", 60, p.VisualEffects["bubble"] > 0},
+		{"aphasia", 90, p.AphasiaTurns > 0},
+		{"ataxia", 120, p.AtaxiaTurns > 0},
+		{"agnosia", 150, p.AgnosiaTurns > 0},
+		{"amnesia", 180, p.AmnesiaTurns > 0},
+		{"vertige", 210, p.VisualEffects["vertige"] > 0},
+		{"invert", 240, p.VisualEffects["invert"] > 0},
+	}
+
+	for _, e := range effects {
+		isDisabled := dw.world.Debug.DisabledEffects[e.key]
+		dw.drawCheckbox(screen, startX, startY+e.yOff, e.key, e.isActive && !isDisabled, false)
+		dw.drawCheckbox(screen, startX+200, startY+e.yOff, "", isDisabled, false)
+	}
 }
 
 func (dw *DebugWindow) drawButton(screen *ebiten.Image, x, y float32, label, id string) {
@@ -196,13 +233,19 @@ func (dw *DebugWindow) drawButton(screen *ebiten.Image, x, y float32, label, id 
 	textutil.Draw(screen, label, int(x)+5, int(y)+15, color.White)
 }
 
-func (dw *DebugWindow) drawCheckbox(screen *ebiten.Image, x, y float32, label string, checked bool) {
+func (dw *DebugWindow) drawCheckbox(screen *ebiten.Image, x, y float32, label string, checked bool, disabled bool) {
 	size := float32(16)
-	vector.StrokeRect(screen, x, y, size, size, 1, color.White, true)
+	borderColor := color.RGBA{100, 100, 100, 255}
+	labelColor := color.RGBA{120, 120, 120, 255}
+	if !disabled {
+		borderColor = color.RGBA{255, 255, 255, 255}
+		labelColor = color.RGBA{255, 255, 255, 255}
+	}
+	vector.StrokeRect(screen, x, y, size, size, 1, borderColor, true)
 	if checked {
 		vector.DrawFilledRect(screen, x+3, y+3, size-6, size-6, color.RGBA{0, 255, 0, 255}, true)
 	}
-	textutil.Draw(screen, label, int(x)+25, int(y)+13, color.White)
+	textutil.Draw(screen, label, int(x)+25, int(y)+13, labelColor)
 }
 
 func (dw *DebugWindow) HandleClick(mx, my int) bool {
@@ -340,16 +383,21 @@ func (dw *DebugWindow) handleClickShaders(mx, my float32) {
 
 	for i, s := range dw.sortedShaders {
 		cy := startY + 30 + float32(i*30)
-		// Clique sur le checkbox OU son label
-		if dw.isInside(mx, my, startX, cy, 200, 20) {
-			dw.world.Debug.ActiveShaders[s] = !dw.world.Debug.ActiveShaders[s]
-			// Sync with player visual effects for immediate feedback
-			if dw.world.Player != nil {
-				if dw.world.Debug.ActiveShaders[s] {
-					dw.world.Player.VisualEffects[s] = 999
-				} else {
-					dw.world.Player.VisualEffects[s] = 0
-				}
+		if dw.isInside(mx, my, startX+200, cy, 20, 20) {
+			if dw.world.Debug.DisabledShaders[s] {
+				delete(dw.world.Debug.DisabledShaders, s)
+				fmt.Printf("[DEBUG] Shader débloqué : %s\n", s)
+			} else {
+				dw.world.Debug.DisabledShaders[s] = true
+				fmt.Printf("[DEBUG] Shader bloqué : %s\n", s)
+			}
+		} else if dw.isInside(mx, my, startX, cy, 200, 20) {
+			if dw.world.Debug.ActiveShaders[s] {
+				delete(dw.world.Debug.ActiveShaders, s)
+				fmt.Printf("[DEBUG] Shader désactivé : %s\n", s)
+			} else {
+				dw.world.Debug.ActiveShaders[s] = true
+				fmt.Printf("[DEBUG] Shader activé : %s\n", s)
 			}
 		}
 	}
@@ -363,63 +411,50 @@ func (dw *DebugWindow) handleClickImpairments(mx, my float32) {
 		return
 	}
 
-	// Blur
-	if dw.isInside(mx, my, startX, startY+30, 200, 20) {
-		dw.world.Debug.ActiveShaders["blur"] = !dw.world.Debug.ActiveShaders["blur"]
-		if dw.world.Player != nil {
-			if dw.world.Debug.ActiveShaders["blur"] {
-				dw.world.Player.VisualEffects["blur"] = 999
+	type effectDef struct {
+		key    string
+		yOff   float32
+		active func()
+		clear  func()
+	}
+
+	effects := []effectDef{
+		{"blur", 30, func() { p.VisualEffects["blur"] = 999 }, func() { p.VisualEffects["blur"] = 0 }},
+		{"bubble", 60, func() { p.VisualEffects["bubble"] = 999 }, func() { p.VisualEffects["bubble"] = 0 }},
+		{"aphasia", 90, func() { p.AphasiaTurns = 10 }, func() { p.AphasiaTurns = 0 }},
+		{"ataxia", 120, func() { p.AtaxiaTurns = 10 }, func() { p.AtaxiaTurns = 0 }},
+		{"agnosia", 150, func() { p.AgnosiaTurns = 10 }, func() { p.AgnosiaTurns = 0 }},
+		{"amnesia", 180, func() { p.AmnesiaTurns = 10 }, func() { p.AmnesiaTurns = 0 }},
+		{"vertige", 210, func() { p.VisualEffects["vertige"] = 999 }, func() { p.VisualEffects["vertige"] = 0 }},
+		{"invert", 240, func() { p.VisualEffects["invert"] = 999 }, func() { p.VisualEffects["invert"] = 0 }},
+	}
+
+	for _, e := range effects {
+		if dw.isInside(mx, my, startX+200, startY+e.yOff, 20, 20) {
+			if dw.world.Debug.DisabledEffects[e.key] {
+				delete(dw.world.Debug.DisabledEffects, e.key)
+				fmt.Printf("[DEBUG] Effet débloqué : %s\n", e.key)
 			} else {
-				dw.world.Player.VisualEffects["blur"] = 0
+				dw.world.Debug.DisabledEffects[e.key] = true
+				e.clear()
+				fmt.Printf("[DEBUG] Effet bloqué : %s\n", e.key)
 			}
-		}
-	}
-	// Bubble
-	if dw.isInside(mx, my, startX, startY+60, 200, 20) {
-		dw.world.Debug.ActiveShaders["bubble"] = !dw.world.Debug.ActiveShaders["bubble"]
-		if dw.world.Player != nil {
-			if dw.world.Debug.ActiveShaders["bubble"] {
-				dw.world.Player.VisualEffects["bubble"] = 999
+		} else if dw.isInside(mx, my, startX, startY+e.yOff, 200, 20) {
+			isActive := e.key == "blur" && p.VisualEffects["blur"] > 0 ||
+				e.key == "bubble" && p.VisualEffects["bubble"] > 0 ||
+				e.key == "aphasia" && p.AphasiaTurns > 0 ||
+				e.key == "ataxia" && p.AtaxiaTurns > 0 ||
+				e.key == "agnosia" && p.AgnosiaTurns > 0 ||
+				e.key == "amnesia" && p.AmnesiaTurns > 0 ||
+				e.key == "vertige" && p.VisualEffects["vertige"] > 0 ||
+				e.key == "invert" && p.VisualEffects["invert"] > 0
+
+			if isActive {
+				e.clear()
+				fmt.Printf("[DEBUG] Effet désactivé : %s\n", e.key)
 			} else {
-				dw.world.Player.VisualEffects["bubble"] = 0
-			}
-		}
-	}
-	// Aphasia
-	if dw.isInside(mx, my, startX, startY+90, 200, 20) {
-		if p.AphasiaTurns > 0 { p.AphasiaTurns = 0 } else { p.AphasiaTurns = 10 }
-	}
-	// Ataxia
-	if dw.isInside(mx, my, startX, startY+120, 200, 20) {
-		if p.AtaxiaTurns > 0 { p.AtaxiaTurns = 0 } else { p.AtaxiaTurns = 10 }
-	}
-	// Agnosia
-	if dw.isInside(mx, my, startX, startY+150, 200, 20) {
-		if p.AgnosiaTurns > 0 { p.AgnosiaTurns = 0 } else { p.AgnosiaTurns = 10 }
-	}
-	// Amnesia
-	if dw.isInside(mx, my, startX, startY+180, 200, 20) {
-		if p.AmnesiaTurns > 0 { p.AmnesiaTurns = 0 } else { p.AmnesiaTurns = 10 }
-	}
-	// Vertige
-	if dw.isInside(mx, my, startX, startY+210, 200, 20) {
-		dw.world.Debug.ActiveShaders["vertige"] = !dw.world.Debug.ActiveShaders["vertige"]
-		if dw.world.Player != nil {
-			if dw.world.Debug.ActiveShaders["vertige"] {
-				dw.world.Player.VisualEffects["vertige"] = 999
-			} else {
-				dw.world.Player.VisualEffects["vertige"] = 0
-			}
-		}
-	}
-	// Invert
-	if dw.isInside(mx, my, startX, startY+240, 200, 20) {
-		dw.world.Debug.ActiveShaders["invert"] = !dw.world.Debug.ActiveShaders["invert"]
-		if dw.world.Player != nil {
-			if dw.world.Debug.ActiveShaders["invert"] {
-				dw.world.Player.VisualEffects["invert"] = 999
-			} else {
-				dw.world.Player.VisualEffects["invert"] = 0
+				e.active()
+				fmt.Printf("[DEBUG] Effet activé : %s\n", e.key)
 			}
 		}
 	}
@@ -432,6 +467,8 @@ func (dw *DebugWindow) isInside(mx, my, x, y, w, h float32) bool {
 func (dw *DebugWindow) ResetDefaults() {
 	dw.world.Debug.OverrideDifficulty = false
 	dw.world.Debug.ActiveShaders = make(map[string]bool)
+	dw.world.Debug.DisabledShaders = make(map[string]bool)
+	dw.world.Debug.DisabledEffects = make(map[string]bool)
 	dw.world.Debug.MessageSpeed = 1.0
 	if dw.world.Player != nil {
 		dw.world.Player.AphasiaTurns = 0

@@ -49,32 +49,50 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 		s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vous êtes déboussolé."))
 
 	case "shadowstalker":
-		// Applique un effet visuel de flou
+		if s.world.Debug.DisabledEffects["blur"] {
+			fmt.Printf("[DEBUG] Effet blur bloqué (désactivé via F12) — %s\n", c.Species)
+			return
+		}
 		if s.world.Player != nil {
 			s.world.Player.VisualEffects["blur"] = 3
 			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Votre vision se trouble..."))
 		}
 
 	case "echo_hound":
+		if s.world.Debug.DisabledEffects["aphasia"] {
+			fmt.Printf("[DEBUG] Effet aphasia bloqué (désactivé via F12) — %s\n", c.Species)
+			return
+		}
 		if s.world.Player != nil {
 			s.world.Player.AphasiaTurns = 3
 			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Les mots perdent leur sens..."))
 		}
 
 	case "burrower":
+		if s.world.Debug.DisabledEffects["ataxia"] {
+			fmt.Printf("[DEBUG] Effet ataxia bloqué (désactivé via F12) — %s\n", c.Species)
+			return
+		}
 		if s.world.Player != nil {
 			s.world.Player.AtaxiaTurns = 3
 			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vos mains ne vous obéissent plus !"))
 		}
 
 	case "moss_monkey":
+		if s.world.Debug.DisabledEffects["agnosia"] {
+			fmt.Printf("[DEBUG] Effet agnosia bloqué (désactivé via F12) — %s\n", c.Species)
+			return
+		}
 		if s.world.Player != nil {
 			s.world.Player.AgnosiaTurns = 3
-			s.world.Player.VisualEffects["moss_drip"] = 3
 			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Une mousse envahissante vous aveugle !"))
 		}
 
 	case "specter":
+		if s.world.Debug.DisabledEffects["amnesia"] {
+			fmt.Printf("[DEBUG] Effet amnesia bloqué (désactivé via F12) — %s\n", c.Species)
+			return
+		}
 		fmt.Printf("[%s] L'attaque touche le joueur et provoque une amnésie temporaire !\n", c.Species)
 		flipDir := entity.FlipTop
 		if s.world.Player != nil {
@@ -86,11 +104,19 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 		s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Vous avez du mal à vous souvenir."))
 
 	case "lumifly":
+		if s.world.Debug.DisabledEffects["bubble"] {
+			fmt.Printf("[DEBUG] Effet bubble bloqué (désactivé via F12) — %s\n", c.Species)
+			return
+		}
 		if s.world.Player != nil {
 			s.world.Player.VisualEffects["bubble"] = 2
 		}
 
 	case "fleeing_sprite":
+		if s.world.Debug.DisabledEffects["vertige"] {
+			fmt.Printf("[DEBUG] Effet vertige bloqué (désactivé via F12) — %s\n", c.Species)
+			return
+		}
 		if s.world.Player != nil {
 			s.world.Player.VertigoTurns = 3
 			s.world.Player.VisualEffects["vertige"] = 3
@@ -98,6 +124,10 @@ func (s *CreatureAttackEffectSystem) onCreatureAttacked(e event.Event) {
 		}
 
 	case "flutterwing":
+		if s.world.Debug.DisabledEffects["invert"] {
+			fmt.Printf("[DEBUG] Effet invert bloqué (désactivé via F12) — %s\n", c.Species)
+			return
+		}
 		if s.world.Player != nil {
 			s.world.Player.VisualEffects["invert"] = 2
 			s.world.EventBus.PublishImmediate(event.NewItemMessageEvent("Les couleurs s'inversent autour de vous..."))

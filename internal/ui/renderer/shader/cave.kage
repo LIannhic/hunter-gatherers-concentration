@@ -42,9 +42,9 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 	// === 3. OBSCURITÉ DE FOND ===
 	var maxDarkness float
 	if Intensity < 0.5 {
-		maxDarkness = mix(0.55, 0.75, Intensity*2.0)
+		maxDarkness = mix(0.30, 0.50, Intensity*2.0)
 	} else {
-		maxDarkness = mix(0.75, 0.90, (Intensity-0.5)*2.0)
+		maxDarkness = mix(0.50, 0.70, (Intensity-0.5)*2.0)
 	}
 
 	// === 4. VIGNETTE DE LA TORCHE ===

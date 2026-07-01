@@ -169,20 +169,21 @@ func (r *EffectRenderer) DrawQuakeEffect(dst, currentSrc, ghostSrc *ebiten.Image
 }
 
 type GlobalEffectParams struct {
-	SanityRatio float32 // 0.0 (vide) to 1.0 (plein)
-	Biome       string
-	UseBlur     bool
-	UseBubble   bool
-	UseRain     bool
-	UseWave     bool
-	UseHeat     bool
-	UseCave     bool
-	UseVortex   bool
-	UseVertige  bool
-	UseInvert   bool
-	PortalPos   []float32 // [x, y] normalized, nil if none
-	MousePos    []float32 // [x, y] normalized
-	ScreenSize  []float32 // [width, height] pixels
+	SanityRatio     float32 // 0.0 (vide) to 1.0 (plein)
+	Biome           string
+	UseBlur         bool
+	UseBubble       bool
+	UseRain         bool
+	UseWave         bool
+	UseHeat         bool
+	UseCave         bool
+	UseVortex       bool
+	UseVertige      bool
+	UseInvert       bool
+	DisabledShaders map[string]bool // Shaders d'environnement désactivés via F12
+	PortalPos       []float32       // [x, y] normalized, nil if none
+	MousePos        []float32       // [x, y] normalized
+	ScreenSize      []float32       // [width, height] pixels
 }
 
 // ProcessCreatureAttackEffects applique les effets visuels d'attaque de créatures
@@ -266,19 +267,20 @@ func (r *EffectRenderer) ProcessBiomeEffects(screen *ebiten.Image, params Global
 	dst := r.bufferB
 
 	anyApplied := false
-	applyCave := params.Biome == "cave" || params.UseCave
+	disabled := params.DisabledShaders
+	applyCave := (params.Biome == "cave" || params.UseCave) && !disabled["cave"]
 
-	if params.Biome == "swamp" || params.UseWave {
+	if (params.Biome == "swamp" || params.UseWave) && !disabled["wave"] {
 		r.applyShader(src, dst, "wave", shaderIntensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
-	if params.Biome == "desert" || params.UseHeat {
+	if (params.Biome == "desert" || params.UseHeat) && !disabled["heat"] {
 		r.applyShader(src, dst, "heat", shaderIntensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
-	if params.Biome == "forest" || params.UseRain {
+	if (params.Biome == "forest" || params.UseRain) && !disabled["rain"] {
 		r.applyShader(src, dst, "rain", shaderIntensity, nil, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true

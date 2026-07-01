@@ -77,6 +77,8 @@ type DebugState struct {
 	Difficulty         meta.DifficultySettings
 	AllowedCreatures   map[string]bool
 	ActiveShaders      map[string]bool
+	DisabledShaders    map[string]bool // Shaders d'environnement (biome) désactivés par le joueur
+	DisabledEffects    map[string]bool // Effets négatifs d'attaque de créature désactivés par le joueur
 	MessageSpeed       float64
 }
 
@@ -132,6 +134,8 @@ func NewWorld() *World {
 				"portable_portal": true,
 			},
 			ActiveShaders: make(map[string]bool),
+			DisabledShaders: make(map[string]bool),
+			DisabledEffects: make(map[string]bool),
 		},
 	}
 

@@ -1046,10 +1046,10 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 
 		attackParams := renderer.GlobalEffectParams{
 			SanityRatio: ratio,
-			UseBlur:     app.World.Player.VisualEffects["blur"] > 0 || app.World.Debug.ActiveShaders["blur"],
-			UseBubble:   (app.World.Player.VisualEffects["bubble"] > 0 || app.World.Debug.ActiveShaders["bubble"]) && isOverPlaymat,
-			UseVertige:  app.World.Player.VisualEffects["vertige"] > 0 || app.World.Debug.ActiveShaders["vertige"],
-			UseInvert:   app.World.Player.VisualEffects["invert"] > 0 || app.World.Debug.ActiveShaders["invert"],
+			UseBlur:     (app.World.Player.VisualEffects["blur"] > 0 || app.World.Debug.ActiveShaders["blur"]) && !app.World.Debug.DisabledEffects["blur"],
+			UseBubble:   (app.World.Player.VisualEffects["bubble"] > 0 || app.World.Debug.ActiveShaders["bubble"]) && isOverPlaymat && !app.World.Debug.DisabledEffects["bubble"],
+			UseVertige:  (app.World.Player.VisualEffects["vertige"] > 0 || app.World.Debug.ActiveShaders["vertige"]) && !app.World.Debug.DisabledEffects["vertige"],
+			UseInvert:   (app.World.Player.VisualEffects["invert"] > 0 || app.World.Debug.ActiveShaders["invert"]) && !app.World.Debug.DisabledEffects["invert"],
 			MousePos:    []float32{float32(mx) / sw, float32(my) / sh},
 			ScreenSize:  []float32{sw, sh},
 		}
@@ -1086,15 +1086,16 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 		}
 
 		biomeParams := renderer.GlobalEffectParams{
-			SanityRatio: ratio,
-			Biome:       biome,
-			UseRain:     app.World.Player.VisualEffects["rain"] > 0 || app.World.Debug.ActiveShaders["rain"],
-			UseWave:     app.World.Debug.ActiveShaders["wave"],
-			UseHeat:     app.World.Debug.ActiveShaders["heat"],
-			UseCave:     app.World.Debug.ActiveShaders["cave"],
-			UseVortex:   app.World.Debug.ActiveShaders["vortex"],
-			PortalPos:   portalPos,
-			ScreenSize:  []float32{sw, sh},
+			SanityRatio:     ratio,
+			Biome:           biome,
+			UseRain:         (app.World.Player.VisualEffects["rain"] > 0 || app.World.Debug.ActiveShaders["rain"]) && !app.World.Debug.DisabledShaders["rain"],
+			UseWave:         app.World.Debug.ActiveShaders["wave"] && !app.World.Debug.DisabledShaders["wave"],
+			UseHeat:         app.World.Debug.ActiveShaders["heat"] && !app.World.Debug.DisabledShaders["heat"],
+			UseCave:         app.World.Debug.ActiveShaders["cave"] && !app.World.Debug.DisabledShaders["cave"],
+			UseVortex:       app.World.Debug.ActiveShaders["vortex"], // Effet de tuile butin (portail portable), pas un shader d'environnement
+			DisabledShaders: app.World.Debug.DisabledShaders,
+			PortalPos:       portalPos,
+			ScreenSize:      []float32{sw, sh},
 		}
 
 		app.EffectRenderer.ProcessBiomeEffects(screen, biomeParams)
