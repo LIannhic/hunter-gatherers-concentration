@@ -243,7 +243,7 @@ func TestResourceUpdateValueByStage(t *testing.T) {
 	
 	// bourgeon stage (0)
 	r.Lifecycle.CurrentStage = 0
-	r.updateValueByStage()
+	r.UpdateValueByStage()
 	if r.Value.CurrentValue != baseValue/4 {
 		t.Errorf("Expected value %d at bourgeon stage, got %d", baseValue/4, r.Value.CurrentValue)
 	}
@@ -251,7 +251,7 @@ func TestResourceUpdateValueByStage(t *testing.T) {
 	// fruit stage (2)
 	r.Lifecycle.CurrentStage = 2
 	r.Value.CurrentValue = 0
-	r.updateValueByStage()
+	r.UpdateValueByStage()
 	if r.Value.CurrentValue != baseValue {
 		t.Errorf("Expected value %d at fruit stage, got %d", baseValue, r.Value.CurrentValue)
 	}
