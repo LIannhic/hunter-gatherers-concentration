@@ -135,7 +135,13 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
 
 - **Suivi de Progression et Score** :
   - `TotalExperience` : Cumul de toute l'expérience acquise durant une session (Matchs + Butin final). Utilisé comme base pour le calcul du Score dans la persistance.
-  - `Experience` : XP relative au niveau actuel, utilisée pour le système de Level-up.
+  - `Experience` : XP relative au niveau actuel, utilisée pour le système de Level-up. Réinitialisé à 0 au début de chaque partie pour éviter les messages de level-up résiduels.
+
+- **Mode Playtest** :
+  - `IsPlaytest bool` : Indique si la partie est en mode Playtest (grille unique BiomeDefault, pas de navigation).
+  - **SpawnPairs(gridID, pairCount)** : Ajoute des paires de manière progressive. Pool étendu avec toutes les créatures et ressources exclusives de tous les biomes (19 types).
+  - **HasValidPair(gridID)** : Vérifie s'il existe au moins une paire valide dans la grille (utilisé pour la détection d'impossibilité).
+  - **GridRefilled** : Événement publié lors du remplissage progressif de la grille.
 
 - **Buffs et Protection** :
   - `ImmunityTurns` : Géré dans `Player`, permet de bloquer tous les dégâts. Utilisé par l'effet du Shadowstalker.
@@ -254,6 +260,73 @@ Le `CreatureMovementSystem` filtre maintenant les déclencheurs par grille :
 - `TriggerProximity` : Ne calcule la distance que pour les révélations sur **même grille**.
 
 Cela corrige le bug où les Stone Wardens (et autres) bougeaient dans toutes les grilles quand le joueur révélait une tuile aux mêmes coordonnées ailleurs.
+
+---
+
+### Mode Playtest
+
+Le mode Playtest est un mode de test rapide qui utilise une grille unique de type **BiomeDefault** (6x6) sans zone de départ/arrivée ni portail portable.
+
+#### Fonctionnalités
+- **Pool étendu** : Toutes les créatures et ressources exclusives de tous les biomes (Forest, Cave, Swamp, Desert) sont incluses, soit **19 types** au total.
+- **Progressive Spawn** : Le mode commence avec **1 paire** initiale. Chaque match ou merge ajoute **+2 paires** supplémentaires.
+- **Détection d'impossibilité** : Si aucune paire valide n'existe dans la grille, le jeu se termine immédiatement (Game Over).
+- **Tiles révélées** : Les tuiles sont générées face révélées pour permettre une prévisualisation. Elles se cachent automatiquement lors d'un End Turn ou Skip.
+
+#### Pool de Spawn (Playtest)
+| Type | Catégorie | Biome d'origine |
+|------|-----------|-----------------|
+| Lumifly | Créature | Global |
+| Shadowstalker | Créature | Global |
+| Stonewarden | Créature | Global |
+| Flutterwing | Créature | Global |
+| Fleeing Sprite | Créature | Global |
+| Moss Monkey | Créature | Forêt |
+| Specter | Créature | Grotte |
+| Echo Hound | Créature | Marais |
+| Burrower | Créature | Désert |
+| Dreamberry | Ressource | Global |
+| Moonstone | Ressource | Global |
+| Whispering Herb | Ressource | Global |
+| Crystal Shard | Ressource | Global |
+| Moss Truffle | Ressource | Forêt |
+| Void Bloom | Ressource | Grotte |
+| Echo Crystal | Ressource | Marais |
+| Sand Core | Ressource | Désert |
+| Piège | Piège | Global |
+
+#### Événement GridRefilled
+
+L'événement `GridRefilled` est publié lors du remplissage progressif de la grille en mode Playtest :
+
+```go
+GridRefilled  // payload: grid_id, pair_count
+```
+
+#### Fonctions de Spawn
+- **SpawnPairs(gridID, pairCount)** : Ajoute des paires de manière progressive. Utilise le pool étendu avec toutes les créatures et ressources exclusives.
+- **HasValidPair(gridID)** : Vérifie s'il existe au moins une paire valide dans la grille (utilisé pour la détection d'impossibilité).
+
+#### Pool de Spawn
+Le pool de spawn pour le mode Playtest inclut toutes les créatures et ressources exclusives de tous les biomes :
+
+```go
+func buildPlaytestPool() []entity.Type {
+    return []entity.Type{
+        // Créatures globales
+        entity.TypeLumifly, entity.TypeShadowstalker, entity.TypeStonewarden,
+        entity.TypeFlutterwing, entity.TypeFleeingSprite,
+        // Créatures exclusives
+        entity.TypeMossMonkey, entity.TypeSpecter, entity.TypeEchoHound, entity.TypeBurrower,
+        // Ressources globales
+        entity.TypeDreamberry, entity.TypeMoonstone, entity.TypeWhisperingHerb, entity.TypeCrystalShard,
+        // Ressources exclusives
+        entity.TypeMossTruffle, entity.TypeVoidBloom, entity.TypeEchoCrystal, entity.TypeSandCore,
+        // Pièges
+        entity.TypeTrap,
+    }
+}
+```
 
 ---
 
@@ -499,7 +572,6 @@ go test ./internal/domain/... -v
 | Sélection Suppression | Clic droit / Appui Long (0.5s) (Inventaire) |
 | Désélectionner Butin | Clic droit / Tap hors inventaire |
 | Défilement Inventaire | Molette / Glissement (Drag) vertical |
-| Portail Portatif (Raccourci) | P |
 | Statistiques des zones | I |
 | Détails Inventaire | L |
 | Atlas des Assets (Toggle) | T |

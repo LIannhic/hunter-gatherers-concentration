@@ -101,6 +101,9 @@ func NewApplication() (*Application, error) {
 	app.Input = input.NewHandler(app.World, app.AssocEngine)
 	app.HUD = hud.NewHUD(app.World)
 	app.HUD.SetAssetsManager(app.Assets)
+	app.HUD.OnMenuClick = func() {
+		app.ReturnToMenu()
+	}
 	app.DebugWindow = debug.NewDebugWindow(app.World)
 
 	// Inscription du renderer aux événements de scan
@@ -511,6 +514,30 @@ func (app *Application) setupDebugCallbacks() {
 func (app *Application) setupEventSubscriptions() {
     app.World.EventBus.SubscribeFunc(event.TileMatched, func(e event.Event) {
        app.World.Player.GainExperience(10)
+
+       if app.World.IsPlaytest {
+           gridID, _ := e.Payload["grid_id"].(string)
+           if gridID != "" {
+               app.World.SpawnPairs(gridID, 2)
+               if !app.World.HasValidPair(gridID) {
+                   fmt.Println("[PLAYTEST] Plus de paire possible - Game Over")
+                   app.State = domain.StateGameOver
+               }
+           }
+       }
+    })
+
+    app.World.EventBus.SubscribeFunc(event.TileMerged, func(e event.Event) {
+       if app.World.IsPlaytest {
+           gridID, _ := e.Payload["grid_id"].(string)
+           if gridID != "" {
+               app.World.SpawnPairs(gridID, 2)
+               if !app.World.HasValidPair(gridID) {
+                   fmt.Println("[PLAYTEST] Plus de paire possible - Game Over")
+                   app.State = domain.StateGameOver
+               }
+           }
+       }
     })
 
 	app.World.EventBus.SubscribeFunc(event.TileRevealed, func(e event.Event) {
@@ -702,7 +729,11 @@ func (app *Application) updatePlaying() error {
 			switch action {
 			case "replay":
 				app.HUD.HideVictory()
-				app.StartGameWithSlot(0)
+				if app.World.IsPlaytest {
+					app.StartPlaytestGame()
+				} else {
+					app.StartGameWithSlot(0)
+				}
 			case "menu":
 				app.HUD.HideVictory()
 				app.ReturnToMenu()
@@ -854,7 +885,11 @@ func (app *Application) updateGameOver() error {
 		action := app.HUD.HandleGameOverClick(mx, my)
 		switch action {
 		case "replay":
-			app.StartGameWithSlot(0)
+			if app.World.IsPlaytest {
+				app.StartPlaytestGame()
+			} else {
+				app.StartGameWithSlot(0)
+			}
 		case "menu":
 			app.ReturnToMenu()
 		}
@@ -933,10 +968,13 @@ func (app *Application) StartGame() {
 
 	app.World.Turn = 0
 	app.World.MaxTurns = app.World.Player.Stats.MaxSanity
+	app.World.Player.Stats.Experience = 0
 
 	// Initialisation propre de l'inventaire via le World
 	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
-	_ = app.World.AddLootItem(player.NewPortablePortalItem(0))
+	if !app.World.IsPlaytest {
+		_ = app.World.AddLootItem(player.NewPortablePortalItem(0))
+	}
 	app.World.Player.Inventory.ScrollOffset = 0
 
 	app.Engine.Reset()
@@ -1124,6 +1162,9 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 
 	textutil.Draw(screen, "GAME OVER", x+250, y+50, color.RGBA{255, 100, 100, 255})
 	textutil.Draw(screen, "Statistiques épuisées. Votre voyage s'arrête ici.", x+120, y+100, color.White)
+
+	scoreText := fmt.Sprintf("Score : %d", app.World.Player.Stats.TotalExperience)
+	textutil.Draw(screen, scoreText, x+230, y+150, color.RGBA{255, 200, 50, 255})
 
 	btnW, btnH := 160, 40
 

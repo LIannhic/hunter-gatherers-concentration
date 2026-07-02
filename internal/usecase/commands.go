@@ -496,6 +496,7 @@ func (c *MergeTilesCommand) Execute() error {
 			e1.GetMatchID(),
 			e1.GetType(),
 			level+1,
+			c.GridID,
 		))
 
 		// Animation visuelle de retournement (fermeture)

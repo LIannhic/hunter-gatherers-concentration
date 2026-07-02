@@ -42,6 +42,8 @@ const (
 	// Amnésie
 	AmnesiaStarted Type = "amnesia_started"
 	AmnesiaEnded   Type = "amnesia_ended"
+	// Playtest
+	GridRefilled Type = "grid_refilled"
 )
 
 // Event structure de base
@@ -247,7 +249,7 @@ func NewTileMatchedEvent(tilePos entity.Position, entityID string, name string, 
 	}
 }
 
-func NewTileMergedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type, level int) Event {
+func NewTileMergedEvent(tilePos entity.Position, entityID string, name string, entityType entity.Type, level int, gridID string) Event {
 	return Event{
 		Type:     TileMerged,
 		SourceID: entityID,
@@ -257,6 +259,7 @@ func NewTileMergedEvent(tilePos entity.Position, entityID string, name string, e
 			"name":        name,
 			"entity_type": entityType,
 			"level":       level,
+			"grid_id":     gridID,
 		},
 		Timestamp: time.Now(),
 	}
@@ -496,6 +499,18 @@ func NewAmnesiaEndedEvent(source string) Event {
 		Type:     AmnesiaEnded,
 		SourceID: source,
 		Payload:  map[string]interface{}{},
+		Timestamp: time.Now(),
+	}
+}
+
+func NewGridRefilledEvent(gridID string, pairCount int) Event {
+	return Event{
+		Type:     GridRefilled,
+		SourceID: "system",
+		Payload: map[string]interface{}{
+			"grid_id":    gridID,
+			"pair_count": pairCount,
+		},
 		Timestamp: time.Now(),
 	}
 }

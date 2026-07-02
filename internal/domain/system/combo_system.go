@@ -121,6 +121,8 @@ func (s *ComboSystem) Reset() {
 		fmt.Printf("[COMBO] Combo brisé à %d\n", s.comboCount)
 	}
 	s.comboCount = 0
+	s.lastMatchTurn = 0
+	s.matchThisTurn = false
 }
 
 func (s *ComboSystem) getJuicyMessage(count int, isSynergy bool) string {

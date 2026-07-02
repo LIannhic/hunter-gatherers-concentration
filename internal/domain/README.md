@@ -70,15 +70,15 @@ func (s *LifecycleSystem) Update(world *World) {
 ### Implémentation
 
 - **`system/`** : Logique centrale du domaine
-  - `World` : Structure World (Cœur de l'état global).
+  - `World` : Structure World (Cœur de l'état global). Contient `IsPlaytest bool` pour identifier le mode de test.
   - `Engine` : Orchestrateur des systèmes ECS.
   - `ECS Systems` : Implémentations (IA, Mouvement, Lifecycle, Loot...).
   - `AggressionSystem` : Gère le calcul modulaire de l'agressivité (Base + Facteurs : révélations, patience, inventaire, colère d'espèce). Déclenche les attaques à 100%.
   - `CreatureAttackEffectSystem` : Centralise les effets mondiaux déclenchés par les attaques réussies (ex: rotation de grille, troubles cognitifs Aphasia/Ataxia/Agnosia/Amnesia/Vertigo).
   - `Mechanics` : Flip, Match, Merge.
   - `Navigation` : Gestion des grids et navigation.
-  - `Entities` : Logique de spawn.
-  - `Portal` : Système de portail portable (`world_portal.go`) — déploiement 3x3, effet séisme, pénalités (Rê, vortex shader, prévisualisation curseur.
+  - `Population` : `SpawnPairs(gridID, pairCount)` et `HasValidPair(gridID)` pour le mode Playtest. Pool étendu avec toutes les créatures et ressources exclusives.
+  - `Portal` : Système de portail portable (`world_portal.go`) — déploiement 3x3, effet séisme, pénalités (Rêve Brisé), vortex shader, prévisualisation curseur.
   - `Query` : Fonctions de recherche.
   - `TriggerLumiflyEffect` : Publie l'événement `lumifly_effect_triggered` avec les positions des Lumifly, le rayon et la durée restante du tour (`TurnTimer.Remaining`).
 - **`board/`** : Gestion de la géométrie et de la structure du monde
@@ -559,6 +559,73 @@ func TestCreatureAI(t *testing.T) {
     
     action := ai.Decide(creature, mockWorld)
     // Vérifier l'action
+}
+```
+
+---
+
+## Mode Playtest
+
+Le mode Playtest est un mode de test rapide qui utilise une grille unique de type **BiomeDefault** (6x6) sans zone de départ/arrivée ni portail portable.
+
+### Fonctionnalités
+- **Pool étendu** : Toutes les créatures et ressources exclusives de tous les biomes (Forest, Cave, Swamp, Desert) sont incluses, soit **19 types** au total.
+- **Progressive Spawn** : Le mode commence avec **1 paire** initiale. Chaque match ou merge ajoute **+2 paires** supplémentaires.
+- **Détection d'impossibilité** : Si aucune paire valide n'existe dans la grille, le jeu se termine immédiatement (Game Over).
+- **Tiles révélées** : Les tuiles sont générées face révélées pour permettre une prévisualisation. Elles se cachent automatiquement lors d'un End Turn ou Skip.
+
+### Pool de Spawn (Playtest)
+| Type | Catégorie | Biome d'origine |
+|------|-----------|-----------------|
+| Lumifly | Créature | Global |
+| Shadowstalker | Créature | Global |
+| Stonewarden | Créature | Global |
+| Flutterwing | Créature | Global |
+| Fleeing Sprite | Créature | Global |
+| Moss Monkey | Créature | Forêt |
+| Specter | Créature | Grotte |
+| Echo Hound | Créature | Marais |
+| Burrower | Créature | Désert |
+| Dreamberry | Ressource | Global |
+| Moonstone | Ressource | Global |
+| Whispering Herb | Ressource | Global |
+| Crystal Shard | Ressource | Global |
+| Moss Truffle | Ressource | Forêt |
+| Void Bloom | Ressource | Grotte |
+| Echo Crystal | Ressource | Marais |
+| Sand Core | Ressource | Désert |
+| Piège | Piège | Global |
+
+### Événement GridRefilled
+
+L'événement `GridRefilled` est publié lors du remplissage progressif de la grille en mode Playtest :
+
+```go
+GridRefilled  // payload: grid_id, pair_count
+```
+
+### Fonctions de Spawn
+- **SpawnPairs(gridID, pairCount)** : Ajoute des paires de manière progressive. Utilise le pool étendu avec toutes les créatures et ressources exclusives.
+- **HasValidPair(gridID)** : Vérifie s'il existe au moins une paire valide dans la grille (utilisé pour la détection d'impossibilité).
+
+### Pool de Spawn
+Le pool de spawn pour le mode Playtest inclut toutes les créatures et ressources exclusives de tous les biomes :
+
+```go
+func buildPlaytestPool() []entity.Type {
+    return []entity.Type{
+        // Créatures globales
+        entity.TypeLumifly, entity.TypeShadowstalker, entity.TypeStonewarden,
+        entity.TypeFlutterwing, entity.TypeFleeingSprite,
+        // Créatures exclusives
+        entity.TypeMossMonkey, entity.TypeSpecter, entity.TypeEchoHound, entity.TypeBurrower,
+        // Ressources globales
+        entity.TypeDreamberry, entity.TypeMoonstone, entity.TypeWhisperingHerb, entity.TypeCrystalShard,
+        // Ressources exclusives
+        entity.TypeMossTruffle, entity.TypeVoidBloom, entity.TypeEchoCrystal, entity.TypeSandCore,
+        // Pièges
+        entity.TypeTrap,
+    }
 }
 ```
 

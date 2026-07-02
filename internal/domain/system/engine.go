@@ -149,6 +149,7 @@ func (e *Engine) Update() {
 // recomputeMatchableCount vérifie si la grille courante contient au moins une entité matchable (resource ou creature).
 // Le résultat est mis en cache dans hasMatchableEntities pour éviter de rescanner à chaque frame.
 func (e *Engine) recomputeMatchableCount() {
+	hadMatchables := e.hasMatchableEntities
 	e.hasMatchableEntities = false
 	grid, ok := e.world.GetGrid(e.world.CurrentGridID)
 	if !ok {
@@ -163,6 +164,12 @@ func (e *Engine) recomputeMatchableCount() {
 				}
 			}
 		}
+	}
+
+	if hadMatchables && !e.hasMatchableEntities && e.world.IsPlaytest {
+		fmt.Println("[PLAYTEST] Grille vide - refill automatique")
+		e.world.SpawnPairs(e.world.CurrentGridID, 18)
+		e.world.EventBus.PublishImmediate(event.NewGridRefilledEvent(e.world.CurrentGridID, 18))
 	}
 }
 

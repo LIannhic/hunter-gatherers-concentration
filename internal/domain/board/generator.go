@@ -82,17 +82,13 @@ func (g *LayoutGenerator) GenerateDreamPlane(id string, level meta.DifficultyLev
 	return plane
 }
 
-// GeneratePlaytestPlane génère une zone unique et dense pour les tests unitaires et playtests.
+// GeneratePlaytestPlane génère une grille 6x6 simple pour le mode playtest.
 func (g *LayoutGenerator) GeneratePlaytestPlane(id string) *DreamPlane {
 	plane := NewDreamPlane(id)
 
-	startGrid := NewGrid("zone_playtest", 6, 6, BiomeForest)
+	startGrid := NewGrid("zone_playtest", 6, 6, BiomeDefault)
 	plane.AddZone(startGrid)
-	plane.StartZoneID = startGrid.ID
-	plane.EndZoneID = startGrid.ID
 	plane.Coords[startGrid.ID] = Position{4, 4}
-
-	g.SetupPortalArea(startGrid, true)
 
 	return plane
 }

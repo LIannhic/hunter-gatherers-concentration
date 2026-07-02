@@ -329,6 +329,7 @@ func (w *World) GenerateLayout(id string) {
 	w.Grids = make(map[string]*board.Grid)
 	w.GridOrder = make([]string, 0)
 	w.Entities = entity.NewManager() // Reset des entités
+	w.IsPlaytest = false
 	w.Components = component.NewStore()
 	w.RevealedBySpecies = make(map[string]int)
 
@@ -388,7 +389,7 @@ func (w *World) PopulateZones() {
 	}
 }
 
-// GeneratePlaytestLayout génère un monde de test dense avec toutes les entités
+// GeneratePlaytestLayout génère un monde de test avec une seule paire initiale
 func (w *World) GeneratePlaytestLayout(id string) {
 	fmt.Printf("[WORLD] Génération du Layout de PLAYTEST: %s\n", id)
 
@@ -400,50 +401,21 @@ func (w *World) GeneratePlaytestLayout(id string) {
 	w.Entities = entity.NewManager()
 	w.Components = component.NewStore()
 	w.RevealedBySpecies = make(map[string]int)
+	w.IsPlaytest = true
 
-	grid := w.DreamPlane.Zones[w.DreamPlane.StartZoneID]
+	var grid *board.Grid
+	for _, g := range w.DreamPlane.Zones {
+		grid = g
+		break
+	}
 	w.Grids[grid.ID] = grid
 	w.GridOrder = append(w.GridOrder, grid.ID)
 	w.CurrentGridID = grid.ID
 	w.UpdateDiscovery()
 
-	// Population de test précise pour le debug
-	fmt.Println("[WORLD] Population de la zone de playtest (Echo Hound en 1,1)...")
+	w.SpawnPairs(grid.ID, 1)
 
-	// 1. Un Echo Hound isolé pour tester l'animation et l'orientation
-	_, _ = w.SpawnCreature(grid.ID, "echo_hound", entity.Position{X: 1, Y: 1})
-	_, _ = w.SpawnCreature(grid.ID, "echo_hound", entity.Position{X: 2, Y: 1}) // Sa paire
-
-	// 2. Population automatique pour le reste
-	creatures := []string{"lumifly", "shadowstalker", "burrower", "specter", "moss_monkey", "stonewarden", "flutterwing"}
-	resources := []string{"dreamberry", "moonstone", "whispering_herb", "crystal_shard"}
-
-	fmt.Println("[WORLD] Population de la zone de playtest...")
-
-	placePair := func(name string, isCreature bool) {
-		count := 0
-		for y := 0; y < grid.Height && count < 2; y++ {
-			for x := 0; x < grid.Width && count < 2; x++ {
-				pos := board.Position{X: x, Y: y}
-				plot, _ := grid.Get(pos)
-				if plot.StructureID == "" && len(plot.EntitiesID) == 0 {
-					if isCreature {
-						_, _ = w.SpawnCreature(grid.ID, name, entity.Position(pos))
-					} else {
-						_, _ = w.SpawnResource(grid.ID, name, entity.Position(pos))
-					}
-					count++
-				}
-			}
-		}
-	}
-
-	for _, c := range creatures {
-		placePair(c, true)
-	}
-	for _, r := range resources {
-		placePair(r, false)
-	}
+	w.SetPlayerPosition(entity.Position{X: grid.Width / 2, Y: grid.Height / 2})
 
 	fmt.Printf("[WORLD] Playtest layout prêt. Zones: %d, Entités: %d\n",
 		len(w.Grids), w.Entities.Count())

@@ -37,6 +37,41 @@ Chaque zone (grille) est remplie selon un pool commun de créatures, ressources 
 
 Cette répartition garantit une diversité maximale tout en laissant la part belle au hasard.
 
+### Mode Playtest
+
+Le mode Playtest est un mode de test rapide qui utilise une grille unique de type **BiomeDefault** (6x6) sans zone de départ/arrivée ni portail portable. Il permet de tester les mécaniques du jeu sans navigation inter-zones.
+
+#### Fonctionnalités
+- **Pool étendu** : Toutes les créatures et ressources exclusives de tous les biomes (Forest, Cave, Swamp, Desert) sont incluses, soit **19 types** au total.
+- **Progressive Spawn** : Le mode commence avec **1 paire** initiale. Chaque match ou merge ajoute **+2 paires** supplémentaires. Les paires sont piochées dans le pool étendu.
+- **Détection d'impossibilité** : Si aucune paire valide n'existe dans la grille, le jeu se termine immédiatement (Game Over).
+- **Tiles révélées** : Les tuiles sont générées face révélées pour permettre une prévisualisation. Elles se cachent automatiquement lors d'un End Turn ou Skip.
+- **Score** : L'affichage du score est présent même en cas de défaite (Game Over).
+- **REJOUR** : Le bouton REJOUER redémarre en mode Playtest (et non en mode normal).
+
+#### Pool de Spawn (Playtest)
+| Type | Catégorie | Biome d'origine |
+|------|-----------|-----------------|
+| Lumifly | Créature | Global |
+| Shadowstalker | Créature | Global |
+| Stonewarden | Créature | Global |
+| Flutterwing | Créature | Global |
+| Fleeing Sprite | Créature | Global |
+| Moss Monkey | Créature | Forêt |
+| Specter | Créature | Grotte |
+| Echo Hound | Créature | Marais |
+| Burrower | Créature | Désert |
+| Dreamberry | Ressource | Global |
+| Moonstone | Ressource | Global |
+| Whispering Herb | Ressource | Global |
+| Crystal Shard | Ressource | Global |
+| Moss Truffle | Ressource | Forêt |
+| Void Bloom | Ressource | Grotte |
+| Echo Crystal | Ressource | Marais |
+| Sand Core | Ressource | Désert |
+| Piège | Piège | Global |
+| Portail Portable | Structure | Global (exclu en playtest) |
+
 ### Système d'Agressivité Modulaire (Nouveau)
 
 Chaque créature possède désormais une **Agressivité Totale** calculée dynamiquement, remplaçant la valeur statique précédente. Ce système modulaire permet aux créatures de réagir au comportement du joueur et à l'état du monde.
@@ -621,7 +656,6 @@ Le jeu supporte la persistance des données :
 | Sélection Suppression | Clic droit / Appui Long (0.5s) (Inventaire) |
 | Désélectionner Butin | Clic droit / Tap hors inventaire |
 | Défilement Inventaire | Molette / Glissement (Drag) vertical |
-| Portail Portatif (Raccourci) | P |
 | Statistiques des zones | I |
 | Détails Inventaire | L |
 | Atlas des Assets (Toggle) | T |

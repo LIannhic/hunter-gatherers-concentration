@@ -102,6 +102,9 @@ type HUD struct {
 	// Navigation des stades dans l'atlas des assets
 	resourceStageIndex map[string]int
 
+	// Callback pour le bouton menu du portrait
+	OnMenuClick func()
+
 	// Cached sorted keys for grid counts
 	cachedGridCountsKeys []string
 	cachedGridCountsGrid string
@@ -367,6 +370,7 @@ func (h *HUD) ClearMessages() {
 	h.queueRight = h.queueRight[:0]
 	h.activeLeft = nil
 	h.activeRight = nil
+	h.comboMsg = nil
 }
 
 // ToggleDetails bascule l'affichage de la fenêtre de détails
@@ -994,10 +998,9 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 
 	controls := []string{
 		"CLIC: Ouvrir",
-		"M: Matcher",
+		"F12: Debug/Options",
 		"I: Zones",
 		"L: Liste Inv",
-		"P: Portail",
 		"B: Remplir Inv",
 		"ZQSD: Naviguer",
 		"ESPACE: Fin",
@@ -1045,9 +1048,9 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(mxIcon), float32(myIcon), float32(ui.MenuIconSize), float32(ui.MenuIconSize), color.RGBA{150, 150, 150, 255}, true)
 	textutil.Draw(screen, "M", int(mxIcon)+15, int(myIcon)+25, color.Black)
 
-	// Fullscreen Icon
-	fxIcon := ui.PortraitX + ui.FullscreenIconRelativeX
-	fyIcon := ui.PortraitY + ui.FullscreenIconRelativeY
+	// Fullscreen Icon (top-right corner)
+	fxIcon := float64(ui.ScreenWidth) - ui.FullscreenIconSize - float64(ui.PortraitX)
+	fyIcon := ui.PortraitY
 	vector.DrawFilledRect(screen, float32(fxIcon), float32(fyIcon), float32(ui.FullscreenIconSize), float32(ui.FullscreenIconSize), color.RGBA{150, 150, 150, 255}, true)
 	fsLabel := "F"
 	if ebiten.IsFullscreen() {
@@ -1575,17 +1578,17 @@ func (h *HUD) HandleClick(x, y int) bool {
 	fx, fy := float64(x), float64(y)
 	if fx >= float64(mxIcon) && fx <= float64(mxIcon)+ui.MenuIconSize &&
 		fy >= float64(myIcon) && fy <= float64(myIcon)+ui.MenuIconSize {
-		// On ne peut pas appeler ReturnToMenu ici car HUD ne connaît pas app.
-		// On laisse app.go gérer via ses propres callbacks (Input.OnExitToMenu déjà lié à l'icône M)
-		// On retourne juste true pour dire que le clic a été consommé.
+		if h.OnMenuClick != nil {
+			h.OnMenuClick()
+		}
 		return true
 	}
 
 	// Clic sur l'icône Fullscreen (F/W)
-	fsxIcon := ui.PortraitX + ui.FullscreenIconRelativeX
-	fsyIcon := ui.PortraitY + ui.FullscreenIconRelativeY
-	if fx >= float64(fsxIcon) && fx <= float64(fsxIcon)+ui.FullscreenIconSize &&
-		fy >= float64(fsyIcon) && fy <= float64(fsyIcon)+ui.FullscreenIconSize {
+	fsxIcon := float64(ui.ScreenWidth) - ui.FullscreenIconSize - float64(ui.PortraitX)
+	fsyIcon := float64(ui.PortraitY)
+	if fx >= fsxIcon && fx <= fsxIcon+ui.FullscreenIconSize &&
+		fy >= fsyIcon && fy <= fsyIcon+ui.FullscreenIconSize {
 		ebiten.SetFullscreen(!ebiten.IsFullscreen())
 		return true
 	}

@@ -67,6 +67,9 @@ type World struct {
 	// Compteur de créatures révélées par espèce (pour species_anger en O(1))
 	RevealedBySpecies map[string]int
 
+	// Playtest mode
+	IsPlaytest bool
+
 	// Debug
 	Debug DebugState
 }
