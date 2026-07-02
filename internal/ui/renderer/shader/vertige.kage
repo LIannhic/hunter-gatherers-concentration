@@ -6,34 +6,32 @@ var Time float
 var Intensity float
 var Resolution vec2
 
-func hash12(p vec2) float {
-	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123)
-}
-
 func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
-	uv := dstPos.xy / Resolution
-	center := vec2(0.5, 0.5)
-	toCenter := uv - center
-	distFromCenter := length(toCenter)
+	centerInPixels := Resolution * 0.5
+	toCenter := dstPos.xy - centerInPixels
+
+	// Utilisation de coordonnées normalisées pour le calcul de la distorsion
+	// afin que l'effet soit cohérent quelle que soit la résolution.
+	uvToCenter := toCenter / Resolution
+	distFromCenter := length(uvToCenter)
 
 	distortion := 1.0 + distFromCenter*distFromCenter*0.4*Intensity
 
 	pulse := sin(Time*(2.0+5.0*Intensity)) * 0.03 * Intensity
 	distortion += pulse
 
-	uvDistorted := center + toCenter*distortion
-
+	// Aberration chromatique (calculée en normalized space puis appliquée en pixels)
 	chromaShift := 0.02 * Intensity * distFromCenter
 
-	texScale := srcPos / uv
-	srcPosR := (center + toCenter*(distortion+chromaShift)) * texScale
-	srcPosG := uvDistorted * texScale
-	srcPosB := (center + toCenter*(distortion-chromaShift)) * texScale
+	// Calcul des offsets en pixels pour chaque canal
+	offsetR := toCenter * (distortion + chromaShift - 1.0)
+	offsetG := toCenter * (distortion - 1.0)
+	offsetB := toCenter * (distortion - chromaShift - 1.0)
 
 	baseColor := vec4(
-		imageSrc0At(srcPosR).r,
-		imageSrc0At(srcPosG).g,
-		imageSrc0At(srcPosB).b,
+		imageSrc0At(srcPos + offsetR).r,
+		imageSrc0At(srcPos + offsetG).g,
+		imageSrc0At(srcPos + offsetB).b,
 		1.0,
 	)
 
