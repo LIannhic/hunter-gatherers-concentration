@@ -17,10 +17,13 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 
 	// === 1. RAYON DE LA TORCHE ===
 	var targetRadius float
-	if Intensity < 0.5 {
-		targetRadius = mix(2.0, 1.2, Intensity*2.0) * tileSize
+	if Intensity < 0.2 {
+		// Très large au début
+		targetRadius = mix(4.0, 2.5, Intensity*5.0) * tileSize
+	} else if Intensity < 0.6 {
+		targetRadius = mix(2.5, 1.8, (Intensity-0.2)*2.5) * tileSize
 	} else {
-		targetRadius = mix(1.2, 0.15, (Intensity-0.5)*2.0) * tileSize
+		targetRadius = mix(1.8, 1.0, (Intensity-0.6)*2.5) * tileSize
 	}
 
 	// === 2. FORCE ET VACILLEMENT ===
@@ -28,23 +31,29 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 
 	var torchForce float
 	var flickerAmp float
-	if Intensity < 0.5 {
-		t := Intensity * 2.0
-		torchForce = mix(0.35, 0.55, t)
-		flickerAmp = mix(0.03, 0.10, t)
+	if Intensity < 0.3 {
+		t := Intensity / 0.3
+		torchForce = mix(0.95, 0.80, t) // Reste très clair au début
+		flickerAmp = mix(0.01, 0.05, t)
+	} else if Intensity < 0.7 {
+		t := (Intensity - 0.3) / 0.4
+		torchForce = mix(0.80, 0.60, t)
+		flickerAmp = mix(0.05, 0.10, t)
 	} else {
-		t := (Intensity - 0.5) * 2.0
-		torchForce = mix(0.70, 0.95, t)
-		flickerAmp = mix(0.10, 0.30, t)
+		t := (Intensity - 0.7) / 0.3
+		torchForce = mix(0.60, 0.45, t) // Ne descend pas trop bas pour garder de la visibilité
+		flickerAmp = mix(0.10, 0.15, t)
 	}
 	currentTorchFactor := torchForce + (flickerNoise-0.5)*flickerAmp
 
 	// === 3. OBSCURITÉ DE FOND ===
 	var maxDarkness float
-	if Intensity < 0.5 {
-		maxDarkness = mix(0.30, 0.50, Intensity*2.0)
+	if Intensity < 0.2 {
+		maxDarkness = mix(0.0, 0.15, Intensity*5.0) // Quasiment invisible au début
+	} else if Intensity < 0.8 {
+		maxDarkness = mix(0.15, 0.45, (Intensity-0.2)/0.6)
 	} else {
-		maxDarkness = mix(0.50, 0.70, (Intensity-0.5)*2.0)
+		maxDarkness = mix(0.45, 0.60, (Intensity-0.8)/0.2) // Plus de visibilité en fond
 	}
 
 	// === 4. VIGNETTE DE LA TORCHE ===
@@ -59,6 +68,9 @@ func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
 
 	darknessMix := torchVignette * maxDarkness
 	finalColor := mix(litColor, caveBlack, darknessMix)
+
+	// Assure une visibilité minimale même dans le noir
+	finalColor = max(finalColor, baseColor * 0.20)
 
 	// === 6. LIGHTS HUD — cercles de lumière contraints aux panneaux ===
 	// [cx, cy, radius, _] × 4 éléments. Le rayon ne dépasse jamais radius.

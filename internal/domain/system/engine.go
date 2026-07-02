@@ -151,12 +151,14 @@ func (e *Engine) Update() {
 func (e *Engine) recomputeMatchableCount() {
 	hadMatchables := e.hasMatchableEntities
 	e.hasMatchableEntities = false
+	hasAnyEntity := false
 	grid, ok := e.world.GetGrid(e.world.CurrentGridID)
 	if !ok {
 		return
 	}
 	for _, tile := range grid.Plots {
 		if len(tile.EntitiesID) > 0 {
+			hasAnyEntity = true
 			if ent, ok := e.world.Entities.Get(entity.ID(tile.EntitiesID[len(tile.EntitiesID)-1])); ok {
 				if ent.GetType() == entity.TypeResource || ent.GetType() == entity.TypeCreature {
 					e.hasMatchableEntities = true
@@ -166,7 +168,7 @@ func (e *Engine) recomputeMatchableCount() {
 		}
 	}
 
-	if hadMatchables && !e.hasMatchableEntities && e.world.IsPlaytest {
+	if hadMatchables && !e.hasMatchableEntities && !hasAnyEntity && e.world.IsPlaytest {
 		fmt.Println("[PLAYTEST] Grille vide - refill automatique")
 		e.world.SpawnPairs(e.world.CurrentGridID, 18)
 		e.world.EventBus.PublishImmediate(event.NewGridRefilledEvent(e.world.CurrentGridID, 18))

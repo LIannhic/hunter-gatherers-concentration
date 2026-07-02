@@ -68,7 +68,9 @@ type World struct {
 	RevealedBySpecies map[string]int
 
 	// Playtest mode
-	IsPlaytest bool
+	IsPlaytest            bool
+	SpawnLevel            int // Niveau de progression du spawn en playtest (1 à 18)
+	MatchesSinceLastLevel int  // Réussites depuis le dernier level-up (seuil = SpawnLevel)
 
 	// Debug
 	Debug DebugState

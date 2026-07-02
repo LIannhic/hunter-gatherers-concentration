@@ -255,8 +255,8 @@ func (r *EffectRenderer) ProcessBiomeEffects(screen *ebiten.Image, params Global
 	}
 
 	shaderIntensity := intensity
-	if shaderIntensity < 0.15 {
-		shaderIntensity = 0.15
+	if shaderIntensity < 0.03 {
+		shaderIntensity = 0.03
 	}
 
 	r.ensureBuffers(screen)

@@ -283,6 +283,11 @@ func (c *MatchTilesCommand) Execute() error {
 		c.World.RemoveEntity(entity1.GetID())
 		c.World.RemoveEntity(entity2.GetID())
 
+		// Crucial pour le Playtest : on force le traitement des événements (TileMatched)
+		// avant d'appeler OnSuccess, car OnSuccess déclenche le spawn de nouvelles paires
+		// basé sur le SpawnLevel mis à jour par l'event.
+		c.World.EventBus.ProcessQueue()
+
 		if c.OnSuccess != nil {
 			c.OnSuccess()
 		}

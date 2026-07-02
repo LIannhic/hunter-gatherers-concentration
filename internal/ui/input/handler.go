@@ -74,6 +74,7 @@ type Handler struct {
 	OnUnlockNavigation    func(gridID string)                        // F7: Cheat - désceller sorties
 	OnClearBlocked        func(gridID string)                        // F8: Cheat - retirer état bloqué
 	OnVictory             func()                                     // Callback déclenché lors de l'activation du portail final
+	OnGameOver            func()                                     // Callback pour Game Over (Playtest)
 	OnTriggerQuake        func(gridID string, clockwise bool, angle float32) // Debug: déclencher l'effet séisme
 	OnHoverButton         func(mana, health, sanity int)             // Feedback de coût au survol
 	OnLongPress           func(pos board.Position, gridID string)    // Appui long tactile
@@ -868,6 +869,7 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 
 // endTurn synchronise l'état du joueur sur le plateau puis termine le tour.
 func (h *Handler) endTurn() {
+	h.hideAllTilesInGrid()
 	h.world.SetPlayerOnBoard(h.isMovedThisTurn)
 	if h.OnTurnEnd != nil {
 		h.OnTurnEnd()
@@ -887,9 +889,8 @@ func (h *Handler) processSkip(skipButtonID actionbuttons.ButtonID) {
 		}
 	}
 
-	// Si rien à cacher, on balance quand même TOUTES les tuiles de la grille avant la fin de tour
+	// Si rien à cacher, on termine le tour directement
 	if len(h.revealedEntities) == 0 {
-		h.hideAllTilesInGrid()
 		h.endTurn()
 		return
 	}
@@ -963,8 +964,7 @@ func (h *Handler) processSkip(skipButtonID actionbuttons.ButtonID) {
 		}
 	}
 
-	// On cache les tuiles révélées puis déclenche la fin de tour.
-	h.hideAllTilesInGrid()
+	// On termine le tour (hideAllTilesInGrid est appelé dans endTurn)
 	h.ClearSelection()
 
 	h.endTurn()
@@ -1094,6 +1094,21 @@ func (h *Handler) processMergeAttempt() {
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
+			if h.world.IsPlaytest {
+				// On ne spawn de nouvelles paires QUE si l'objectif vient d'être atteint
+				// (le compteur a été remis à 0 par app.go via ProcessQueue juste avant)
+				if h.world.MatchesSinceLastLevel == 0 {
+					h.world.SpawnPairs(gridID, h.world.SpawnLevel)
+				}
+
+				// On vérifie s'il reste des paires possibles APRÈS le spawn éventuel
+				if !h.world.HasValidPair(gridID) {
+					fmt.Println("[PLAYTEST] Plus de paire possible après traitement - Game Over")
+					if h.OnGameOver != nil {
+						h.OnGameOver()
+					}
+				}
+			}
 			h.endTurn()
 		},
 		OnFailure: func() {
@@ -1186,6 +1201,21 @@ func (h *Handler) processMatchAttempt() {
 			h.revealedGridIDs = nil
 			h.isProcessing = false
 			h.ClearSelection()
+			if h.world.IsPlaytest {
+				// On ne spawn de nouvelles paires QUE si l'objectif vient d'être atteint
+				// (le compteur a été remis à 0 par app.go via ProcessQueue juste avant)
+				if h.world.MatchesSinceLastLevel == 0 {
+					h.world.SpawnPairs(gridID1, h.world.SpawnLevel)
+				}
+
+				// On vérifie s'il reste des paires possibles APRÈS le spawn éventuel
+				if !h.world.HasValidPair(gridID1) {
+					fmt.Println("[PLAYTEST] Plus de paire possible après traitement - Game Over")
+					if h.OnGameOver != nil {
+						h.OnGameOver()
+					}
+				}
+			}
 			h.endTurn()
 		},
 		OnFailure: func() {
@@ -1883,7 +1913,6 @@ func (h *Handler) ResetTimerSkip() {
 		h.renderer.StartButtonIconAnim("eject", false, h.revealedEntities[0], "", actionbuttons.BtnEndTurn, h.world)
 	}
 
-	h.hideAllTilesInGrid()
 	h.isProcessing = false
 	h.ClearSelection()
 	h.endTurn()

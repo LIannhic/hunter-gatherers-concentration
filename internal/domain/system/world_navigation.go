@@ -402,6 +402,7 @@ func (w *World) GeneratePlaytestLayout(id string) {
 	w.Components = component.NewStore()
 	w.RevealedBySpecies = make(map[string]int)
 	w.IsPlaytest = true
+	w.SpawnLevel = 1
 
 	var grid *board.Grid
 	for _, g := range w.DreamPlane.Zones {

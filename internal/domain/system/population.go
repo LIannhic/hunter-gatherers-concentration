@@ -264,7 +264,7 @@ func (w *World) HasValidPair(gridID string) bool {
 		if !ok {
 			continue
 		}
-		if ent.GetType() != entity.TypeResource && ent.GetType() != entity.TypeCreature {
+		if ent.GetType() != entity.TypeResource && ent.GetType() != entity.TypeCreature && ent.GetType() != entity.TypeTrap {
 			continue
 		}
 		matchID := ent.GetMatchID()

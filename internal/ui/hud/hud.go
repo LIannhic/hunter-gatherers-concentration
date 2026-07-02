@@ -1421,7 +1421,6 @@ func (h *HUD) renderHelpWindow(screen *ebiten.Image) {
 	drawKey("CLIC G", "Ouvrir une tuile", false)
 	drawKey("ESPACE", "Finir le tour", false)
 	drawKey("F11 / F/W", "Plein écran / Fenêtré", false)
-	drawKey("1-9", "Changement rapide de zone", false)
 	dy += 10
 
 	drawCategory("FENÊTRES D'INFO")
@@ -1438,6 +1437,7 @@ func (h *HUD) renderHelpWindow(screen *ebiten.Image) {
 	dy += 10
 
 	drawCategory("COMMANDES SPÉCIALES")
+	drawKey("1-9", "Changement rapide de zone", true)
 	drawKey("R", "Réinitialiser rotation", true)
 	drawKey("B", "Remplir l'inventaire", true)
 	drawKey("F1-F4", "Changer difficulté", true)

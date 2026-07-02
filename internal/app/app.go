@@ -382,6 +382,11 @@ func (app *Application) setupCallbacks() {
 		app.ReturnToMenu()
 	}
 
+	app.Input.OnGameOver = func() {
+		fmt.Println("[STATE] GAME OVER - Playtest (No pairs left)")
+		app.State = domain.StateGameOver
+	}
+
 	app.setupDebugCallbacks()
 }
 
@@ -475,10 +480,13 @@ func (app *Application) setupEventSubscriptions() {
        if app.World.IsPlaytest {
            gridID, _ := e.Payload["grid_id"].(string)
            if gridID != "" {
-               app.World.SpawnPairs(gridID, 2)
-               if !app.World.HasValidPair(gridID) {
-                   fmt.Println("[PLAYTEST] Plus de paire possible - Game Over")
-                   app.State = domain.StateGameOver
+               app.World.MatchesSinceLastLevel++
+               fmt.Printf("[PLAYTEST] Match ! %d/%d pour niveau %d\n", app.World.MatchesSinceLastLevel, app.World.SpawnLevel, app.World.SpawnLevel+1)
+
+               if app.World.SpawnLevel < 18 && app.World.MatchesSinceLastLevel >= app.World.SpawnLevel {
+                   app.World.SpawnLevel++
+                   app.World.MatchesSinceLastLevel = 0
+                   fmt.Printf("[PLAYTEST] OBJECTIF ATTEINT -> SpawnLevel passe à %d. Compteur remis à 0.\n", app.World.SpawnLevel)
                }
            }
        }
@@ -488,11 +496,9 @@ func (app *Application) setupEventSubscriptions() {
        if app.World.IsPlaytest {
            gridID, _ := e.Payload["grid_id"].(string)
            if gridID != "" {
-               app.World.SpawnPairs(gridID, 2)
-               if !app.World.HasValidPair(gridID) {
-                   fmt.Println("[PLAYTEST] Plus de paire possible - Game Over")
-                   app.State = domain.StateGameOver
-               }
+               // Pour les fusions, on ne compte pas cela comme un "match" final pour le level up
+               // afin d'éviter les doubles incréments ou la confusion.
+               // On vérifie juste si le jeu peut continuer.
            }
        }
     })
