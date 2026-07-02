@@ -7,33 +7,48 @@ var Intensity float
 var Resolution vec2
 
 func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
-	centerInPixels := Resolution * 0.5
-	toCenter := dstPos.xy - centerInPixels
+    // --- PARTIE CORRIGÉE : RECENTRAGE DES UVs ---
 
-	// Utilisation de coordonnées normalisées pour le calcul de la distorsion
-	// afin que l'effet soit cohérent quelle que soit la résolution.
-	uvToCenter := toCenter / Resolution
-	distFromCenter := length(uvToCenter)
+    // 1. Calcul des UVs normalisés standard (de 0.0 à 1.0)
+    uv := dstPos.xy / Resolution
 
-	distortion := 1.0 + distFromCenter*distFromCenter*0.4*Intensity
+    // 2. Transférer dans le repère corrigé (-0.5 à 0.5)
+    // C'est cette ligne qui résout le décalage !
+    correctedUV := uv - vec2(0.5, 0.5)
 
-	pulse := sin(Time*(2.0+5.0*Intensity)) * 0.03 * Intensity
-	distortion += pulse
+    // --- LE RESTE EST PRESQUE IDENTIQUE, MAIS UTILISE 'correctedUV' ---
 
-	// Aberration chromatique (calculée en normalized space puis appliquée en pixels)
-	chromaShift := 0.02 * Intensity * distFromCenter
+    // La distance se calcule maintenant par rapport au milieu corrigé (0, 0)
+    distFromCenter := length(correctedUV)
 
-	// Calcul des offsets en pixels pour chaque canal
-	offsetR := toCenter * (distortion + chromaShift - 1.0)
-	offsetG := toCenter * (distortion - 1.0)
-	offsetB := toCenter * (distortion - chromaShift - 1.0)
+    // Calcul de distorsion standard (0.4 pour l'effet de bombement)
+    distortion := 1.0 + distFromCenter*distFromCenter*0.4*Intensity
 
-	baseColor := vec4(
-		imageSrc0At(srcPos + offsetR).r,
-		imageSrc0At(srcPos + offsetG).g,
-		imageSrc0At(srcPos + offsetB).b,
-		1.0,
-	)
+    // Le Pulse reste inchangé, il utilise Time
+    pulse := sin(Time*(2.0+5.0*Intensity)) * 0.03 * Intensity
+    distortion += pulse
 
-	return baseColor
+    // L'aberration chromatique utilise aussi 'distFromCenter' corrigé
+    chromaShift := 0.02 * Intensity * distFromCenter
+
+    // 3. Calcul des offsets (décalages)
+    // Nous travaillons dans le repère centré, nous multiplions par correctedUV.
+    // L'offset Vert (G) est la déformation pure (distortion - 1.0)
+    // L'offset Rouge (R) et Bleu (B) sont modifiés par le chromaShift
+    // On multiplie par Resolution pour convertir les offsets normalisés en pixels
+    offsetR := correctedUV * (distortion + chromaShift - 1.0) * Resolution
+    offsetG := correctedUV * (distortion - 1.0) * Resolution
+    offsetB := correctedUV * (distortion - chromaShift - 1.0) * Resolution
+
+    // --- FIN DE LA PARTIE CORRIGÉE ---
+
+    // Récupération de la couleur originale avec décalage
+    baseColor := vec4(
+       imageSrc0At(srcPos + offsetR).r,
+       imageSrc0At(srcPos + offsetG).g,
+       imageSrc0At(srcPos + offsetB).b,
+       1.0,
+    )
+
+    return baseColor
 }
