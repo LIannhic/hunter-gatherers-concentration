@@ -67,14 +67,13 @@ type Handler struct {
 	OnToggleDetails       func()                                     // Callback pour afficher les détails
 	OnToggleInvDetails    func()                                     // Callback pour afficher l'inventaire détaillé
 	OnToggleAssetsDetails func()                                     // T: Callback pour afficher l'atlas des assets
+	OnToggleHelp          func()                                     // H: Callback pour afficher l'aide
 	OnFillInventory       func()                                     // Callback pour remplir l'inventaire (debug)
 	OnRevealAll           func(gridID string)                        // F5: Cheat - révéler tout
 	OnHideAll             func(gridID string)                        // F6: Cheat - cacher tout
 	OnUnlockNavigation    func(gridID string)                        // F7: Cheat - désceller sorties
 	OnClearBlocked        func(gridID string)                        // F8: Cheat - retirer état bloqué
-	OnUsePortablePortal   func(gridID string, center board.Position) // P / grid placement: Déployer le portail portable
 	OnVictory             func()                                     // Callback déclenché lors de l'activation du portail final
-	OnForceTurn           func()                                     // KeySpace: Forcer le prochain tour
 	OnTriggerQuake        func(gridID string, clockwise bool, angle float32) // Debug: déclencher l'effet séisme
 	OnHoverButton         func(mana, health, sanity int)             // Feedback de coût au survol
 	OnLongPress           func(pos board.Position, gridID string)    // Appui long tactile
@@ -528,12 +527,22 @@ func (h *Handler) executePrimaryActionAt(x, y int) error {
 	}
 
 	// Priorité : mode portail portable (même si isProcessing)
-	if h.portablePortalMode && h.OnUsePortablePortal != nil {
+	if h.portablePortalMode {
 		if pos, gridID, ok := h.renderer.ScreenToGrid(x, y, h.world); ok {
 			if gridID != board.InventoryGridID {
 				grid, _ := h.world.GetGrid(gridID)
 				if grid != nil && h.isValidPortalPreviewPosition(grid, pos) {
-					h.OnUsePortablePortal(gridID, pos)
+					// Utilisation directe via UsePortablePortalCommand
+					fmt.Println("[ACTION] Utilisation du portail portable")
+					cmd := &usecase.UsePortablePortalCommand{World: h.world, GridID: gridID, Center: pos}
+					if err := cmd.Execute(); err != nil {
+						fmt.Printf("[ERROR] Impossible de déployer le portail portable : %v\n", err)
+					} else {
+						fmt.Println("[SUCCESS] Portail portable déployé. Démarrage du timer de victoire.")
+						// NOTE: Le reset de HUD et du mode devra être géré ailleurs ou via un callback générique
+						h.portablePortalMode = false
+						h.StartVictoryTimer(5.0)
+					}
 					return nil
 				}
 			}
@@ -1222,31 +1231,15 @@ func (h *Handler) handleKeyboard() {
 		}
 	}
 
+	if inpututil.IsKeyJustPressed(ebiten.KeyH) {
+		if h.OnToggleHelp != nil {
+			h.OnToggleHelp()
+		}
+	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeyB) {
 		if h.OnFillInventory != nil {
 			h.OnFillInventory()
-		}
-	}
-
-	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
-		if h.OnUsePortablePortal != nil {
-			center := board.Position{X: -1, Y: -1}
-			if hovered, _, ok := h.getHoveredTile(); ok {
-				center = hovered
-			}
-			h.OnUsePortablePortal(h.GetCurrentGridID(), center)
-		}
-	}
-
-	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
-		if len(h.revealedEntities) == 2 {
-			fmt.Println("[ACTION] Raccourci clavier : Match")
-			h.processMatchAttempt()
-			if h.world.TurnTimer != nil {
-				h.world.TurnTimer.Reset()
-			}
-		} else {
-			h.tryMatchSelected()
 		}
 	}
 

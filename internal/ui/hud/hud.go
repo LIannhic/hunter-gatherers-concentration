@@ -57,6 +57,7 @@ type HUD struct {
 	showDetails          bool
 	showInventoryDetails bool
 	showAssetsDetails    bool
+	showHelp             bool
 	assetPage            int
 	showVictory          bool
 	fullFeedbackTimer    int // Timer pour le retour visuel d'inventaire plein
@@ -118,6 +119,7 @@ func NewHUD(world *domain.World) *HUD {
 		showDetails:          false,
 		showInventoryDetails: false,
 		showAssetsDetails:    false,
+		showHelp:             false,
 		assetPage:            0,
 		showVictory:          false,
 		fullFeedbackTimer:    0,
@@ -379,6 +381,7 @@ func (h *HUD) ToggleDetails() {
 	if h.showDetails {
 		h.showInventoryDetails = false
 		h.showAssetsDetails = false
+		h.showHelp = false
 	}
 }
 
@@ -388,6 +391,7 @@ func (h *HUD) ToggleInventoryDetails() {
 	if h.showInventoryDetails {
 		h.showDetails = false
 		h.showAssetsDetails = false
+		h.showHelp = false
 	}
 }
 
@@ -397,6 +401,21 @@ func (h *HUD) ToggleAssetsDetails() {
 	if h.showAssetsDetails {
 		h.showDetails = false
 		h.showInventoryDetails = false
+		h.showHelp = false
+		h.showVictory = false
+		if h.debugWindow != nil && h.world != nil {
+			h.world.Debug.Visible = false
+		}
+	}
+}
+
+// ToggleHelp bascule l'affichage de l'aide
+func (h *HUD) ToggleHelp() {
+	h.showHelp = !h.showHelp
+	if h.showHelp {
+		h.showDetails = false
+		h.showInventoryDetails = false
+		h.showAssetsDetails = false
 		h.showVictory = false
 		if h.debugWindow != nil && h.world != nil {
 			h.world.Debug.Visible = false
@@ -443,6 +462,13 @@ func (h *HUD) Render(screen *ebiten.Image) {
 
 	h.renderJuicyCombo(screen)
 
+	// Rendu des boutons de portrait APRÈS le combo message pour le z-index
+	h.renderPortraitButtons(screen)
+
+	if h.showHelp {
+		h.renderHelpWindow(screen)
+	}
+
 	if h.showDetails {
 		h.renderDetailWindow(screen)
 	}
@@ -453,6 +479,10 @@ func (h *HUD) Render(screen *ebiten.Image) {
 
 	if h.showAssetsDetails {
 		h.renderAssetsWindow(screen)
+	}
+
+	if h.showHelp {
+		h.renderHelpWindow(screen)
 	}
 
 	if h.showVictory {
@@ -967,14 +997,6 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	// Portrait Holder
 	vector.StrokeRect(screen, ui.PortraitX, ui.PortraitY, ui.PortraitW, ui.PortraitH, 1, color.RGBA{100, 100, 100, 255}, true)
 
-	// Menu Icon / Button (M)
-	mx := ui.PortraitX + ui.MenuIconRelativeX
-	my := ui.PortraitY + ui.MenuIconRelativeY
-	btnMColor := color.RGBA{150, 150, 150, 255}
-	// On pourrait ajouter un effet de survol ici si on avait accès à la souris
-	vector.DrawFilledRect(screen, float32(mx), float32(my), float32(ui.MenuIconSize), float32(ui.MenuIconSize), btnMColor, true)
-	textutil.Draw(screen, "M", int(mx)+15, int(my)+25, color.Black)
-
 	// Turn and Difficulty (aligned)
 	infoX := int(ui.PortraitX) + 60
 	infoY := int(ui.PortraitY) + 25
@@ -997,15 +1019,11 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	textutil.Draw(screen, "ACTION:", int(ui.PortraitX)+10, y-15, color.RGBA{100, 200, 255, 255})
 
 	controls := []string{
-		"CLIC: Ouvrir",
-		"F12: Debug/Options",
-		"I: Zones",
-		"L: Liste Inv",
-		"B: Remplir Inv",
+		"CLIC: Basculer",
+		"H: Aide",
+		"F12: Options",
 		"ZQSD: Naviguer",
-		"ESPACE: Fin",
-		"F1-F4: Diff",
-		"ESC: Menu",
+		"SPACE: Fin",
 	}
 	for _, c := range controls {
 		textutil.Draw(screen, c, int(ui.PortraitX)+10, y, color.RGBA{160, 160, 160, 255})
@@ -1041,22 +1059,24 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	if len(keys) == 0 {
 		textutil.Draw(screen, "(Zone vide)", rx, ry, color.RGBA{150, 150, 150, 255})
 	}
+}
 
+func (h *HUD) renderPortraitButtons(screen *ebiten.Image) {
 	// Menu Icon
 	mxIcon := ui.PortraitX + ui.MenuIconRelativeX
 	myIcon := ui.PortraitY + ui.MenuIconRelativeY
 	vector.DrawFilledRect(screen, float32(mxIcon), float32(myIcon), float32(ui.MenuIconSize), float32(ui.MenuIconSize), color.RGBA{150, 150, 150, 255}, true)
-	textutil.Draw(screen, "M", int(mxIcon)+15, int(myIcon)+25, color.Black)
+	textutil.Draw(screen, "M", int(mxIcon)+15, int(myIcon)+23, color.Black)
 
 	// Fullscreen Icon (top-right corner)
 	fxIcon := float64(ui.ScreenWidth) - ui.FullscreenIconSize - float64(ui.PortraitX)
-	fyIcon := ui.PortraitY
+	fyIcon := float64(ui.PortraitY) + ui.FullscreenIconRelativeY
 	vector.DrawFilledRect(screen, float32(fxIcon), float32(fyIcon), float32(ui.FullscreenIconSize), float32(ui.FullscreenIconSize), color.RGBA{150, 150, 150, 255}, true)
 	fsLabel := "F"
 	if ebiten.IsFullscreen() {
 		fsLabel = "W"
 	}
-	textutil.Draw(screen, fsLabel, int(fxIcon)+15, int(fyIcon)+25, color.Black)
+	textutil.Draw(screen, fsLabel, int(fxIcon)+15, int(fyIcon)+23, color.Black)
 }
 
 func (h *HUD) renderInventory(screen *ebiten.Image) {
@@ -1362,6 +1382,74 @@ func (h *HUD) renderDetailWindow(screen *ebiten.Image) {
 	}
 }
 
+func (h *HUD) renderHelpWindow(screen *ebiten.Image) {
+	// Position et taille de la fenêtre (ajustée au contenu)
+	winW, winH := 400, 580
+	winX := (ui.ScreenWidth - winW) / 2
+	winY := (ui.ScreenHeight - winH) / 2
+
+	// Fond translucide (Yellow/Orange theme)
+	vector.DrawFilledRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), color.RGBA{30, 25, 10, 230}, true)
+	vector.StrokeRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), 2, color.RGBA{200, 150, 50, 255}, true)
+
+	// Titre
+	textutil.Draw(screen, "COMMANDES DU JEU", winX+20, winY+30, color.RGBA{255, 200, 50, 255})
+
+	// Icone fermer (X)
+	closeX := winX + winW - 30
+	closeY := winY + 10
+	vector.DrawFilledRect(screen, float32(closeX), float32(closeY), 20, 20, color.RGBA{150, 50, 50, 255}, true)
+	textutil.Draw(screen, "X", closeX+6, closeY+15, color.White)
+
+	dy := winY + 70
+	drawCategory := func(title string) {
+		textutil.Draw(screen, title, winX+20, dy, color.RGBA{100, 200, 255, 255})
+		dy += 22
+	}
+	drawKey := func(key, desc string, isCheat bool) {
+		clr := color.RGBA{200, 200, 200, 255}
+		if isCheat {
+			clr = color.RGBA{255, 100, 100, 255}
+			desc = "[TRICHE] " + desc
+		}
+		textutil.Draw(screen, fmt.Sprintf("%-10s: %s", key, desc), winX+30, dy, clr)
+		dy += 18
+	}
+
+	drawCategory("NAVIGATION & ACTIONS")
+	drawKey("ZQSD", "Se déplacer / Naviguer", false)
+	drawKey("CLIC G", "Ouvrir une tuile", false)
+	drawKey("ESPACE", "Finir le tour", false)
+	drawKey("F11 / F/W", "Plein écran / Fenêtré", false)
+	drawKey("1-9", "Changement rapide de zone", false)
+	dy += 10
+
+	drawCategory("FENÊTRES D'INFO")
+	drawKey("H", "Cette aide", false)
+	drawKey("I", "Statistiques des zones", false)
+	drawKey("L", "Détails de l'inventaire", false)
+	drawKey("T", "Atlas des ressources", false)
+	drawKey("F12", "Options / Debug", false)
+	drawKey("ESC", "Menu principal", false)
+	dy += 10
+
+	drawCategory("TESTS D'EFFETS")
+	drawKey("+ / -", "Rotation horaire / anti", false)
+	dy += 10
+
+	drawCategory("COMMANDES SPÉCIALES")
+	drawKey("R", "Réinitialiser rotation", true)
+	drawKey("B", "Remplir l'inventaire", true)
+	drawKey("F1-F4", "Changer difficulté", true)
+	drawKey("F5-F6", "Révéler / Cacher tout", true)
+	drawKey("F7", "Désceller les sorties", true)
+	drawKey("F8", "Basculer état bloqué", true)
+	drawKey("F9", "Spawn créature aléatoire", true)
+	drawKey("F10", "Incrémenter Combo", true)
+	drawKey("Shift+S", "Spawn toutes créatures", true)
+	drawKey("C", "Nettoyage plateau", true)
+}
+
 func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
 	// Position et taille de la fenêtre (identique à renderDetailWindow)
 	winW, winH := 320, 450
@@ -1586,10 +1674,24 @@ func (h *HUD) HandleClick(x, y int) bool {
 
 	// Clic sur l'icône Fullscreen (F/W)
 	fsxIcon := float64(ui.ScreenWidth) - ui.FullscreenIconSize - float64(ui.PortraitX)
-	fsyIcon := float64(ui.PortraitY)
+	fsyIcon := float64(ui.PortraitY) + ui.FullscreenIconRelativeY
 	if fx >= fsxIcon && fx <= fsxIcon+ui.FullscreenIconSize &&
 		fy >= fsyIcon && fy <= fsyIcon+ui.FullscreenIconSize {
 		ebiten.SetFullscreen(!ebiten.IsFullscreen())
+		return true
+	}
+
+	if h.showHelp {
+		winW, winH := 340, 580
+		winX := (ui.ScreenWidth - winW) / 2
+		winY := (ui.ScreenHeight - winH) / 2
+		closeX := winX + winW - 30
+		closeY := winY + 10
+
+		if x >= closeX && x <= closeX+20 && y >= closeY && y <= closeY+20 {
+			h.showHelp = false
+			return true
+		}
 		return true
 	}
 

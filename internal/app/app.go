@@ -154,6 +154,7 @@ func NewApplication() (*Application, error) {
 	app.Input.OnToggleDetails = app.HUD.ToggleDetails
 	app.Input.OnToggleInvDetails = app.HUD.ToggleInventoryDetails
 	app.Input.OnToggleAssetsDetails = app.HUD.ToggleAssetsDetails
+	app.Input.OnToggleHelp = app.HUD.ToggleHelp
 	app.Input.OnHoverButton = app.HUD.SetPotentialCosts
 
 	app.Input.OnLongPress = func(pos board.Position, gridID string) {
@@ -196,45 +197,6 @@ func NewApplication() (*Application, error) {
 		for _, item := range items {
 			_ = app.World.AddLootItem(item)
 		}
-	}
-
-	app.Input.OnUsePortablePortal = func(gridID string, center board.Position) {
-		if gridID == "" {
-			gridID = app.World.CurrentGridID
-		}
-		fmt.Println("[ACTION] Utilisation du portail portable")
-		cmd := &usecase.UsePortablePortalCommand{World: app.World, GridID: gridID, Center: center}
-		if err := cmd.Execute(); err != nil {
-			fmt.Printf("[ERROR] Impossible de déployer le portail portable : %v\n", err)
-		} else {
-			fmt.Println("[SUCCESS] Portail portable déployé. Démarrage du timer de victoire.")
-			app.HUD.ClearActiveLootSelection()
-			app.Input.SetPortablePortalMode(false)
-
-			// Démarre le compte à rebours de victoire fixe de 5 secondes
-			app.Input.StartVictoryTimer(5.0)
-		}
-	}
-
-	app.Input.OnVictory = func() {
-		// Calcul des gains d'XP basés sur le butin
-		totalXP := 0
-		for _, item := range app.World.Player.Inventory.Items {
-			switch item.OriginalType {
-			case entity.TypeResource:
-				totalXP += 100
-			case entity.TypeCreature:
-				totalXP += 250
-			}
-		}
-		oldLevel := app.World.Player.Stats.Level
-		app.World.Player.GainExperience(totalXP)
-
-		if app.World.Player.Stats.Level > oldLevel {
-			app.World.EventBus.Publish(event.NewLevelUpEvent(app.World.Player.Stats.Level))
-		}
-
-		app.HUD.ShowVictory()
 	}
 
 	// 7. Configuration des Callbacks de commandes de jeu
@@ -425,11 +387,6 @@ func (app *Application) setupCallbacks() {
 
 // setupDebugCallbacks configure les raccourcis et commandes de triche/débogage.
 func (app *Application) setupDebugCallbacks() {
-	app.Input.OnForceTurn = func() {
-		fmt.Println("[DEBUG] Forcing turn end")
-		app.Engine.Update()
-	}
-
 	app.Input.OnTriggerQuake = func(gridID string, clockwise bool, angle float32) {
 		app.Renderer.TriggerQuakeEffect(gridID, clockwise, angle)
 	}

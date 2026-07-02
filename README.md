@@ -639,13 +639,13 @@ Le jeu supporte la persistance des données :
 | Révéler tuile | Relâchement Clic gauche / Doigt (Plateau) |
 | Sélectionner tuile révélée | Relâchement Clic gauche / Doigt (Tuile révélée) |
 | Désélectionner / Annuler | Clic droit (Plateau) / Échap / Toggle (Mobile) |
-| Matcher (valider paire) | M ou Bouton MATCH |
 | Skip (si 2 tuiles révélées) | Espace ou Bouton SKIP |
 | Fin de tour forcée | Espace (sans match en cours) ou Bouton TURN |
 | Naviguer entre les zones | Flèches ou ZQSD / WASD / Clic Sortie |
 | Rotation plateau (Visuel) | + (Horaire) / - (Anti-horaire) — déclenche un effet de séisme visuel (ghost shader 90°) |
-| Reset rotation | R — réinitialise la rotation avec l'angle correspondant (1, 2 ou 3 × 90°) |
+| Reset rotation | R [TRICHE] — réinitialise la rotation avec l'angle correspondant (1, 2 ou 3 × 90°) |
 | Basculer Plein Écran | F11 ou Bouton F/W (Portrait) |
+| Aide | H |
 
 #### Gestion et Inventaire
 

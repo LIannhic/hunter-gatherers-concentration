@@ -23,13 +23,13 @@ const (
 	PortraitW = 270
 	PortraitH = 270
 
-	MenuIconRelativeX = 5
-	MenuIconRelativeY = 5
-	MenuIconSize      = 43.75
+	MenuIconRelativeX = 10
+	MenuIconRelativeY = 10
+	MenuIconSize      = 40.0
 
 	FullscreenIconRelativeX = 53.75
-	FullscreenIconRelativeY = 5
-	FullscreenIconSize      = 43.75
+	FullscreenIconRelativeY = 0
+	FullscreenIconSize      = 40.0
 )
 
 // Inventory Panel
