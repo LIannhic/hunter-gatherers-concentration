@@ -33,6 +33,8 @@ cmd/game              # Point d'entrée
     /infrastructure   # Détails techniques
         /assets       # Gestion des sprites/couleurs
         /loader       # Chargement JSON/config
+        /persistence  # Implémentations des dépôts (JSON, Web)
+        /gamejolt     # Client API Game Jolt (Sessions & Scores)
         
     /ui               # Interface utilisateur
         /renderer     # Dessin du plateau
@@ -134,7 +136,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
 - **World.ActiveAnimationCount** : Compteur d'animations actives (flip, slide, attack). Incrémenté par `AnimationStarted`, décrémenté par `AnimationEnded` (handlers dans `BoardRenderer.SubscribeToEvents`).
 
 - **Suivi de Progression et Score** :
-  - `TotalExperience` : Cumul de toute l'expérience acquise durant une session (Matchs + Butin final). Utilisé comme base pour le calcul du Score dans la persistance.
+  - `TotalExperience` : Cumul de toute l'expérience acquise durant une session (Matchs + Butin final). Utilisé comme base pour le calcul du Score dans la persistance et les classements externes (Game Jolt).
   - `Experience` : XP relative au niveau actuel, utilisée pour le système de Level-up. Réinitialisé à 0 au début de chaque partie pour éviter les messages de level-up résiduels.
 
 - **Mode Playtest** :
