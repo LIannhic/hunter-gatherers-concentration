@@ -933,6 +933,9 @@ func (app *Application) StartGameWithSlot(slotID int) {
 			go func() {
 				if err := app.GameJolt.SessionOpen(); err != nil {
 					fmt.Printf("[GAMEJOLT] Session open error: %v\n", err)
+				} else {
+					// Ping immédiat pour passer en statut "active"
+					_ = app.GameJolt.SessionPing(true)
 				}
 			}()
 			app.lastPingTime = time.Now()
@@ -950,7 +953,10 @@ func (app *Application) StartPlaytestGame() {
 
 	if app.GameJolt.IsActive() {
 		go func() {
-			_ = app.GameJolt.SessionOpen()
+			if err := app.GameJolt.SessionOpen(); err == nil {
+				// Ping immédiat pour passer en statut "active"
+				_ = app.GameJolt.SessionPing(true)
+			}
 		}()
 		app.lastPingTime = time.Now()
 	}
