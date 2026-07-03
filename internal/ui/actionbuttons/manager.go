@@ -53,6 +53,7 @@ type Manager struct {
 	getTimerPanic        func() bool    // true si < 3s restantes
 	getVictoryProgress   func() float64 // 0.0 → 1.0 (V0.2)
 	isVictoryActive      func() bool    // true si portail déployé (V0.2)
+	isPortalMatch        func() bool    // true si duo de portails sélectionnés
 
 	// Base coordinates (fixed by UI spec)
 	baseCoords [btnCount]struct{ x, y float64 }
@@ -77,7 +78,7 @@ type Manager struct {
 // getRevealedTileCount doit retourner le nombre de tuiles révélées ce tour.
 // getPlayer doit retourner le joueur courant (pour les StatusEffects).
 // getTimerProgress / getTimerPanic fournissent l'état du compte à rebours temps réel.
-func NewManager(getRevealedTileCount func() int, getRevealedEntities func() []string, getPlayer func() *player.Player, getTimerProgress func() float64, getTimerPanic func() bool, getVictoryProgress func() float64, isVictoryActive func() bool) *Manager {
+func NewManager(getRevealedTileCount func() int, getRevealedEntities func() []string, getPlayer func() *player.Player, getTimerProgress func() float64, getTimerPanic func() bool, getVictoryProgress func() float64, isVictoryActive func() bool, isPortalMatch func() bool) *Manager {
 	m := &Manager{
 		getRevealedTileCount: getRevealedTileCount,
 		getRevealedEntities:  getRevealedEntities,
@@ -86,6 +87,7 @@ func NewManager(getRevealedTileCount func() int, getRevealedEntities func() []st
 		getTimerPanic:        getTimerPanic,
 		getVictoryProgress:   getVictoryProgress,
 		isVictoryActive:      isVictoryActive,
+		isPortalMatch:        isPortalMatch,
 		baseCoords: [btnCount]struct{ x, y float64 }{
 			{ui.ActionBtn1X, ui.ActionBtn1Y},
 			{ui.ActionBtn2X, ui.ActionBtn2Y},
@@ -141,11 +143,21 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 		states[BtnSkip].Active = true
 		states[BtnMerge].Active = true
 		states[BtnMatch].Active = true
+
+		// V0.3 : Changement de labels pour le portail
+		if m.isPortalMatch != nil && m.isPortalMatch() {
+			states[BtnMatch].Label = "EXTRACT"
+			states[BtnMerge].Label = "EXTRACT"
+			states[BtnSkip].Label = "STAY"
+		}
 	}
 	// TURN est actif sauf quand 2+ tuiles sont révélées (le joueur doit choisir)
 	// Exception : victoire active (END GAME)
 	if revealedCount < 2 || (m.isVictoryActive != nil && m.isVictoryActive()) {
 		states[BtnEndTurn].Active = true
+		if m.isPortalMatch != nil && m.isPortalMatch() {
+			states[BtnEndTurn].Label = "STAY"
+		}
 	}
 
 	// --- V0.2 : TRANSITION END GAME ---
@@ -155,6 +167,9 @@ func (m *Manager) ComputeStates() [btnCount]ButtonState {
 			states[BtnEndTurn].FillProgress = m.getVictoryProgress()
 			states[BtnEndTurn].FillAlert = true
 		}
+	} else if revealedCount >= 2 && m.isPortalMatch != nil && m.isPortalMatch() {
+		// V0.3 : STAY prend le pas sur TURN/END TURN si portail sélectionné
+		states[BtnEndTurn].Label = "STAY"
 	}
 
 	// --- FEEDBACK TEMPS RÉEL : Remplissage des boutons Skip et Turn ---

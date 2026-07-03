@@ -16,6 +16,7 @@ func TestNewManager(t *testing.T) {
 		func() bool { return false },
 		func() float64 { return 0 },
 		func() bool { return false },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 	if len(states) != 4 {
@@ -31,6 +32,7 @@ func TestButtonActivationAtRest(t *testing.T) {
 		func() float64 { return 0 },
 		func() bool { return false },
 		func() float64 { return 0 },
+		func() bool { return false },
 		func() bool { return false },
 	)
 	states := m.ComputeStates()
@@ -60,6 +62,7 @@ func TestButtonActivationWhenTwoTilesRevealed(t *testing.T) {
 		func() bool { return false },
 		func() float64 { return 0 },
 		func() bool { return false },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -79,6 +82,7 @@ func TestBaseCoordinates(t *testing.T) {
 		func() float64 { return 0 },
 		func() bool { return false },
 		func() float64 { return 0 },
+		func() bool { return false },
 		func() bool { return false },
 	)
 	states := m.ComputeStates()
@@ -110,6 +114,7 @@ func TestImpairmentScrambling(t *testing.T) {
 		func() bool { return false },
 		func() float64 { return 0 },
 		func() bool { return false },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 
@@ -133,6 +138,7 @@ func TestHitTest(t *testing.T) {
 		func() float64 { return 0.3 },
 		func() bool { return false },
 		func() float64 { return 0 },
+		func() bool { return false },
 		func() bool { return false },
 	)
 	states := m.ComputeStates()
@@ -161,6 +167,7 @@ func TestVictoryEndTurn(t *testing.T) {
 		func() bool { return false },
 		func() float64 { return 0.7 },
 		func() bool { return true },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 	if states[BtnEndTurn].Label != "END GAME" {
@@ -183,6 +190,7 @@ func TestTimerPanicSetsSkipAlert(t *testing.T) {
 		func() bool { return true },
 		func() float64 { return 0 },
 		func() bool { return false },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 	if !states[BtnSkip].FillAlert {
@@ -201,6 +209,7 @@ func TestAgnosiaSetsAllScrambled(t *testing.T) {
 		func() float64 { return 0 },
 		func() bool { return false },
 		func() float64 { return 0 },
+		func() bool { return false },
 		func() bool { return false },
 	)
 	states := m.ComputeStates()
@@ -222,6 +231,7 @@ func TestAphasiaAltersLabels(t *testing.T) {
 		func() float64 { return 0 },
 		func() bool { return false },
 		func() float64 { return 0 },
+		func() bool { return false },
 		func() bool { return false },
 	)
 
@@ -254,6 +264,7 @@ func TestRevealedEntitiesPropagation(t *testing.T) {
 		func() bool { return false },
 		func() float64 { return 0 },
 		func() bool { return false },
+		func() bool { return false },
 	)
 	states := m.ComputeStates()
 	for i := 0; i < 4; i++ {
@@ -263,5 +274,32 @@ func TestRevealedEntitiesPropagation(t *testing.T) {
 		if states[i].RevealedEntities[0] != "ent1" || states[i].RevealedEntities[1] != "ent2" {
 			t.Errorf("Button %d: unexpected revealed entities content: %v", i, states[i].RevealedEntities)
 		}
+	}
+}
+
+func TestPortalMatchLabels(t *testing.T) {
+	m := NewManager(
+		func() int { return 2 },
+		func() []string { return nil },
+		func() *player.Player { return player.New("test") },
+		func() float64 { return 0 },
+		func() bool { return false },
+		func() float64 { return 0 },
+		func() bool { return false },
+		func() bool { return true }, // portal match
+	)
+	states := m.ComputeStates()
+
+	if states[BtnMatch].Label != "EXTRACT" {
+		t.Errorf("Expected BtnMatch label EXTRACT, got %s", states[BtnMatch].Label)
+	}
+	if states[BtnMerge].Label != "EXTRACT" {
+		t.Errorf("Expected BtnMerge label EXTRACT, got %s", states[BtnMerge].Label)
+	}
+	if states[BtnSkip].Label != "STAY" {
+		t.Errorf("Expected BtnSkip label STAY, got %s", states[BtnSkip].Label)
+	}
+	if states[BtnEndTurn].Label != "STAY" {
+		t.Errorf("Expected BtnEndTurn label STAY, got %s", states[BtnEndTurn].Label)
 	}
 }

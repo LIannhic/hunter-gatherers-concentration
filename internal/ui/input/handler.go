@@ -818,6 +818,18 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 	switch btnID {
 	case actionbuttons.BtnMatch:
 		fmt.Println("[ACTION] Bouton Match activé")
+		// V0.3 : Si c'est un match de portail, on déclenche la victoire direct
+		if h.IsPortalMatch() {
+			if h.OnVictory != nil {
+				h.OnVictory()
+			}
+			h.revealedEntities = nil
+			h.confirmedRevealedEntities = nil
+			h.revealedGridIDs = nil
+			h.isProcessing = false
+			h.ClearSelection()
+			return
+		}
 		h.processMatchAttempt()
 		if h.world.TurnTimer != nil {
 			h.world.TurnTimer.Reset()
@@ -846,6 +858,14 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 			return
 		}
 
+		// V0.3 : Si c'est un STAY sur portail
+		if h.IsPortalMatch() {
+			h.skipPending = true
+			h.isProcessing = true
+			h.processSkip(actionbuttons.BtnEndTurn)
+			return
+		}
+
 		h.skipPending = true
 		h.isProcessing = true
 		h.processSkip(actionbuttons.BtnEndTurn)
@@ -860,6 +880,18 @@ func (h *Handler) handleActionButtonClick(btnID actionbuttons.ButtonID) {
 		}
 	case actionbuttons.BtnMerge:
 		fmt.Println("[ACTION] Bouton Merge activé")
+		// V0.3 : Si c'est un match de portail, on déclenche la victoire direct
+		if h.IsPortalMatch() {
+			if h.OnVictory != nil {
+				h.OnVictory()
+			}
+			h.revealedEntities = nil
+			h.confirmedRevealedEntities = nil
+			h.revealedGridIDs = nil
+			h.isProcessing = false
+			h.ClearSelection()
+			return
+		}
 		h.processMergeAttempt()
 		if h.world.TurnTimer != nil {
 			h.world.TurnTimer.Reset()
@@ -1834,6 +1866,25 @@ func (h *Handler) IsVictoryTimerActive() bool {
 
 func (h *Handler) IsPortablePortalMode() bool {
 	return h.portablePortalMode
+}
+
+// IsPortalMatch vérifie si les deux tuiles actuellement révélées sont des portails de fin
+func (h *Handler) IsPortalMatch() bool {
+	if len(h.revealedEntities) != 2 {
+		return false
+	}
+
+	e1, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[0]))
+	e2, _ := h.world.Entities.Get(entity.ID(h.revealedEntities[1]))
+
+	if e1 == nil || e2 == nil {
+		return false
+	}
+
+	isP1Portal := e1.HasTag("finish_portal") || e1.HasTag("portable_portal")
+	isP2Portal := e2.HasTag("finish_portal") || e2.HasTag("portable_portal")
+
+	return isP1Portal && isP2Portal
 }
 
 // handlePortalClick gère les interactions avec les portails révélés.

@@ -128,6 +128,7 @@ func NewApplication() (*Application, error) {
 		},
 		func() float64 { return app.Input.GetVictoryTimerProgress() },
 		func() bool { return app.Input.IsVictoryTimerActive() },
+		func() bool { return app.Input.IsPortalMatch() },
 	)
 	app.Renderer.ActionButtons = btnManager
 	app.Input.SetActionButtonsManager(btnManager)
@@ -385,6 +386,11 @@ func (app *Application) setupCallbacks() {
 	app.Input.OnGameOver = func() {
 		fmt.Println("[STATE] GAME OVER - Playtest (No pairs left)")
 		app.State = domain.StateGameOver
+	}
+
+	app.Input.OnVictory = func() {
+		fmt.Println("[STATE] VICTOIRE - Portail franchi")
+		app.HUD.ShowVictory()
 	}
 
 	app.setupDebugCallbacks()
