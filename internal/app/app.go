@@ -397,11 +397,13 @@ func (app *Application) setupCallbacks() {
 
 	app.Input.OnGameOver = func() {
 		fmt.Println("[STATE] GAME OVER - Playtest (No pairs left)")
+		app.submitScoreAndCloseSession()
 		app.State = domain.StateGameOver
 	}
 
 	app.Input.OnVictory = func() {
 		fmt.Println("[STATE] VICTOIRE - Portail franchi")
+		app.submitScoreAndCloseSession()
 		app.HUD.ShowVictory()
 	}
 
@@ -778,13 +780,7 @@ func (app *Application) updatePlaying() error {
 	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
 
-		if app.GameJolt.IsActive() {
-			score := app.World.Player.Stats.TotalExperience
-			go func() {
-				_ = app.GameJolt.ScoreAdd(fmt.Sprintf("%d XP", score), score, "")
-				_ = app.GameJolt.SessionClose()
-			}()
-		}
+		app.submitScoreAndCloseSession()
 
 		diff := string(app.World.Difficulty.Level)
 		duration := time.Since(app.sessionStartTime).Seconds()
@@ -1016,6 +1012,7 @@ func (app *Application) StartGame() {
 func (app *Application) ReturnToMenu() {
 	app.HUD.HideVictory()
 
+	// On ne ferme la session ici que si elle n'a pas été fermée par une victoire/défaite
 	if app.GameJolt.IsActive() {
 		go func() {
 			_ = app.GameJolt.SessionClose()
@@ -1051,6 +1048,24 @@ func (app *Application) ReturnToMenu() {
 
 	app.World.Player.Inventory.Items = make([]*player.LootItem, 0, app.World.Player.Inventory.MaxSize)
 	fmt.Println("[MENU] Retour au menu principal")
+}
+
+func (app *Application) submitScoreAndCloseSession() {
+	if !app.GameJolt.IsActive() {
+		return
+	}
+
+	score := app.World.Player.Stats.TotalExperience
+	fmt.Printf("[GAMEJOLT] Submission du score final : %d XP\n", score)
+
+	go func() {
+		if err := app.GameJolt.ScoreAdd(fmt.Sprintf("%d XP", score), score, ""); err != nil {
+			fmt.Printf("[GAMEJOLT] Score submission error: %v\n", err)
+		}
+		if err := app.GameJolt.SessionClose(); err != nil {
+			fmt.Printf("[GAMEJOLT] Session close error: %v\n", err)
+		}
+	}()
 }
 
 // Draw distribue l'appel d'affichage graphique Ebitengine vers l'écran adéquat.
