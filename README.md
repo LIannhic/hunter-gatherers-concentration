@@ -611,24 +611,29 @@ go build -o game ./cmd/game
 
 ### Compiler pour le Web (WASM)
 
-Pour générer le fichier WebAssembly (compatible avec Itch.io), utilisez les commandes suivantes (PowerShell) :
+Pour générer le fichier WebAssembly (compatible avec Itch.io ou Game Jolt), utilisez les commandes suivantes (PowerShell) :
 
 ```powershell
-# 1. On renomme temporairement le fichier de ressources Windows pour éviter les conflits
+# 1. On renomme temporairement le fichier de ressources Windows
 Rename-Item ./cmd/game/rsrc.syso rsrc.syso.bak
 
-# 2. On compile pour le WebAssembly
-$env:GOOS="js"; $env:GOARCH="wasm"; go build -o hgcv0.2_basic-incursion.wasm ./cmd/game
+# 2. On compile pour le WebAssembly (Standard)
+$env:GOOS="js"; $env:GOARCH="wasm"; go build -o game.wasm ./cmd/game
 
-# 3. On restaure le fichier de ressources
+# 3. Version Game Jolt (avec injection sécurisée des clés)
+# Remplacez VOTRE_ID et VOTRE_CLE par vos identifiants réels
+go build -ldflags="-s -w -X 'github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/gamejolt.GameID=VOTRE_ID' -X 'github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/gamejolt.PrivateKey=VOTRE_CLE'" -o game_gamejolt.wasm ./cmd/game
+
+# 4. On restaure le fichier de ressources
 Rename-Item ./cmd/game/rsrc.syso.bak rsrc.syso
 ```
 
-### Sauvegardes
+### Sauvegardes et Cloud
 
 Le jeu supporte la persistance des données :
 - **Desktop** : Les sauvegardes sont stockées dans le dossier `./saves` au format JSON.
-- **Web (WASM)** : Les sauvegardes utilisent le `LocalStorage` du navigateur pour garantir la persistance entre les sessions.
+- **Web (WASM)** : Les sauvegardes utilisent le `LocalStorage` du navigateur.
+- **Game Jolt (Social)** : Intégration automatique des sessions et des scores (XP Totale) lorsque le jeu est hébergé sur Game Jolt.
 
 ### Contrôles
 

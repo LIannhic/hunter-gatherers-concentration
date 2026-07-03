@@ -17,6 +17,7 @@ import (
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/player"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/domain/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/assets"
+	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/gamejolt"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/loader"
 	infraPersistence "github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/persistence"
 	"github.com/LIannhic/hunter-gatherers-concentration/internal/ui"
@@ -53,11 +54,15 @@ type Application struct {
 	HUD            *hud.HUD
 	DebugWindow    *debug.DebugWindow
 
+	// External APIs
+	GameJolt *gamejolt.Client
+
 	// Game State
 	State domain.GameState
 
 	// Session tracking
 	sessionStartTime time.Time
+	lastPingTime     time.Time
 	hasSaves         bool
 	randSource       *rand.Rand
 	tempDifficulty   meta.DifficultyLevel // Utilisé pour transmettre le choix de difficulté
@@ -92,6 +97,13 @@ func NewApplication() (*Application, error) {
 		repo = infraPersistence.NewJsonRepository("./saves")
 	}
 	app.Persistence = usecase.NewPersistenceManager(repo)
+
+	// 4.1 Initialisation GameJolt (WASM uniquement)
+	username, token := gamejolt.GetCredentialsFromURL()
+	app.GameJolt = gamejolt.NewClient(username, token)
+	if app.GameJolt.IsActive() {
+		fmt.Printf("[GAMEJOLT] Client active pour l'utilisateur : %s\n", username)
+	}
 
 	// 5. Initialisation des composants UI et Rendering
 	app.Renderer = renderer.NewBoardRenderer(app.Assets)
@@ -685,6 +697,16 @@ func (app *Application) updateMenu() error {
 func (app *Application) updatePlaying() error {
 	app.HUD.Update()
 
+	// GameJolt Session Ping (toutes les 30 secondes)
+	if app.GameJolt.IsActive() && time.Since(app.lastPingTime) > 30*time.Second {
+		go func() {
+			if err := app.GameJolt.SessionPing(true); err != nil {
+				fmt.Printf("[GAMEJOLT] Ping error: %v\n", err)
+			}
+		}()
+		app.lastPingTime = time.Now()
+	}
+
 	if app.HUD.IsVictoryVisible() {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 			app.HUD.HideVictory()
@@ -755,6 +777,14 @@ func (app *Application) updatePlaying() error {
 
 	if !app.World.Player.IsAlive() || app.World.Player.Stats.Sanity <= 0 || app.World.Player.Stats.Mana < 0 {
 		fmt.Println("[STATE] GAME OVER - Statistiques épuisées")
+
+		if app.GameJolt.IsActive() {
+			score := app.World.Player.Stats.TotalExperience
+			go func() {
+				_ = app.GameJolt.ScoreAdd(fmt.Sprintf("%d XP", score), score, "")
+				_ = app.GameJolt.SessionClose()
+			}()
+		}
 
 		diff := string(app.World.Difficulty.Level)
 		duration := time.Since(app.sessionStartTime).Seconds()
@@ -903,6 +933,15 @@ func (app *Application) StartGameWithSlot(slotID int) {
 			app.World.Difficulty = meta.GetSettings(diffLevel)
 		}
 
+		if app.GameJolt.IsActive() {
+			go func() {
+				if err := app.GameJolt.SessionOpen(); err != nil {
+					fmt.Printf("[GAMEJOLT] Session open error: %v\n", err)
+				}
+			}()
+			app.lastPingTime = time.Now()
+		}
+
 		app.World.GenerateLayout("dream_plane_1")
 		app.StartGame()
 	}
@@ -912,6 +951,13 @@ func (app *Application) StartGameWithSlot(slotID int) {
 func (app *Application) StartPlaytestGame() {
 	fmt.Println("[PLAYTEST] Starting playtest session")
 	app.sessionStartTime = time.Now()
+
+	if app.GameJolt.IsActive() {
+		go func() {
+			_ = app.GameJolt.SessionOpen()
+		}()
+		app.lastPingTime = time.Now()
+	}
 
 	app.World.Hub = meta.NewHub()
 	app.World.Player = player.New("playtest_player")
@@ -969,6 +1015,12 @@ func (app *Application) StartGame() {
 // ReturnToMenu quitte la session active, sauvegarde l'état persistant et vide la mémoire temporaire.
 func (app *Application) ReturnToMenu() {
 	app.HUD.HideVictory()
+
+	if app.GameJolt.IsActive() {
+		go func() {
+			_ = app.GameJolt.SessionClose()
+		}()
+	}
 
 	if app.World.TurnTimer != nil {
 		app.World.TurnTimer.Stop()

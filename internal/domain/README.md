@@ -508,7 +508,8 @@ type Repository interface {
 ### Implémentations
 
 - **`JsonRepository`** : Utilisé sur Desktop, stocke les fichiers dans un dossier local (`./saves`).
-- **`WebRepository`** : Utilisé dans les builds WebAssembly (Itch.io), utilise le `LocalStorage` du navigateur via `syscall/js`.
+- **`WebRepository`** : Utilisé dans les builds WebAssembly (Itch.io), utilise le `LocalStorage`.
+- **`Infrastructure Extensions`** : La couche supérieure peut s'abonner aux événements du domaine pour synchroniser l'état avec des services tiers (ex: Game Jolt pour les sessions et scores).
 
 ---
 
