@@ -4,51 +4,44 @@ package main
 
 var Time float
 var Intensity float
-var Resolution vec2
+var Center vec2 // Centre de l'effet en PIXELS logiques
 
 func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
-    // --- PARTIE CORRIGÉE : RECENTRAGE DES UVs ---
+    // 1. Taille de l'image source en pixels
+    res := imageSrc0Size()
 
-    // 1. Calcul des UVs normalisés standard (de 0.0 à 1.0)
-    uv := dstPos.xy / Resolution
+    // 2. Calcul du vecteur relatif au centre en PIXELS logiques
+    // On utilise srcPos pour être cohérent avec le sampling imageSrc0At
+    relPos := srcPos - Center
 
-    // 2. Transférer dans le repère corrigé (-0.5 à 0.5)
-    // C'est cette ligne qui résout le décalage !
-    correctedUV := uv - vec2(0.5, 0.5)
+    // 3. Distance normalisée par rapport à la taille de l'image
+    // On conserve la logique de distension elliptique originale
+    relUV := relPos / res
+    distFromCenter := length(relUV)
 
-    // --- LE RESTE EST PRESQUE IDENTIQUE, MAIS UTILISE 'correctedUV' ---
-
-    // La distance se calcule maintenant par rapport au milieu corrigé (0, 0)
-    distFromCenter := length(correctedUV)
-
+    // 4. Formule de distorsion originale
     // Calcul de distorsion standard (0.4 pour l'effet de bombement)
     distortion := 1.0 + distFromCenter*distFromCenter*0.4*Intensity
 
-    // Le Pulse reste inchangé, il utilise Time
+    // Le Pulse basé sur le temps
     pulse := sin(Time*(2.0+5.0*Intensity)) * 0.03 * Intensity
     distortion += pulse
 
-    // L'aberration chromatique utilise aussi 'distFromCenter' corrigé
+    // L'aberration chromatique (décalage R/B)
     chromaShift := 0.02 * Intensity * distFromCenter
 
-    // 3. Calcul des offsets (décalages)
-    // Nous travaillons dans le repère centré, nous multiplions par correctedUV.
-    // L'offset Vert (G) est la déformation pure (distortion - 1.0)
-    // L'offset Rouge (R) et Bleu (B) sont modifiés par le chromaShift
-    // On multiplie par Resolution pour convertir les offsets normalisés en pixels
-    offsetR := correctedUV * (distortion + chromaShift - 1.0) * Resolution
-    offsetG := correctedUV * (distortion - 1.0) * Resolution
-    offsetB := correctedUV * (distortion - chromaShift - 1.0) * Resolution
+    // 5. Calcul des décalages (offsets) en PIXELS
+    // On applique la distorsion par rapport au vecteur relatif
+    offsetR := relPos * (distortion + chromaShift - 1.0)
+    offsetG := relPos * (distortion - 1.0)
+    offsetB := relPos * (distortion - chromaShift - 1.0)
 
-    // --- FIN DE LA PARTIE CORRIGÉE ---
-
-    // Récupération de la couleur originale avec décalage
-    baseColor := vec4(
+    // 6. Échantillonnage final
+    // Utilisation de srcPos (pixels source) + décalage calculé
+    return vec4(
        imageSrc0At(srcPos + offsetR).r,
        imageSrc0At(srcPos + offsetG).g,
        imageSrc0At(srcPos + offsetB).b,
        1.0,
     )
-
-    return baseColor
 }

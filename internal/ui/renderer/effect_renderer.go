@@ -224,7 +224,15 @@ func (r *EffectRenderer) ProcessCreatureAttackEffects(screen *ebiten.Image, para
 	if params.UseVertige {
 		vertigeMin := float32(0.45)
 		vertigeIntensity := vertigeMin + (1.0-vertigeMin)*intensity
-		r.applyShader(src, dst, "vertige", vertigeIntensity, nil, params.ScreenSize)
+
+		// Centre du plateau (Playmat) en PIXELS logiques (640, 360) pour stabiliser l'effet.
+		// En passant les pixels directement, on évite les erreurs d'aspect ratio sur écrans larges.
+		vertigeCenter := []float32{
+			float32(ui.PlaymatX + ui.PlaymatW/2),
+			float32(ui.PlaymatY + ui.PlaymatH/2),
+		}
+
+		r.applyShader(src, dst, "vertige", vertigeIntensity, vertigeCenter, params.ScreenSize)
 		src, dst = dst, src
 		anyApplied = true
 	}
