@@ -69,6 +69,7 @@ type Stats struct {
 	MaxSanity  int // Maximum de santé mentale
 	Experience      int // Points d'expérience accumulés au niveau actuel
 	TotalExperience int // Points d'expérience totaux accumulés (Score)
+	TotalComboBonus int // Cumul des bonus de combo
 	Level           int // Niveau actuel du joueur
 }
 

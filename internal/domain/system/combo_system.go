@@ -94,6 +94,7 @@ func (s *ComboSystem) onMatch(e event.Event) {
 	}
 
 	s.world.Player.GainExperience(scoreBonus)
+	s.world.Player.Stats.TotalComboBonus += scoreBonus
 
 	// Publie l'événement de combo
 	s.world.EventBus.PublishImmediate(event.NewComboTriggeredEvent(msg, s.comboCount, scoreBonus, juiciness))
@@ -105,6 +106,7 @@ func (s *ComboSystem) onMerge(e event.Event) {
 
 	// Une fusion ne reset pas le combo, et peut même l'incrémenter légèrement
 	msg := "MERGE!"
+	s.world.Player.Stats.TotalComboBonus += 10
 	s.world.EventBus.PublishImmediate(event.NewComboTriggeredEvent(msg, s.comboCount, 10, 2))
 }
 
