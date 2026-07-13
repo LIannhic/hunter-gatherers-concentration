@@ -13,8 +13,10 @@ import (
 // GameID et PrivateKey sont injectables via -ldflags au moment du build.
 // Exemple: -ldflags="-X 'github.com/LIannhic/hunter-gatherers-concentration/internal/infrastructure/gamejolt.GameID=123'"
 var (
-	GameID     string
-	PrivateKey string
+	GameID          string
+	PrivateKey      string
+	TableIDMain     = "1094189"
+	TableIDPlaytest = "1097407"
 )
 
 const BaseURL = "https://api.gamejolt.com/api/game/v1/"

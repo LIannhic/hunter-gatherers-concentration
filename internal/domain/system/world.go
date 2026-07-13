@@ -69,6 +69,7 @@ type World struct {
 
 	// Playtest mode
 	IsPlaytest            bool
+	IsCheated             bool
 	SpawnLevel            int // Niveau de progression du spawn en playtest (1 à 18)
 	MatchesSinceLastLevel int  // Réussites depuis le dernier level-up (seuil = SpawnLevel)
 
