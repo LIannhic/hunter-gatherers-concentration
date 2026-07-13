@@ -1300,6 +1300,7 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyB) {
+		h.world.IsCheated = true
 		if h.OnFillInventory != nil {
 			h.OnFillInventory()
 		}
@@ -1345,10 +1346,12 @@ func (h *Handler) handleKeyboard() {
 
 	// S: Spawn entités via debug list, Shift+S: Spawn TOUTES les créatures
 	if inpututil.IsKeyJustPressed(ebiten.KeyS) && ebiten.IsKeyPressed(ebiten.KeyShift) {
+		h.world.IsCheated = true
 		if h.OnSpawnAllCreatures != nil {
 			h.OnSpawnAllCreatures(h.GetCurrentGridID())
 		}
 	} else if inpututil.IsKeyJustPressed(ebiten.KeyS) && h.world.Debug.Visible {
+		h.world.IsCheated = true
 		// Spawn via la liste de debug si la fenêtre est ouverte
 		if h.OnSpawnEntities != nil {
 			h.OnSpawnEntities(h.GetCurrentGridID())
@@ -1356,6 +1359,7 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
+		h.world.IsCheated = true
 		if h.OnSpawnRandomCreature != nil {
 			h.OnSpawnRandomCreature(h.GetCurrentGridID())
 		}
@@ -1363,6 +1367,7 @@ func (h *Handler) handleKeyboard() {
 
 	// F5: Cheat - révéler toutes les tuiles
 	if inpututil.IsKeyJustPressed(ebiten.KeyF5) {
+		h.world.IsCheated = true
 		if h.OnRevealAll != nil {
 			h.OnRevealAll(h.GetCurrentGridID())
 		}
@@ -1370,6 +1375,7 @@ func (h *Handler) handleKeyboard() {
 
 	// F6: Cheat - cacher toutes les tuiles
 	if inpututil.IsKeyJustPressed(ebiten.KeyF6) {
+		h.world.IsCheated = true
 		if h.OnHideAll != nil {
 			h.OnHideAll(h.GetCurrentGridID())
 		}
@@ -1377,6 +1383,7 @@ func (h *Handler) handleKeyboard() {
 
 	// F7: Cheat - désceller les sorties
 	if inpututil.IsKeyJustPressed(ebiten.KeyF7) {
+		h.world.IsCheated = true
 		if h.OnUnlockNavigation != nil {
 			h.OnUnlockNavigation(h.GetCurrentGridID())
 		}
@@ -1384,6 +1391,7 @@ func (h *Handler) handleKeyboard() {
 
 	// F8: Cheat - retirer l'état bloqué des tuiles
 	if inpututil.IsKeyJustPressed(ebiten.KeyF10) {
+		h.world.IsCheated = true
 		if h.world.Engine != nil {
 			// On cherche le ComboSystem dans les systèmes de l'engine
 			// Note: On pourrait aussi l'exposer directement dans Engine si besoin
@@ -1395,6 +1403,7 @@ func (h *Handler) handleKeyboard() {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyC) {
+		h.world.IsCheated = true
 		fmt.Println("[KEY] C : Nettoyage du plateau")
 		if h.OnClearBoard != nil {
 			h.OnClearBoard(h.GetCurrentGridID())
@@ -1404,6 +1413,7 @@ func (h *Handler) handleKeyboard() {
 	for i := 0; i < 9; i++ {
 		key := ebiten.Key(i + int(ebiten.Key1))
 		if inpututil.IsKeyJustPressed(key) {
+			h.world.IsCheated = true
 			if i < len(h.world.GridOrder) {
 				gridID := h.world.GridOrder[i]
 				fmt.Printf("[INPUT] Changement de grille : -> %s\n", gridID)
