@@ -982,6 +982,7 @@ func (app *Application) StartGame() {
 	app.Input.ResetGameState()
 	app.HUD.ClearMessages()
 	app.World.RevealedBySpecies = make(map[string]int)
+	app.World.IsCheated = false
 
 	app.World.Turn = 0
 	app.World.MaxTurns = app.World.Player.Stats.MaxSanity
@@ -1056,16 +1057,51 @@ func (app *Application) ReturnToMenu() {
 	fmt.Println("[MENU] Retour au menu principal")
 }
 
+func (app *Application) calculateLootValue(item *player.LootItem) int {
+	level := item.GetCumulationLevel()
+	if level == 0 {
+		return 100
+	}
+	// Formule: 2^level * 100 + (2^(level-1) * 100 / 2)
+	base := (1 << level) * 100
+	bonus := (1 << (level - 1)) * 100 / 2
+	return base + bonus
+}
+
+func (app *Application) calculateFinalScore() int {
+	score := app.World.Player.Stats.TotalExperience
+
+	// Calcul du butin : Ressources et Créatures = selon formule (cumul inclus)
+	for _, item := range app.World.Player.Inventory.Items {
+		if item.OriginalType == entity.TypeResource || item.OriginalType == entity.TypeCreature {
+			score += app.calculateLootValue(item)
+		}
+	}
+	return score
+}
+
 func (app *Application) submitScoreAndCloseSession() {
 	if !app.GameJolt.IsActive() {
 		return
 	}
 
-	score := app.World.Player.Stats.TotalExperience
-	fmt.Printf("[GAMEJOLT] Submission du score final : %d XP\n", score)
+	finalScore := app.calculateFinalScore()
+
+	// Anti-cheat : si triche, le score soumis est 0
+	if app.World.IsCheated {
+		fmt.Println("[GAMEJOLT] Triche détectée : Score invalidé (0 XP soumis)")
+		finalScore = 0
+	}
+
+	tableID := gamejolt.TableIDMain
+	if app.World.IsPlaytest {
+		tableID = gamejolt.TableIDPlaytest
+	}
+
+	fmt.Printf("[GAMEJOLT] Submission du score final (%s) : %d XP\n", tableID, finalScore)
 
 	go func() {
-		if err := app.GameJolt.ScoreAdd(fmt.Sprintf("%d XP", score), score, ""); err != nil {
+		if err := app.GameJolt.ScoreAdd(fmt.Sprintf("%d XP", finalScore), finalScore, tableID); err != nil {
 			fmt.Printf("[GAMEJOLT] Score submission error: %v\n", err)
 		}
 		if err := app.GameJolt.SessionClose(); err != nil {
@@ -1205,8 +1241,15 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	textutil.Draw(screen, "GAME OVER", x+250, y+50, color.RGBA{255, 100, 100, 255})
 	textutil.Draw(screen, "Statistiques épuisées. Votre voyage s'arrête ici.", x+120, y+100, color.White)
 
-	scoreText := fmt.Sprintf("Score : %d", app.World.Player.Stats.TotalExperience)
+	finalScore := app.calculateFinalScore()
+	scoreText := fmt.Sprintf("Valeur Totale : %d XP", finalScore)
+	if app.World.IsCheated {
+		scoreText += " (triche détectée)"
+	}
 	textutil.Draw(screen, scoreText, x+230, y+150, color.RGBA{255, 200, 50, 255})
+
+	comboText := fmt.Sprintf("Bonus Combo cumulés : %d XP", app.World.Player.Stats.TotalComboBonus)
+	textutil.Draw(screen, comboText, x+180, y+185, color.RGBA{150, 200, 255, 255})
 
 	btnW, btnH := 160, 40
 

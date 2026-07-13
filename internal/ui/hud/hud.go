@@ -847,20 +847,37 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	resourceCount := 0
 	creatureCount := 0
 	for _, item := range h.world.Player.Inventory.Items {
+		val := 0
+		level := item.GetCumulationLevel()
+		if level == 0 {
+			val = 100
+		} else {
+			base := (1 << level) * 100
+			bonus := (1 << (level - 1)) * 100 / 2
+			val = base + bonus
+		}
+
 		switch item.OriginalType {
 		case entity.TypeResource:
 			resourceCount++
-			totalValue += 100 // Valeur arbitraire pour l'instant
+			totalValue += val
 		case entity.TypeCreature:
 			creatureCount++
-			totalValue += 250
+			totalValue += val
 		}
 	}
 
 	statsY := y + 150
 	textutil.Draw(screen, fmt.Sprintf("Ressources collectées : %d", resourceCount), x+100, statsY, color.White)
 	textutil.Draw(screen, fmt.Sprintf("Créatures capturées : %d", creatureCount), x+100, statsY+30, color.White)
-	textutil.Draw(screen, fmt.Sprintf("Valeur totale du butin : %d XP", totalValue), x+100, statsY+70, color.RGBA{255, 255, 100, 255})
+	textutil.Draw(screen, fmt.Sprintf("Bonus Combo cumulés : %d XP", h.world.Player.Stats.TotalComboBonus), x+100, statsY+60, color.RGBA{150, 200, 255, 255})
+
+	finalScore := h.world.Player.Stats.TotalExperience + totalValue
+	valText := fmt.Sprintf("Valeur Totale : %d XP", finalScore)
+	if h.world.IsCheated {
+		valText += " (triche détectée)"
+	}
+	textutil.Draw(screen, valText, x+100, statsY+100, color.RGBA{255, 255, 100, 255})
 
 	// Boutons
 	btnW, btnH := 160, 40
