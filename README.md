@@ -261,13 +261,26 @@ Le système de progression immédiate sur le plateau repose sur le choix du joue
     - **Scaling** : Un match de haut niveau produit un butin de plus grande valeur.
 - **Révélation** : Retourner une tuile cumulée (Niv.1+) consomme du Mana égal à son niveau.
 
-### Système de Score et XP
+### Système de Score, Butin et Game Jolt
 
-La progression du joueur est quantifiée par l'expérience (XP) acquise lors de ses actions :
-- **En cours de partie** : +10 XP par association réussie.
-- **Extraction** : La valeur du butin sécurisé est convertie en XP bonus lors du franchissement du portail (100 XP par ressource, 250 XP par créature).
-- **Persistance** : Le score final (Total XP) est enregistré dans le profil du joueur, mettant à jour le "Dernier score" et le "Score Max".
-- **Level-up** : Accumuler assez d'XP augmente le niveau du personnage, améliorant sa Santé et son Mana maximum.
+La progression du joueur est quantifiée par l'expérience (XP) acquise. En fin de partie (Victoire ou Game Over), une **Valeur Totale** est calculée et soumise aux classements.
+
+- **Expérience en jeu** : +10 XP par association réussie.
+- **Bonus Combo** : Points additionnels accordés pour les chaînes d'associations (GOOD!, NICE!, GREAT!...).
+- **Valeur du Butin** : Le butin sécurisé dans l'inventaire est converti selon son niveau de cumul :
+    - **Niveau 0** : 100 XP
+    - **Niveau 1** : 250 XP
+    - **Niveau 2** : 500 XP
+    - **Niveau 3** : 1000 XP
+    - *Formule : `2^level * 100 + (2^(level-1) * 100 / 2)` pour level > 0.*
+- **Valeur Totale** : Somme de l'XP accumulée + Valeur du butin. C'est ce score global qui est affiché et transmis.
+- **Game Jolt (Social)** : Intégration automatique des sessions et des scores lorsque le jeu est hébergé sur Game Jolt. Deux tableaux distincts sont utilisés :
+    - **Table "Main"** (ID `1094189`) : Pour les expéditions standards.
+    - **Table "Playtest"** (ID `1097407`) : Pour le mode Playtest.
+- **Anti-Triche (Anti-Cheat)** :
+    - L'utilisation de touches de debug (`B`, `F5-F10`, `S`, `C`) ou de navigation rapide (`1-0`) active le flag de triche.
+    - Si la triche est détectée : la mention **"(triche détectée)"** apparaît en fin de partie et le score soumis à Game Jolt est forcé à **0 XP**.
+    - Le flag est réinitialisé à chaque nouvelle partie.
 
 ### Système de Combo (Juicy Combo)
 

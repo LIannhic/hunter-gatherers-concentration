@@ -70,7 +70,7 @@ func (s *LifecycleSystem) Update(world *World) {
 ### Implémentation
 
 - **`system/`** : Logique centrale du domaine
-  - `World` : Structure World (Cœur de l'état global). Contient `IsPlaytest bool` pour identifier le mode de test.
+  - `World` : Structure World (Cœur de l'état global). Contient `IsPlaytest bool` pour le mode test et `IsCheated bool` pour le suivi de l'anti-triche.
   - `Engine` : Orchestrateur des systèmes ECS.
   - `ECS Systems` : Implémentations (IA, Mouvement, Lifecycle, Loot...).
   - `AggressionSystem` : Gère le calcul modulaire de l'agressivité (Base + Facteurs : révélations, patience, inventaire, colère d'espèce). Déclenche les attaques à 100%.
@@ -110,7 +110,7 @@ func (s *LifecycleSystem) Update(world *World) {
   - `TrackSystem` : Gère la durée de vie et la disparition progressive des traces au sol
   - `AggressionSystem` : **Nouveau** — Calcule l'agressivité totale des créatures (Base + Facteurs). S'abonne à `TileRevealed` (reason: "player_action") pour le facteur "reveals" et à `CreatureMoved` pour le facteur "patience" (+2% par pas, +10% par rebond). Déclenche l'attaque si agressivité ≥ 100 à la fin de l'animation de flip.
   - `CreatureAttackEffectSystem` : Centralise les effets mondiaux des attaques réussies. Linke les impacts physiques aux altérations mentales (Aphasia, Ataxia, Agnosia, Amnesia, Vertigo) et transformations de terrain (Quake).
-  - `ComboSystem` : Gère le système de combo (Priority 10). S'abonne à `TileMatched` pour incrémenter le compteur et calculer la juiciness (1-5). S'abonne à `TileMerged` pour publier un message sans incrémenter. S'abonne à `PlayerDamaged` pour réinitialiser le combo en cas d'erreur. Publie `ComboTriggered` via `PublishImmediate` (sinon perdu dans `ProcessQueue`).
+  - `ComboSystem` : Gère le système de combo (Priority 10). S'abonne à `TileMatched` pour incrémenter le compteur et calculer la juiciness (1-5). Accumule les bonus dans `Player.Stats.TotalComboBonus`. S'abonne à `TileMerged` pour publier un message sans incrémenter. S'abonne à `PlayerDamaged` pour réinitialiser le combo en cas d'erreur.
 
 **Note architecture importante** : À partir de la fusion du #18, l'état visuel (`TileState`) appartient à l'entité, pas à la tuile. Cela permet :
 - Une gestion cohérente des états (l'entité contrôle sa visibilité)

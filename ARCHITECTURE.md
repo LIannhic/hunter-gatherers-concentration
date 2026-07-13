@@ -93,6 +93,7 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
   - **Tilt (Pente)** : Chaque parcelle possède une direction de pente utilisée pour définir l'animation de fermeture "naturelle" des tuiles. Les transformations sont cumulatives (`apply * current`).
   - **Transformation D4 Unifiée** : Les UVs des tuiles (face et dos) sont transformés par la D4 de l'entité, y compris pour les créatures et ressources. Les croix et silhouettes suivent la rotation/miroir. Le dos utilise un miroir horizontal supplémentaire (`1.0 - u`).
   - **Cumul (Merge)** : Les entités peuvent être fusionnées pour augmenter leur `CumulationLevel` (0 à 2+). Cela influence les règles de match et le rendu (échelle x1.15 par niveau + bordures concentriques colorées si révélé).
+  - **Anti-Cheat** : Le `World` possède un flag `IsCheated` activé par l'usage de commandes de debug/navigation rapide, invalidant les scores Game Jolt (soumission de 0 XP).
 
 - **Systems** : Mettent à jour l'état du monde via l'**Engine** (`engine.go`).
   - **Engine** : Chef d'orchestre du domaine. Il sépare la logique en trois cycles :
@@ -136,8 +137,9 @@ Le domaine utilise une architecture **Entity-Component-System (ECS)** amélioré
 - **World.ActiveAnimationCount** : Compteur d'animations actives (flip, slide, attack). Incrémenté par `AnimationStarted`, décrémenté par `AnimationEnded` (handlers dans `BoardRenderer.SubscribeToEvents`).
 
 - **Suivi de Progression et Score** :
-  - `TotalExperience` : Cumul de toute l'expérience acquise durant une session (Matchs + Butin final). Utilisé comme base pour le calcul du Score dans la persistance et les classements externes (Game Jolt).
-  - `Experience` : XP relative au niveau actuel, utilisée pour le système de Level-up. Réinitialisé à 0 au début de chaque partie pour éviter les messages de level-up résiduels.
+  - `TotalExperience` : Cumul de toute l'expérience acquise durant une session (Matchs + Combos). Utilisé comme base pour le calcul du Score final avec la valeur du butin.
+  - `TotalComboBonus` : Somme spécifique des points gagnés via le système de combo.
+  - `Experience` : XP relative au niveau actuel, utilisée pour le système de Level-up.
 
 - **Mode Playtest** :
   - `IsPlaytest bool` : Indique si la partie est en mode Playtest (grille unique BiomeDefault, pas de navigation).
