@@ -51,7 +51,7 @@ func NewTitleScreen() *TitleScreen {
 			W: 200,
 			H: 50,
 		},
-		ButtonText: "DEMARRER", // Texte par défaut
+		ButtonText: "ADVENTURE", // Default text
 	}
 }
 
@@ -82,7 +82,7 @@ func (t *TitleScreen) Render(screen *ebiten.Image, hasSaves bool) {
 	t.drawPlaytestButton(screen)
 
 	// Instructions
-	hint := "En jeu: Appuyez sur echap pour retourner au menu"
+	hint := "In game: Press ESC to return to menu"
 	hintX := t.width/2 - textutil.MeasureWidth(hint)/2
 	textutil.Draw(screen, hint, hintX, 500, color.RGBA{100, 100, 100, 255})
 }
@@ -115,7 +115,7 @@ func (t *TitleScreen) drawButton(screen *ebiten.Image) {
 	// Texte du bouton
 	btnText := t.ButtonText
 	if btnText == "" {
-		btnText = "DEMARRER"
+		btnText = "ADVENTURE"
 	}
 	btnX := t.buttonRect.X + t.buttonRect.W/2 - textutil.MeasureWidth(btnText)/2
 	btnY := t.buttonRect.Y + t.buttonRect.H/2 + 4
@@ -163,7 +163,7 @@ func (t *TitleScreen) drawPlaytestButton(screen *ebiten.Image) {
 	)
 
 	// Texte du bouton
-	btnText := "PLAYTEST"
+	btnText := "ARCADE"
 	btnX := t.playtestButtonRect.X + t.playtestButtonRect.W/2 - textutil.MeasureWidth(btnText)/2
 	btnY := t.playtestButtonRect.Y + t.playtestButtonRect.H/2 + 4
 	textutil.Draw(screen, btnText, btnX, btnY, color.White)
@@ -195,7 +195,7 @@ func (t *TitleScreen) drawProfileButton(screen *ebiten.Image) {
 	)
 
 	// Texte du bouton
-	btnText := "PROFILS"
+	btnText := "PROFILES"
 	btnX := t.profileButtonRect.X + t.profileButtonRect.W/2 - textutil.MeasureWidth(btnText)/2
 	btnY := t.profileButtonRect.Y + t.profileButtonRect.H/2 + 4
 	textutil.Draw(screen, btnText, btnX, btnY, color.White)

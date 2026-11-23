@@ -233,9 +233,9 @@ func (app *Application) checkSaves() {
 	metas, _ := app.Persistence.GetSaveSummaries()
 	app.hasSaves = len(metas) > 0
 	if app.hasSaves {
-		app.TitleScreen.ButtonText = "CONTINUER"
+		app.TitleScreen.ButtonText = "CONTINUE"
 	} else {
-		app.TitleScreen.ButtonText = "DEMARRER"
+		app.TitleScreen.ButtonText = "ADVENTURE"
 	}
 }
 
@@ -1127,7 +1127,7 @@ func (app *Application) drawMenu(screen *ebiten.Image) {
 	app.TitleScreen.Render(screen, app.hasSaves)
 
 	if app.hasSaves {
-		textutil.Draw(screen, "[ CHANGER DE PROFIL ]", 640-textutil.MeasureWidth("[ CHANGER DE PROFIL ]")/2, 405, color.RGBA{150, 150, 255, 255})
+		textutil.Draw(screen, "[ CHANGE PROFILE ]", 640-textutil.MeasureWidth("[ CHANGE PROFILE ]")/2, 405, color.RGBA{150, 150, 255, 255})
 	}
 
 	if app.SaveMenu.IsVisible() {
@@ -1223,7 +1223,7 @@ func (app *Application) drawPlaying(screen *ebiten.Image) {
 	}
 
 	if app.World.Entities.Count() == 0 {
-		textutil.Draw(screen, "Appuyez sur S pour spawner des entites", 200, 300, color.RGBA{255, 255, 0, 255})
+		textutil.Draw(screen, "Press S to spawn entities", 200, 300, color.RGBA{255, 255, 0, 255})
 	}
 }
 
@@ -1239,16 +1239,16 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 3, color.RGBA{255, 100, 100, 255}, true)
 
 	textutil.Draw(screen, "GAME OVER", x+250, y+50, color.RGBA{255, 100, 100, 255})
-	textutil.Draw(screen, "Statistiques épuisées. Votre voyage s'arrête ici.", x+120, y+100, color.White)
+	textutil.Draw(screen, "Stats depleted. Your journey ends here.", x+120, y+100, color.White)
 
 	finalScore := app.calculateFinalScore()
-	scoreText := fmt.Sprintf("Valeur Totale : %d XP", finalScore)
+	scoreText := fmt.Sprintf("Total Score : %d XP", finalScore)
 	if app.World.IsCheated {
-		scoreText += " (triche détectée)"
+		scoreText += " (cheat detected)"
 	}
 	textutil.Draw(screen, scoreText, x+230, y+150, color.RGBA{255, 200, 50, 255})
 
-	comboText := fmt.Sprintf("Bonus Combo cumulés : %d XP", app.World.Player.Stats.TotalComboBonus)
+	comboText := fmt.Sprintf("Cumulative Combo Bonus : %d XP", app.World.Player.Stats.TotalComboBonus)
 	textutil.Draw(screen, comboText, x+180, y+185, color.RGBA{150, 200, 255, 255})
 
 	btnW, btnH := 160, 40
@@ -1258,7 +1258,7 @@ func (app *Application) drawGameOver(screen *ebiten.Image) {
 	by := y + 300
 	vector.DrawFilledRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), color.RGBA{80, 40, 40, 255}, true)
 	vector.StrokeRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
-	textutil.Draw(screen, "REJOUER", bx1+50, by+25, color.White)
+	textutil.Draw(screen, "REPLAY", bx1+50, by+25, color.White)
 
 	// Bouton MENU
 	bx2 := x + 340
