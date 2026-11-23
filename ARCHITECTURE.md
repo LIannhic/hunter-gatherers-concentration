@@ -31,12 +31,14 @@ cmd/game              # Point d'entrée
         commands.go   # Command pattern (RevealTile, MatchTiles...)
         
     /infrastructure   # Détails techniques
-        /assets       # Gestion des sprites/couleurs
+        /assets       # Gestion des sprites/couleurs et dictionnaire I18N
+            /locales  # Fichiers de langues JSON (en.json, fr.json)
         /loader       # Chargement JSON/config
         /persistence  # Implémentations des dépôts (JSON, Web)
         /gamejolt     # Client API Game Jolt (Sessions & Scores)
         
     /ui               # Interface utilisateur
+        /i18n         # Gestionnaire d'internationalisation (I18N)
         /renderer     # Dessin du plateau
         /input        # Gestion souris/clavier
         /hud          # Affichage infos
@@ -482,11 +484,12 @@ Séparation des responsabilités :
 
 - **DebugWindow** (`ui/debug/window.go`) : Console de débogage interactive (F12) permettant de modifier les statistiques, la difficulté, et de filtrer les entités spawnables. Contrôle la vitesse de défilement des messages HUD (`MessageSpeed` via `+`/`-`).
 
-- **TextUtil** (`ui/textutil/textutil.go`) : Package helper centralisant le rendu texte via `text/v2` avec police Go Mono intégrée (via `//go:embed`). Fournit `Draw()`, `MeasureWidth()` et `GoTextFace`. `MeasureWidth` optimisé avec `len(str) * charWidth` (police monospace). Le `Draw()` soustrait `HAscent` pour maintenir la compatibilité baseline avec text v1.
+- **I18N Manager** (`ui/i18n/manager.go`) : Système d'internationalisation thread-safe (`sync.RWMutex`) avec chargement automatique des dictionnaires JSON embarqués (`internal/infrastructure/assets/locales/en.json` et `fr.json`). Offre la fonction `T(key, args...)` avec support des arguments dynamique et fallback automatique vers la langue par défaut (`en`).
+- **TextUtil** (`ui/textutil/textutil.go`) : Package helper centralisant le rendu texte via `text/v2` avec police Go Mono intégrée (via `//go:embed`). Fournit `Draw()`, `MeasureWidth()`, `WrapText()` et `GoTextFace`. `MeasureWidth` est optimisé pour mesurer le nombre réel de runes UTF-8 (`utf8.RuneCountInString`), garantissant un alignement et une largeur précis avec les caractères accentués (`é`, `à`, `ç`, `è`, `ê`). `WrapText` découpe automatiquement les textes longs sur plusieurs lignes pour s'adapter aux variations de longueur entre langues.
 - **ActionButtons** (`ui/actionbuttons/manager.go`) : Manager purement réactif qui recalcule à chaque frame l'état des 4 boutons d'action (Match, Skip, Turn, Menu) en fonction du nombre de tuiles retournées et des troubles cognitifs actifs du joueur. 
   - **Aphasia** : Glitch périodique des labels (toutes les 0.5s) et pulsation de taille.
   - **Ataxia** : Mode **Whack-a-mole** dynamique. Les boutons sautent hors de l'écran avant de réapparaître dans un autre coin. Thème Désert appliqué.
-  - **Agnosia** : Standardisation totale en Noir & Blanc. Labels forcés sur "BOUTON".
+  - **Agnosia** : Standardisation totale en Noir & Blanc. Labels forcés sur "BUTTON".
   - **Remplissage Effaceur** : Le timer se remplit de Noir vers Blanc, effaçant visuellement le contenu blanc du bouton à mesure qu'il progresse.
   - **Interaction** : Gère les transformations de coordonnées (scrambling) et l'interpolation pour des mouvements fluides. Coordonne le **Feedback de Coût** vers les jauges du HUD.
 
@@ -499,7 +502,7 @@ app.NewApplication() // Crée world, assets, renderer, input...
 
 La couche `App` gère également le choix du dépôt de persistance en fonction de l'environnement (WASM vs Desktop).
 
-La couche `App` gère également le flux de navigation pré-jeu, notamment la **sélection de difficulté** qui est déclenchée lors du clic sur "DEMARRER" (pour les nouveaux joueurs) ou via le menu de profil.
+La couche `App` gère également le flux de navigation pré-jeu, notamment la **sélection de difficulté** qui est déclenchée lors du clic sur le bouton principal **ADVENTURE** (pour les nouveaux joueurs) ou via le menu de profil. Le second bouton **ARCADE** permet de lancer directement le mode incursion rapide (ex-playtest).
 
 ## Patterns utilisés
 

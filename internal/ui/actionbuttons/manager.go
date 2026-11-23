@@ -348,7 +348,7 @@ func (m *Manager) applyImpairments(p *player.Player, states *[btnCount]ButtonSta
 			for i := 0; i < btnCount; i++ {
 				sourceLabel := m.baseLabels[i]
 				if p.AgnosiaTurns > 0 {
-					sourceLabel = "BOUTON"
+					sourceLabel = "BUTTON"
 				}
 				label := []rune(sourceLabel)
 
@@ -370,7 +370,7 @@ func (m *Manager) applyImpairments(p *player.Player, states *[btnCount]ButtonSta
 	// Agnosia : rend les boutons indifférenciés (identiques)
 	if p.AgnosiaTurns > 0 {
 		for i := 0; i < btnCount; i++ {
-			states[i].Label = "BOUTON"
+			states[i].Label = "BUTTON"
 			states[i].Scrambled = true
 			// Applique le timer à tous les boutons pour l'uniformité
 			if m.getTimerProgress != nil {

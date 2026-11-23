@@ -33,8 +33,8 @@ type FamilyMember struct {
 func NewFamily() *Family {
 	return &Family{
 		Members: []FamilyMember{
-			{Name: "Sœur aînée", Status: "healthy", Age: 16},
-			{Name: "Frère cadet", Status: "healthy", Age: 8},
+			{Name: "Elder sister", Status: "healthy", Age: 16},
+			{Name: "Younger brother", Status: "healthy", Age: 8},
 		},
 		Needs: []Need{
 			{Type: "food", Current: 50, Required: 100, Urgency: 3},
@@ -57,7 +57,7 @@ func (f *Family) Allocate(resourceType string, amount int) error {
 			return nil
 		}
 	}
-	return errors.New("besoin non trouvé")
+	return errors.New("need not found")
 }
 
 // PayDebt réduit la dette

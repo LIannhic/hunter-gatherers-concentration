@@ -37,9 +37,15 @@ Chaque zone (grille) est remplie selon un pool commun de créatures, ressources 
 
 Cette répartition garantit une diversité maximale tout en laissant la part belle au hasard.
 
-### Mode Playtest
+### Modes de jeu à l'écran titre
 
-Le mode Playtest est un mode de test rapide qui utilise une grille unique de type **BiomeDefault** (6x6) sans zone de départ/arrivée ni portail portable. Il permet de tester les mécaniques du jeu sans navigation inter-zones.
+L'écran titre propose deux modes de jeu principaux :
+- **ADVENTURE (Aventure)** : L'expédition normale à travers le réseau de zones du plan onirique avec gestion de l'inventaire, des portails et de la méta-progression.
+- **ARCADE (ex-Playtest)** : Une incursion rapide et condensée sur une grille unique 6x6 sans navigation inter-zones.
+
+### Mode Arcade (ex-Playtest)
+
+Le mode **Arcade** est un mode d'incursion rapide qui utilise une grille unique de type **BiomeDefault** (6x6) sans zone de départ/arrivée ni portail portable. Il permet d'expérimenter les mécaniques du jeu dans une session intense.
 
 #### Fonctionnalités
 - **Pool étendu** : Toutes les créatures et ressources exclusives de tous les biomes (Forest, Cave, Swamp, Desert) sont incluses, soit **19 types** au total.
@@ -47,7 +53,7 @@ Le mode Playtest est un mode de test rapide qui utilise une grille unique de typ
 - **Détection d'impossibilité** : Si aucune paire valide n'existe dans la grille, le jeu se termine immédiatement (Game Over).
 - **Tiles révélées** : Les tuiles sont générées face révélées pour permettre une prévisualisation. Elles se cachent automatiquement lors d'un End Turn ou Skip.
 - **Score** : L'affichage du score est présent même en cas de défaite (Game Over).
-- **REJOUR** : Le bouton REJOUER redémarre en mode Playtest (et non en mode normal).
+- **REJOUER** : Le bouton REJOUER redémarre directement en mode Arcade.
 
 #### Pool de Spawn (Playtest)
 | Type | Catégorie | Biome d'origine |
@@ -191,6 +197,13 @@ Le compte à rebours s'adapte dynamiquement au contexte de jeu :
 | **Normal** | 1.0 | Vitesse normale |
 
 Priorité : Grille vide > Animation/Preview > Normal.
+
+### Internationalisation (I18N) & Multilingue
+
+Le jeu intègre un système d'internationalisation léger et modulable :
+- **Architecture I18N** (`internal/ui/i18n`) : Un gestionnaire thread-safe (`Manager`) qui charge les dictionnaire de traductions JSON embarqués dans le binaire (`internal/infrastructure/assets/locales/en.json` et `fr.json`).
+- **Support des caractères accentués** : Intégration avec `text/v2` d'Ebiten. La mesure de largeur (`MeasureWidth`) calcule le nombre réel de runes UTF-8 (`utf8.RuneCountInString`), permettant un rendu et un alignement parfaits des caractères de la langue française (`é`, `à`, `ç`, `è`, `ê`, `î`, `ô`).
+- **Adaptation dynamique du texte** : Utilitaire `WrapText` pour découper automatiquement les phrases longues sur plusieurs lignes selon la largeur des conteneurs UI.
 
 ### Correction : Toxicité Locale
 

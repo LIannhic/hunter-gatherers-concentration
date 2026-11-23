@@ -565,9 +565,9 @@ func TestCreatureAI(t *testing.T) {
 
 ---
 
-## Mode Playtest
+## Mode Arcade (ex-Playtest)
 
-Le mode Playtest est un mode de test rapide qui utilise une grille unique de type **BiomeDefault** (6x6) sans zone de départ/arrivée ni portail portable.
+Le mode **Arcade** (nommé techniquement Playtest dans le domaine) est un mode d'incursion rapide qui utilise une grille unique de type **BiomeDefault** (6x6) sans zone de départ/arrivée ni portail portable.
 
 ### Fonctionnalités
 - **Pool étendu** : Toutes les créatures et ressources exclusives de tous les biomes (Forest, Cave, Swamp, Desert) sont incluses, soit **19 types** au total.

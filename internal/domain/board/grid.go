@@ -101,7 +101,7 @@ func (g *Grid) Get(pos Position) (*Plot, error) {
 	}
 	p, ok := g.Plots[pos]
 	if !ok {
-		return nil, errors.New("parcelle inexistante")
+		return nil, errors.New("plot does not exist")
 	}
 	return p, nil
 }

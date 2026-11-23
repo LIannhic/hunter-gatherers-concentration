@@ -42,7 +42,7 @@ func (d *DifficultySelection) Render(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, d.x, d.y, d.w, d.h, color.RGBA{20, 20, 35, 255}, true)
 	vector.StrokeRect(screen, d.x, d.y, d.w, d.h, 2, color.RGBA{100, 100, 200, 255}, true)
 
-	title := "CHOISISSEZ VOTRE DESTIN"
+	title := "CHOOSE YOUR DESTINY"
 	textutil.Draw(screen, title, int(d.x)+100, int(d.y)+35, color.RGBA{255, 220, 100, 255})
 
 	mx, my := ebiten.CursorPosition()

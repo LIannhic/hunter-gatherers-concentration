@@ -4,6 +4,8 @@ import (
 	"bytes"
 	_ "embed"
 	"image/color"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -45,7 +47,39 @@ func Draw(dst *ebiten.Image, str string, x, y int, clr color.Color) {
 }
 
 // MeasureWidth returns the width in pixels of the given text.
-// Optimized for Go Mono (monospace): len * charWidth.
+// Correctly accounts for multi-byte UTF-8 runes (accents like é, à, ç).
 func MeasureWidth(str string) int {
-	return int(float64(len(str)) * charWidth)
+	return int(float64(utf8.RuneCountInString(str)) * charWidth)
+}
+
+// WrapText splits a long text string into multiple lines so that no line exceeds maxWidth pixels.
+func WrapText(str string, maxWidth int) []string {
+	words := strings.Fields(str)
+	if len(words) == 0 {
+		return nil
+	}
+
+	var lines []string
+	var currentLine string
+
+	for _, w := range words {
+		testLine := currentLine
+		if testLine != "" {
+			testLine += " "
+		}
+		testLine += w
+
+		if MeasureWidth(testLine) > maxWidth && currentLine != "" {
+			lines = append(lines, currentLine)
+			currentLine = w
+		} else {
+			currentLine = testLine
+		}
+	}
+
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+
+	return lines
 }
