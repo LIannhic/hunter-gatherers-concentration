@@ -91,7 +91,7 @@ func (m *SaveMenu) Render(screen *ebiten.Image) {
 	screen.DrawImage(overlay, nil)
 
 	// Titre
-	textutil.Draw(screen, "GESTION DES PROFILS", 640-textutil.MeasureWidth("GESTION DES PROFILS")/2, 125, color.RGBA{200, 180, 100, 255})
+	textutil.Draw(screen, "PROFILE MANAGEMENT", 640-textutil.MeasureWidth("PROFILE MANAGEMENT")/2, 125, color.RGBA{200, 180, 100, 255})
 
 	// Bouton Retour
 	m.drawBackButton(screen)
@@ -110,7 +110,7 @@ func (m *SaveMenu) Render(screen *ebiten.Image) {
 func (m *SaveMenu) drawBackButton(screen *ebiten.Image) {
 	vector.FillRect(screen, float32(m.backRect.X), float32(m.backRect.Y), float32(m.backRect.W), float32(m.backRect.H), color.RGBA{40, 40, 60, 255}, true)
 	vector.StrokeRect(screen, float32(m.backRect.X), float32(m.backRect.Y), float32(m.backRect.W), float32(m.backRect.H), 2, color.White, true)
-	textutil.Draw(screen, "< RETOUR", m.backRect.X+15, m.backRect.Y+35, color.White)
+	textutil.Draw(screen, "< BACK", m.backRect.X+15, m.backRect.Y+35, color.White)
 }
 
 func (m *SaveMenu) drawSlot(screen *ebiten.Image, id int) {
@@ -134,33 +134,33 @@ func (m *SaveMenu) drawSlot(screen *ebiten.Image, id int) {
 	vector.StrokeRect(screen, float32(r.X), float32(r.Y), float32(r.W), float32(r.H), 2, borderColor, true)
 
 	if slotMeta == nil {
-		textutil.Draw(screen, fmt.Sprintf("SLOT %d : VIDE", id), r.X+20, r.Y+85, color.Gray{150})
-		textutil.Draw(screen, "[ CLIQUEZ POUR NOUVEAU PROFIL ]", r.X+200, r.Y+85, color.White)
+		textutil.Draw(screen, fmt.Sprintf("SLOT %d : EMPTY", id), r.X+20, r.Y+85, color.Gray{150})
+		textutil.Draw(screen, "[ CLICK FOR NEW PROFILE ]", r.X+200, r.Y+85, color.White)
 	} else {
 		// Infos slot
 		titleColor := color.RGBA{100, 150, 255, 255}
 		textutil.Draw(screen, fmt.Sprintf("SLOT %d - %s", id, slotMeta.Difficulty), r.X+20, r.Y+30, titleColor)
 
 		createdStr := slotMeta.CreatedAt.Format("02/01/2006")
-		textutil.Draw(screen, "Cree le : "+createdStr, r.X+20, r.Y+55, color.Gray{150})
+		textutil.Draw(screen, "Created on : "+createdStr, r.X+20, r.Y+55, color.Gray{150})
 
 		dateStr := slotMeta.UpdatedAt.Format("02/01/2006 15:04")
-		textutil.Draw(screen, "Dernier jeu : "+dateStr, r.X+20, r.Y+80, color.White)
+		textutil.Draw(screen, "Last played : "+dateStr, r.X+20, r.Y+80, color.White)
 
 		playtimeStr := formatDuration(slotMeta.TotalPlaytime)
-		textutil.Draw(screen, "Temps de jeu : "+playtimeStr, r.X+20, r.Y+105, color.RGBA{200, 200, 100, 255})
+		textutil.Draw(screen, "Playtime : "+playtimeStr, r.X+20, r.Y+105, color.RGBA{200, 200, 100, 255})
 
-		stats := fmt.Sprintf("Expeditions : %d | Morts : %d", slotMeta.SessionCount, slotMeta.DeathCount)
+		stats := fmt.Sprintf("Expeditions : %d | Deaths : %d", slotMeta.SessionCount, slotMeta.DeathCount)
 		textutil.Draw(screen, stats, r.X+20, r.Y+130, color.Gray{180})
 
-		scoreStr := fmt.Sprintf("Score Max : %d | Dernier : %d", slotMeta.MaxScore, slotMeta.LastScore)
+		scoreStr := fmt.Sprintf("Max Score : %d | Last : %d", slotMeta.MaxScore, slotMeta.LastScore)
 		textutil.Draw(screen, scoreStr, r.X+20, r.Y+150, color.RGBA{100, 200, 100, 255})
 
 		// Bouton Difficulté
 		dr := m.diffRects[id-1]
 		vector.FillRect(screen, float32(dr.X), float32(dr.Y), float32(dr.W), float32(dr.H), color.RGBA{60, 60, 100, 255}, true)
 		vector.StrokeRect(screen, float32(dr.X), float32(dr.Y), float32(dr.W), float32(dr.H), 1, color.RGBA{200, 200, 255, 255}, true)
-		textutil.Draw(screen, "DIFFICULTE", dr.X+15, dr.Y+20, color.White)
+		textutil.Draw(screen, "DIFFICULTY", dr.X+15, dr.Y+20, color.White)
 
 		// Bouton Supprimer (X)
 		dlr := m.deleteRects[id-1]
@@ -183,10 +183,10 @@ func (m *SaveMenu) drawConfirmation(screen *ebiten.Image) {
 	vector.FillRect(screen, float32(cx), float32(cy), float32(cw), float32(ch), color.RGBA{40, 20, 20, 255}, true)
 	vector.StrokeRect(screen, float32(cx), float32(cy), float32(cw), float32(ch), 2, color.RGBA{255, 0, 0, 255}, true)
 
-	msg := fmt.Sprintf("Supprimer le profil %d ?", m.confirmDeleteSlot)
+	msg := fmt.Sprintf("Delete profile %d ?", m.confirmDeleteSlot)
 	textutil.Draw(screen, msg, cx+100, cy+50, color.White)
-	textutil.Draw(screen, "Cliquez a nouveau sur X pour confirmer", cx+60, cy+80, color.Gray{150})
-	textutil.Draw(screen, "Ou n'importe ou ailleurs pour annuler", cx+60, cy+100, color.Gray{150})
+	textutil.Draw(screen, "Click X again to confirm", cx+60, cy+80, color.Gray{150})
+	textutil.Draw(screen, "Or click anywhere else to cancel", cx+60, cy+100, color.Gray{150})
 }
 
 // HandleClick traite le clic et retourne l'action

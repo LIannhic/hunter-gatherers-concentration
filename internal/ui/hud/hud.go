@@ -167,13 +167,13 @@ func NewHUD(world *domain.World) *HUD {
 
 		msg := ""
 		if reason == "confrontation" {
-			msg = fmt.Sprintf("CONFRONTATION ! -%d HP", damage)
+			msg = fmt.Sprintf("CONFRONTATION! -%d HP", damage)
 		} else if reason == "invalid_match" {
-			msg = "MATCH INVALIDE !"
+			msg = "INVALID MATCH!"
 		} else if reason == "skipped_valid_match" {
-			msg = "MATCH IGNORE !"
+			msg = "SKIPPED MATCH!"
 		} else if reason == "toxicity" {
-			msg = fmt.Sprintf("TOXICITÉ ! -%d HP", damage)
+			msg = fmt.Sprintf("TOXICITY! -%d HP", damage)
 		}
 		if msg != "" {
 			h.AddMessage(msg, "right")
@@ -183,13 +183,13 @@ func NewHUD(world *domain.World) *HUD {
 	// S'abonne au passage de niveau
 	world.EventBus.SubscribeFunc(event.LevelUp, func(e event.Event) {
 		level, _ := e.Payload["level"].(int)
-		h.AddMessage(fmt.Sprintf("NIVEAU %d ATTEINT !", level), "left")
+		h.AddMessage(fmt.Sprintf("LEVEL %d REACHED!", level), "left")
 	})
 
 	// S'abonne au début d'amnésie pour afficher l'effet à droite
 	world.EventBus.SubscribeFunc(event.AmnesiaStarted, func(e event.Event) {
 		duration, _ := e.Payload["duration"].(int)
-		h.AddMessage(fmt.Sprintf("AMNÉSIE ! %d tours.", duration), "right")
+		h.AddMessage(fmt.Sprintf("AMNESIA! %d turns.", duration), "right")
 	})
 
 	// S'abonne aux combos juicy
@@ -727,15 +727,15 @@ func (h *HUD) renderAssetsWindow(screen *ebiten.Image) {
 		h.assetPage = maxPage
 	}
 
-	title := fmt.Sprintf("ATLAS DES ASSETS - Page %d/%d", h.assetPage+1, maxPage+1)
+	title := fmt.Sprintf("ASSET ATLAS - Page %d/%d", h.assetPage+1, maxPage+1)
 	textutil.Draw(screen, title, x+20, y+30, color.RGBA{200, 200, 255, 255})
 
 	// Boutons de pagination
 	if h.assetPage > 0 {
-		h.drawButton(screen, float32(x+20), float32(y+winH-40), 100, 25, "PRECEDENT", color.RGBA{60, 60, 80, 255})
+		h.drawButton(screen, float32(x+20), float32(y+winH-40), 100, 25, "PREVIOUS", color.RGBA{60, 60, 80, 255})
 	}
 	if h.assetPage < maxPage {
-		h.drawButton(screen, float32(x+winW-120), float32(y+winH-40), 100, 25, "SUIVANT", color.RGBA{60, 60, 80, 255})
+		h.drawButton(screen, float32(x+winW-120), float32(y+winH-40), 100, 25, "NEXT", color.RGBA{60, 60, 80, 255})
 	}
 
 	colWidth := 150
@@ -838,9 +838,9 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	vector.DrawFilledRect(screen, float32(x), float32(y), float32(winW), float32(winH), color.RGBA{20, 40, 20, 255}, true)
 	vector.StrokeRect(screen, float32(x), float32(y), float32(winW), float32(winH), 3, color.RGBA{100, 255, 100, 255}, true)
 
-	textutil.Draw(screen, "VICTOIRE !", x+250, y+50, color.RGBA{100, 255, 100, 255})
-	textutil.Draw(screen, "Vous avez franchi le portail final.", x+150, y+80, color.White)
-	textutil.Draw(screen, "Appuyez sur ESC pour retourner au menu.", x+130, y+100, color.RGBA{150, 150, 150, 255})
+	textutil.Draw(screen, "VICTORY!", x+250, y+50, color.RGBA{100, 255, 100, 255})
+	textutil.Draw(screen, "You have crossed the final portal.", x+150, y+80, color.White)
+	textutil.Draw(screen, "Press ESC to return to menu.", x+130, y+100, color.RGBA{150, 150, 150, 255})
 
 	// Calcul des gains
 	totalValue := 0
@@ -868,14 +868,14 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	}
 
 	statsY := y + 150
-	textutil.Draw(screen, fmt.Sprintf("Ressources collectées : %d", resourceCount), x+100, statsY, color.White)
-	textutil.Draw(screen, fmt.Sprintf("Créatures capturées : %d", creatureCount), x+100, statsY+30, color.White)
-	textutil.Draw(screen, fmt.Sprintf("Bonus Combo cumulés : %d XP", h.world.Player.Stats.TotalComboBonus), x+100, statsY+60, color.RGBA{150, 200, 255, 255})
+	textutil.Draw(screen, fmt.Sprintf("Resources collected: %d", resourceCount), x+100, statsY, color.White)
+	textutil.Draw(screen, fmt.Sprintf("Creatures captured: %d", creatureCount), x+100, statsY+30, color.White)
+	textutil.Draw(screen, fmt.Sprintf("Cumulative Combo Bonus: %d XP", h.world.Player.Stats.TotalComboBonus), x+100, statsY+60, color.RGBA{150, 200, 255, 255})
 
 	finalScore := h.world.Player.Stats.TotalExperience + totalValue
-	valText := fmt.Sprintf("Valeur Totale : %d XP", finalScore)
+	valText := fmt.Sprintf("Total Score: %d XP", finalScore)
 	if h.world.IsCheated {
-		valText += " (triche détectée)"
+		valText += " (cheat detected)"
 	}
 	textutil.Draw(screen, valText, x+100, statsY+100, color.RGBA{255, 255, 100, 255})
 
@@ -887,7 +887,7 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	by := y + 300
 	vector.DrawFilledRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), color.RGBA{40, 80, 40, 255}, true)
 	vector.StrokeRect(screen, float32(bx1), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
-	textutil.Draw(screen, "REJOUER", bx1+50, by+25, color.White)
+	textutil.Draw(screen, "REPLAY", bx1+50, by+25, color.White)
 
 	// Bouton MENU
 	bx2 := x + 340
@@ -895,7 +895,7 @@ func (h *HUD) renderVictoryWindow(screen *ebiten.Image) {
 	vector.StrokeRect(screen, float32(bx2), float32(by), float32(btnW), float32(btnH), 1, color.White, true)
 	textutil.Draw(screen, "MENU", bx2+60, by+25, color.White)
 
-	textutil.Draw(screen, "Appuyez sur ESC pour retourner au menu.", x+130, y+360, color.RGBA{150, 150, 150, 255})
+	textutil.Draw(screen, "Press ESC to return to menu.", x+130, y+360, color.RGBA{150, 150, 150, 255})
 }
 
 func (h *HUD) HandleVictoryClick(mx, my int) string {
@@ -976,13 +976,13 @@ func (h *HUD) getGridDetailedCounts(gridID string) map[string]int {
 		if e.GetGridID() == gridID {
 			label := "structure"
 			if e.HasTag("start_portal") {
-				label = "portail_entree"
+				label = "entry_portal"
 			} else if e.HasTag("finish_portal") {
-				label = "portail_sortie"
+				label = "exit_portal"
 			} else if e.HasTag("dolmen") {
 				label = "dolmen"
 			} else if e.HasTag("obelisk") {
-				label = "obelisque"
+				label = "obelisk"
 			}
 			h.cachedDetailedCounts[label]++
 		}
@@ -1036,11 +1036,11 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	textutil.Draw(screen, "ACTION:", int(ui.PortraitX)+10, y-15, color.RGBA{100, 200, 255, 255})
 
 	controls := []string{
-		"CLIC: Basculer",
-		"H: Aide",
+		"CLICK: Toggle",
+		"H: Help",
 		"F12: Options",
-		"ZQSD: Naviguer",
-		"SPACE: Fin",
+		"WASD: Navigate",
+		"SPACE: End",
 	}
 	for _, c := range controls {
 		textutil.Draw(screen, c, int(ui.PortraitX)+10, y, color.RGBA{160, 160, 160, 255})
@@ -1050,7 +1050,7 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	// --- COLUMN RIGHT: CURRENT GRID DETAILS ---
 	rx := int(ui.PortraitX) + 125
 	ry := int(ui.PortraitY) + 85
-	textutil.Draw(screen, "SUR ZONE:", rx, ry-15, color.RGBA{100, 200, 255, 255})
+	textutil.Draw(screen, "IN ZONE:", rx, ry-15, color.RGBA{100, 200, 255, 255})
 
 	counts := h.getGridDetailedCounts(h.world.CurrentGridID)
 
@@ -1074,7 +1074,7 @@ func (h *HUD) renderPortrait(screen *ebiten.Image) {
 	}
 
 	if len(keys) == 0 {
-		textutil.Draw(screen, "(Zone vide)", rx, ry, color.RGBA{150, 150, 150, 255})
+		textutil.Draw(screen, "(Empty zone)", rx, ry, color.RGBA{150, 150, 150, 255})
 	}
 }
 
@@ -1376,7 +1376,7 @@ func (h *HUD) renderDetailWindow(screen *ebiten.Image) {
 	vector.StrokeRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), 2, color.RGBA{100, 100, 150, 255}, true)
 
 	// Titre
-	textutil.Draw(screen, "STATISTIQUES DES ZONES", winX+20, winY+30, color.RGBA{100, 200, 255, 255})
+	textutil.Draw(screen, "ZONE STATISTICS", winX+20, winY+30, color.RGBA{100, 200, 255, 255})
 
 	// Icone fermer (X)
 	closeX := winX + winW - 30
@@ -1410,7 +1410,7 @@ func (h *HUD) renderHelpWindow(screen *ebiten.Image) {
 	vector.StrokeRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), 2, color.RGBA{200, 150, 50, 255}, true)
 
 	// Titre
-	textutil.Draw(screen, "COMMANDES DU JEU", winX+20, winY+30, color.RGBA{255, 200, 50, 255})
+	textutil.Draw(screen, "GAME CONTROLS", winX+20, winY+30, color.RGBA{255, 200, 50, 255})
 
 	// Icone fermer (X)
 	closeX := winX + winW - 30
@@ -1427,44 +1427,44 @@ func (h *HUD) renderHelpWindow(screen *ebiten.Image) {
 		clr := color.RGBA{200, 200, 200, 255}
 		if isCheat {
 			clr = color.RGBA{255, 100, 100, 255}
-			desc = "[TRICHE] " + desc
+			desc = "[CHEAT] " + desc
 		}
 		textutil.Draw(screen, fmt.Sprintf("%-10s: %s", key, desc), winX+30, dy, clr)
 		dy += 18
 	}
 
 	drawCategory("NAVIGATION & ACTIONS")
-	drawKey("ZQSD", "Se déplacer / Naviguer", false)
-	drawKey("CLIC G", "Ouvrir une tuile", false)
-	drawKey("ESPACE", "Finir le tour", false)
-	drawKey("F11 / F/W", "Plein écran / Fenêtré", false)
+	drawKey("WASD", "Move / Navigate", false)
+	drawKey("LEFT CLICK", "Open a tile", false)
+	drawKey("SPACE", "End turn", false)
+	drawKey("F11 / F/W", "Fullscreen / Windowed", false)
 	dy += 10
 
-	drawCategory("FENÊTRES D'INFO")
-	drawKey("H", "Cette aide", false)
-	drawKey("I", "Statistiques des zones", false)
-	drawKey("L", "Détails de l'inventaire", false)
-	drawKey("T", "Atlas des ressources", false)
+	drawCategory("INFO WINDOWS")
+	drawKey("H", "This help menu", false)
+	drawKey("I", "Zone statistics", false)
+	drawKey("L", "Inventory details", false)
+	drawKey("T", "Resource atlas", false)
 	drawKey("F12", "Options / Debug", false)
-	drawKey("ESC", "Menu principal", false)
+	drawKey("ESC", "Main menu", false)
 	dy += 10
 
-	drawCategory("TESTS D'EFFETS")
-	drawKey("+ / -", "Rotation horaire / anti", false)
+	drawCategory("EFFECT TESTS")
+	drawKey("+ / -", "Clockwise / counter-clockwise rotation", false)
 	dy += 10
 
-	drawCategory("COMMANDES SPÉCIALES")
-	drawKey("1-9", "Changement rapide de zone", true)
-	drawKey("R", "Réinitialiser rotation", true)
-	drawKey("B", "Remplir l'inventaire", true)
-	drawKey("F1-F4", "Changer difficulté", true)
-	drawKey("F5-F6", "Révéler / Cacher tout", true)
-	drawKey("F7", "Désceller les sorties", true)
-	drawKey("F8", "Basculer état bloqué", true)
-	drawKey("F9", "Spawn créature aléatoire", true)
-	drawKey("F10", "Incrémenter Combo", true)
-	drawKey("Shift+S", "Spawn toutes créatures", true)
-	drawKey("C", "Nettoyage plateau", true)
+	drawCategory("SPECIAL COMMANDS")
+	drawKey("1-9", "Quick zone change", true)
+	drawKey("R", "Reset rotation", true)
+	drawKey("B", "Fill inventory", true)
+	drawKey("F1-F4", "Change difficulty", true)
+	drawKey("F5-F6", "Reveal / Hide all", true)
+	drawKey("F7", "Unseal exits", true)
+	drawKey("F8", "Toggle blocked state", true)
+	drawKey("F9", "Spawn random creature", true)
+	drawKey("F10", "Increment Combo", true)
+	drawKey("Shift+S", "Spawn all creatures", true)
+	drawKey("C", "Clear board", true)
 }
 
 func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
@@ -1478,7 +1478,7 @@ func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
 	vector.StrokeRect(screen, float32(winX), float32(winY), float32(winW), float32(winH), 2, color.RGBA{100, 150, 100, 255}, true)
 
 	// Titre
-	textutil.Draw(screen, "CONTENU DE L'INVENTAIRE", winX+20, winY+30, color.RGBA{100, 255, 100, 255})
+	textutil.Draw(screen, "INVENTORY CONTENT", winX+20, winY+30, color.RGBA{100, 255, 100, 255})
 
 	// Icone fermer (X)
 	closeX := winX + winW - 30
@@ -1491,7 +1491,7 @@ func (h *HUD) renderInventoryWindow(screen *ebiten.Image) {
 	dy := winY + 70
 
 	if len(inv.Items) == 0 {
-		textutil.Draw(screen, "(Inventaire vide)", winX+30, dy, color.RGBA{150, 150, 150, 255})
+		textutil.Draw(screen, "(Empty inventory)", winX+30, dy, color.RGBA{150, 150, 150, 255})
 		return
 	}
 
@@ -1569,20 +1569,20 @@ func (h *HUD) HandleClick(x, y int) bool {
 			name string
 			key  string
 		}{
-			{"Dos Tuile Std", "tile_hidden"},
-			{"Tuile Révélée", "tile_revealed"},
-			{"Tuile Matchée", "tile_matched"},
-			{"Tuile Piège", "tile_trap"},
-			{"Tuile Bloquée", "tile_blocked"},
-			{"Tuile Scellée", "tile_sealed"},
-			{"Portail", "tile_portal"},
-			{"Sortie", "tile_exit"},
-			{"Case Vide", "square_empty"},
-			{"Trace Boue", "mud"},
-			{"Trace Griffes", "claws"},
-			{"Herbe Cassée", "broken_grass"},
-			{"Empreinte Pas", "footprints"},
-			{"Rayon Attaque", "intent_beam"},
+			{"Std Tile Back", "tile_hidden"},
+			{"Revealed Tile", "tile_revealed"},
+			{"Matched Tile", "tile_matched"},
+			{"Trap Tile", "tile_trap"},
+			{"Blocked Tile", "tile_blocked"},
+			{"Sealed Tile", "tile_sealed"},
+			{"Portal", "tile_portal"},
+			{"Exit", "tile_exit"},
+			{"Empty Tile", "square_empty"},
+			{"Mud Trail", "mud"},
+			{"Claw Mark", "claws"},
+			{"Broken Grass", "broken_grass"},
+			{"Footprints", "footprints"},
+			{"Attack Beam", "intent_beam"},
 			{"Lumifly", "creature_lumifly"},
 			{"Shadowstalker", "creature_shadowstalker"},
 			{"Burrower", "creature_burrower"},
